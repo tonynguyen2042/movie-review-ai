@@ -11,7 +11,10 @@ models:
   profile: balanced
 
 pipeline:
-  scene_detector: adaptive
+  scene_detection:
+    detector: adaptive
+    threshold: null
+    min_scene_len: 15
   visual_sampling: adaptive
   diarization: true
   evidence_required: true

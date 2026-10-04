@@ -102,10 +102,18 @@ class RenderingSettings(BaseModel):
     fps: PositiveInt = 30
 
 
+class SceneDetectionSettings(BaseModel):
+    """Scene detector selection; ``threshold`` None means the detector default."""
+
+    detector: str = "adaptive"
+    threshold: float | None = None
+    min_scene_len: PositiveInt = 15
+
+
 class PipelineSettings(BaseModel):
     """Pipeline stage defaults."""
 
-    scene_detector: str = "adaptive"
+    scene_detection: SceneDetectionSettings = SceneDetectionSettings()
     visual_sampling: str = "adaptive"
     diarization: bool = True
     evidence_required: bool = True
