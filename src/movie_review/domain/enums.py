@@ -1,0 +1,59 @@
+"""Shared domain enumerations (spec FR-010, FR-016, FR-017; README sections 19-20, 32-33)."""
+
+from enum import StrEnum
+
+
+class EvidenceType(StrEnum):
+    """Where a piece of evidence comes from."""
+
+    DIALOGUE = "DIALOGUE"
+    VISUAL = "VISUAL"
+    AUDIO = "AUDIO"
+    SCENE = "SCENE"
+    EVENT = "EVENT"
+    CHARACTER = "CHARACTER"
+    TIMELINE = "TIMELINE"
+
+
+class ClaimType(StrEnum):
+    """Fact claims and interpretation are represented separately (P11)."""
+
+    PLOT_FACT = "PLOT_FACT"
+    CHARACTER_FACT = "CHARACTER_FACT"
+    TIMELINE_FACT = "TIMELINE_FACT"
+    DIALOGUE_REFERENCE = "DIALOGUE_REFERENCE"
+    INTERPRETATION = "INTERPRETATION"
+    OPINION = "OPINION"
+    THEME = "THEME"
+
+
+class ClaimStatus(StrEnum):
+    """Fact-check verdicts. New claims start as INSUFFICIENT_EVIDENCE (P1)."""
+
+    SUPPORTED = "SUPPORTED"
+    PARTIALLY_SUPPORTED = "PARTIALLY_SUPPORTED"
+    CONTRADICTED = "CONTRADICTED"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+
+
+class JobStatus(StrEnum):
+    """Pipeline job lifecycle states (README section 8; transitions in T006)."""
+
+    CREATED = "CREATED"
+    INGESTING = "INGESTING"
+    MEDIA_READY = "MEDIA_READY"
+    SCENES_READY = "SCENES_READY"
+    TRANSCRIPT_READY = "TRANSCRIPT_READY"
+    VISUAL_ANALYSIS_READY = "VISUAL_ANALYSIS_READY"
+    CHARACTERS_READY = "CHARACTERS_READY"
+    EVENTS_READY = "EVENTS_READY"
+    STORY_READY = "STORY_READY"
+    REVIEW_PLAN_READY = "REVIEW_PLAN_READY"
+    SCRIPT_READY = "SCRIPT_READY"
+    SCRIPT_VERIFIED = "SCRIPT_VERIFIED"
+    AUDIO_READY = "AUDIO_READY"
+    EDIT_PLAN_READY = "EDIT_PLAN_READY"
+    RENDERED = "RENDERED"
+    QUALITY_CHECKED = "QUALITY_CHECKED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
