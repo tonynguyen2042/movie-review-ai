@@ -115,7 +115,7 @@ Never fabricate a PR URL.
   Dependencies: T001  
   Deliverable: Pydantic models for movie, scene, evidence, job, artifact, claims.
 
-- [ ] **T005** SQLite Repository  
+- [x] **T005** SQLite Repository  
   Dependencies: T004  
   Deliverable: schema, migrations/bootstrap, repositories.
 
