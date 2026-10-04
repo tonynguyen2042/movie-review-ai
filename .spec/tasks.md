@@ -127,7 +127,7 @@ Never fabricate a PR URL.
   Dependencies: T002, T004  
   Deliverable: deterministic artifact paths, hashes, atomic writes, integrity validation.
 
-- [ ] **T008** Cache Manager  
+- [x] **T008** Cache Manager  
   Dependencies: T004, T007  
   Deliverable: cache identity and safe cache lookup/invalidation.
 
