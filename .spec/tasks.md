@@ -131,7 +131,7 @@ Never fabricate a PR URL.
   Dependencies: T004, T007  
   Deliverable: cache identity and safe cache lookup/invalidation.
 
-- [ ] **T009** CLI Skeleton  
+- [x] **T009** CLI Skeleton  
   Dependencies: T002, T006, T007, T008  
   Deliverable: Typer CLI with process/inspect/validate/resume/retry skeleton.
 

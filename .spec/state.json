@@ -117,18 +117,20 @@
     },
     "T009": {
       "title": "CLI Skeleton",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "T002",
         "T006",
         "T007",
         "T008"
       ],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-04T20:47:41.951136+00:00",
+      "started_at": "2026-10-04T20:45:39.557040+00:00",
+      "completed_at": "2026-10-04T20:47:41.951136+00:00"
     },
     "T010": {
       "title": "FFmpeg Adapter",
