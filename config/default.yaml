@@ -1,0 +1,53 @@
+# Default configuration — movie-review-ai (T002).
+# Precedence: init kwargs > MOVIE_REVIEW_* env vars > this file > code fallbacks.
+# Model identities live in models.yaml; only the profile NAME is selected here.
+# Source-footage limits are product controls, NOT a legal guarantee.
+
+runtime:
+  backend: mlx
+  device: gpu
+
+models:
+  profile: balanced
+
+pipeline:
+  scene_detector: adaptive
+  visual_sampling: adaptive
+  diarization: true
+  evidence_required: true
+  review:
+    target_duration_minutes: 20
+    target_wpm: 150
+  rendering:
+    width: 1920
+    height: 1080
+    fps: 30
+
+source_video:
+  max_clip_seconds: 8.0
+  preferred_clip_seconds: 3.0
+  max_source_ratio: 0.35
+  max_total_seconds: 420.0
+
+paths:
+  data_dir: data
+  output_dir: data/output
+
+privacy:
+  cloud_ai: false
+  telemetry: false
+
+memory:
+  reserve_mb: 8192
+
+prompts:
+  versions:
+    scene_analysis: v1
+    character_analysis: v1
+    story_analysis: v1
+    review_planner: v1
+    script_writer: v1
+    fact_checker: v1
+    visual_planner: v1
+
+style: youtube

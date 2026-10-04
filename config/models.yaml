@@ -1,0 +1,59 @@
+# Model catalog — movie-review-ai (T002).
+# Profiles per README section 56. The active profile is selected via
+# `models.profile` in default.yaml (or MOVIE_REVIEW__MODELS__PROFILE).
+# Exact checkpoints are benchmark-driven (T074-T077); edit here, not in code.
+
+profiles:
+  fast:
+    asr:
+      model: whisper-large-v3-turbo
+      precision: fp16
+    vision:
+      model: Qwen3-VL-small
+      precision: 4bit
+    reasoning:
+      model: Qwen3.5-9B
+      precision: 4bit
+    critic:
+      model: Qwen3.5-9B
+      precision: 4bit
+      enabled: false
+    tts:
+      model: Qwen3-TTS-0.6B
+      precision: 8bit
+
+  balanced:
+    asr:
+      model: whisper-large-v3-turbo
+      precision: fp16
+    vision:
+      model: Qwen3-VL
+      precision: 4bit
+    reasoning:
+      model: Qwen3.5-27B
+      precision: 4bit
+    critic:
+      model: Qwen3.5-122B-A10B
+      precision: 4bit
+      enabled: false
+    tts:
+      model: Qwen3-TTS-12Hz-1.7B
+      precision: 8bit
+
+  quality:
+    asr:
+      model: whisper-large-v3-turbo
+      precision: fp16
+    vision:
+      model: Qwen3-VL-large
+      precision: 4bit
+    reasoning:
+      model: Qwen3.5-27B
+      precision: 4bit
+    critic:
+      model: Qwen3.5-122B-A10B
+      precision: 4bit
+      enabled: true
+    tts:
+      model: Qwen3-TTS-12Hz-1.7B
+      precision: 8bit
