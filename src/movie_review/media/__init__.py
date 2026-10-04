@@ -1,4 +1,4 @@
-"""Media probing and transcoding adapters (T010)."""
+"""Media probing and process adapters (T010)."""
 
 from movie_review.media.ffmpeg import (
     BinaryNotFoundError,
