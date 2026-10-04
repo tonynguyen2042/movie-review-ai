@@ -137,7 +137,7 @@ Never fabricate a PR URL.
 
 # Phase 1 — Media Intelligence
 
-- [ ] **T010** FFmpeg Adapter
+- [x] **T010** FFmpeg Adapter
 - [ ] **T011** Media Ingest Stage
 - [ ] **T012** Proxy Generation
 - [ ] **T013** PySceneDetect Adapter
