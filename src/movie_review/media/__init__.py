@@ -1,4 +1,4 @@
-"""Media probing, process, and scene-detection adapters (T010, T013)."""
+"""Media probing, process, scene-detection, and frame adapters (T010-T015)."""
 
 from movie_review.media.ffmpeg import (
     BinaryNotFoundError,
@@ -9,6 +9,18 @@ from movie_review.media.ffmpeg import (
     ffmpeg_version,
     probe,
     run,
+)
+from movie_review.media.frames import (
+    Frame,
+    FrameSamplingError,
+    SamplingConfig,
+    SamplingResult,
+    extract_frame,
+    frame_filename,
+    plan_count,
+    sample_movie,
+    sample_timestamps,
+    sampling_config_from,
 )
 from movie_review.media.scenes import (
     DEFAULT_ADAPTIVE_THRESHOLD,
@@ -29,13 +41,23 @@ __all__ = [
     "BinaryNotFoundError",
     "DetectionResult",
     "FFmpegError",
+    "Frame",
+    "FrameSamplingError",
     "ProbeError",
     "ProcessError",
     "SceneCut",
     "SceneDetectionError",
+    "SamplingConfig",
+    "SamplingResult",
     "check",
     "detect_scenes",
+    "extract_frame",
     "ffmpeg_version",
+    "frame_filename",
+    "plan_count",
     "probe",
     "run",
+    "sample_movie",
+    "sample_timestamps",
+    "sampling_config_from",
 ]

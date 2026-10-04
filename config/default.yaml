@@ -15,7 +15,13 @@ pipeline:
     detector: adaptive
     threshold: null
     min_scene_len: 15
-  visual_sampling: adaptive
+  visual_sampling:
+    mode: adaptive
+    short_threshold: 10.0
+    medium_threshold: 60.0
+    short_frames: 3
+    medium_frames: 6
+    long_frames: 12
   diarization: true
   evidence_required: true
   review:

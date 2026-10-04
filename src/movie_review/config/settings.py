@@ -110,11 +110,22 @@ class SceneDetectionSettings(BaseModel):
     min_scene_len: PositiveInt = 15
 
 
+class VisualSamplingSettings(BaseModel):
+    """Duration-adaptive frame sampling buckets (README section 12)."""
+
+    mode: str = "adaptive"
+    short_threshold: PositiveFloat = 10.0
+    medium_threshold: PositiveFloat = 60.0
+    short_frames: PositiveInt = 3
+    medium_frames: PositiveInt = 6
+    long_frames: PositiveInt = 12
+
+
 class PipelineSettings(BaseModel):
     """Pipeline stage defaults."""
 
     scene_detection: SceneDetectionSettings = SceneDetectionSettings()
-    visual_sampling: str = "adaptive"
+    visual_sampling: VisualSamplingSettings = VisualSamplingSettings()
     diarization: bool = True
     evidence_required: bool = True
     review: ReviewSettings = ReviewSettings()
