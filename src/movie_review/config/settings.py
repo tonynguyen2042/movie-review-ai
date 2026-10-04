@@ -155,11 +155,21 @@ class LoggingSettings(BaseModel):
     json_output: bool = True
 
 
+class MediaProxySettings(BaseModel):
+    """Analysis proxy encoding targets (README section 10)."""
+
+    max_width: PositiveInt = 1280
+    max_height: PositiveInt = 720
+    preset: str = "veryfast"
+    crf: int = Field(ge=0, le=51, default=23)
+
+
 class MediaSettings(BaseModel):
     """Media tooling binary locations (resolved via PATH when bare names)."""
 
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
+    proxy: MediaProxySettings = MediaProxySettings()
 
 
 def _profile_from_env() -> str | None:

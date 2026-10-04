@@ -57,5 +57,10 @@ logging:
 media:
   ffmpeg: ffmpeg
   ffprobe: ffprobe
+  proxy:
+    max_width: 1280
+    max_height: 720
+    preset: veryfast
+    crf: 23
 
 style: youtube
