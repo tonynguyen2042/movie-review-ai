@@ -119,7 +119,7 @@ Never fabricate a PR URL.
   Dependencies: T004  
   Deliverable: schema, migrations/bootstrap, repositories.
 
-- [ ] **T006** Job State Machine  
+- [x] **T006** Job State Machine  
   Dependencies: T004, T005  
   Deliverable: persistent job lifecycle and valid state transitions.
 

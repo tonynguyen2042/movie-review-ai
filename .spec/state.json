@@ -72,16 +72,18 @@
     },
     "T006": {
       "title": "Job State Machine",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "T004",
         "T005"
       ],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-04T20:40:55.724372+00:00",
+      "started_at": "2026-10-04T20:39:24.072356+00:00",
+      "completed_at": "2026-10-04T20:40:55.724372+00:00"
     },
     "T007": {
       "title": "Artifact Manager",
