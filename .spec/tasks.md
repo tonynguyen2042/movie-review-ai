@@ -140,7 +140,7 @@ Never fabricate a PR URL.
 - [x] **T010** FFmpeg Adapter
 - [x] **T011** Media Ingest Stage
 - [x] **T012** Proxy Generation
-- [ ] **T013** PySceneDetect Adapter
+- [x] **T013** PySceneDetect Adapter
 - [ ] **T014** Scene Detection Stage
 - [ ] **T015** Frame Sampler
 
