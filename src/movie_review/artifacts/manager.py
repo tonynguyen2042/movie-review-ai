@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -74,12 +75,16 @@ def write_bytes(path: str | Path, data: bytes) -> str:
     """Atomically write bytes (tmp file + fsync + rename); returns hex hash."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f"{target.name}.tmp-{os.getpid()}")
-    with open(tmp, "wb") as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, target)
+    tmp = target.with_name(f"{target.name}.tmp-{os.getpid()}-{threading.get_ident()}")
+    try:
+        with open(tmp, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, target)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
     return sha256_bytes(data)
 
 
