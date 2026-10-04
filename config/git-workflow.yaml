@@ -1,0 +1,39 @@
+version: 1
+
+branch:
+  required: true
+  base: master
+  pattern: "task/{task_id}-{slug}"
+
+milestones:
+  required: true
+  targeted_tests_before_commit: true
+  diff_check_before_commit: true
+
+commit:
+  message_pattern: "{type}({task_id}): {summary}"
+  allowed_types:
+    - feat
+    - fix
+    - test
+    - refactor
+    - docs
+    - chore
+    - perf
+
+completion:
+  full_test_command: "pytest -q"
+  require_full_tests_pass: true
+  require_task_state_done: true
+  require_push: true
+
+pull_request:
+  required: true
+  base: master
+  create_after_task_done: true
+  merge_automatically: false
+  cli_preference: gh
+
+failure:
+  create_pr_when_tests_fail: false
+  fabricate_pr_url: false
