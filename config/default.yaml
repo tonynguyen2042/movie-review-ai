@@ -50,4 +50,8 @@ prompts:
     fact_checker: v1
     visual_planner: v1
 
+logging:
+  level: INFO
+  json_output: true
+
 style: youtube

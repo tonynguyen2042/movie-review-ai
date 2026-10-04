@@ -148,6 +148,13 @@ class PromptsSettings(BaseModel):
     versions: dict[str, str]
 
 
+class LoggingSettings(BaseModel):
+    """Logging output controls."""
+
+    level: str = "INFO"
+    json_output: bool = True
+
+
 def _profile_from_env() -> str | None:
     """Effective ``models.profile`` override from the environment, if present.
 
@@ -209,6 +216,7 @@ class AppSettings(BaseSettings):
     privacy: PrivacySettings = PrivacySettings()
     memory: MemorySettings = MemorySettings()
     prompts: PromptsSettings
+    logging: LoggingSettings = LoggingSettings()
     style: str = "youtube"
 
     @classmethod
