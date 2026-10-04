@@ -63,6 +63,11 @@ def test_missing_file_rejected(tmp_path: Path) -> None:
 def test_bad_min_scene_len_rejected(tmp_path: Path) -> None:
     with pytest.raises(SceneDetectionError, match="min_scene_len"):
         detect_scenes(tmp_path / "m.mp4", min_scene_len=0)
+    # Argument validation precedes I/O: an existing file fails the same way.
+    existing = tmp_path / "e.mp4"
+    existing.write_bytes(b"not-a-video")
+    with pytest.raises(SceneDetectionError, match="min_scene_len"):
+        detect_scenes(existing, min_scene_len=-5)
 
 
 @NEEDS_FFMPEG

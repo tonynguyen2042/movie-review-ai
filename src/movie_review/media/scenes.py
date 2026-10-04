@@ -64,11 +64,11 @@ def detect_scenes(
     kind = detector.lower()
     if kind not in DETECTORS:
         raise SceneDetectionError(f"Unknown detector {detector!r}; expected one of {DETECTORS}")
+    if min_scene_len <= 0:
+        raise SceneDetectionError(f"min_scene_len must be positive frames: {min_scene_len}")
     src = Path(path)
     if not src.is_file():
         raise SceneDetectionError(f"Input file not found: {src}")
-    if min_scene_len <= 0:
-        raise SceneDetectionError(f"min_scene_len must be positive frames: {min_scene_len}")
     if kind == "content":
         algo: ContentDetector | AdaptiveDetector = ContentDetector(
             threshold=DEFAULT_CONTENT_THRESHOLD if threshold is None else threshold,
