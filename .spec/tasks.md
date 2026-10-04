@@ -111,7 +111,7 @@ Never fabricate a PR URL.
   Dependencies: T001, T002  
   Deliverable: JSON logging with job/stage context.
 
-- [ ] **T004** Domain Models  
+- [x] **T004** Domain Models  
   Dependencies: T001  
   Deliverable: Pydantic models for movie, scene, evidence, job, artifact, claims.
 

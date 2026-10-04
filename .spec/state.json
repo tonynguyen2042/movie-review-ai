@@ -44,15 +44,17 @@
     },
     "T004": {
       "title": "Domain Models",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "T001"
       ],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-04T20:37:11.441285+00:00",
+      "started_at": "2026-10-04T20:35:32.008172+00:00",
+      "completed_at": "2026-10-04T20:37:11.441285+00:00"
     },
     "T005": {
       "title": "SQLite Repository",
