@@ -103,7 +103,7 @@ Never fabricate a PR URL.
   Dependencies: none  
   Deliverable: Python 3.12+ package, pyproject, package layout, dev tooling.
 
-- [ ] **T002** Project Configuration  
+- [x] **T002** Project Configuration  
   Dependencies: T001  
   Deliverable: typed settings, environment overrides, default configuration.
 
