@@ -1,8 +1,9 @@
 """Repositories mapping T004 domain models to SQLite rows (T005).
 
 Ownership (``job_id``) is a persistence concern supplied per call, keeping
-domain models pure. All writes use ``INSERT OR REPLACE`` so stage reruns are
-idempotent; foreign-key violations surface as :class:`sqlite3.IntegrityError`.
+domain models pure. Writes are idempotent (upsert/replace); the jobs table
+uses ``ON CONFLICT DO UPDATE`` so lifecycle re-saves never cascade-wipe
+children. Foreign-key violations surface as :class:`sqlite3.IntegrityError`.
 """
 
 from __future__ import annotations
