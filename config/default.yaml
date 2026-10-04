@@ -54,4 +54,8 @@ logging:
   level: INFO
   json_output: true
 
+media:
+  ffmpeg: ffmpeg
+  ffprobe: ffprobe
+
 style: youtube

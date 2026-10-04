@@ -155,6 +155,13 @@ class LoggingSettings(BaseModel):
     json_output: bool = True
 
 
+class MediaSettings(BaseModel):
+    """Media tooling binary locations (resolved via PATH when bare names)."""
+
+    ffmpeg: str = "ffmpeg"
+    ffprobe: str = "ffprobe"
+
+
 def _profile_from_env() -> str | None:
     """Effective ``models.profile`` override from the environment, if present.
 
@@ -217,6 +224,7 @@ class AppSettings(BaseSettings):
     memory: MemorySettings = MemorySettings()
     prompts: PromptsSettings
     logging: LoggingSettings = LoggingSettings()
+    media: MediaSettings = MediaSettings()
     style: str = "youtube"
 
     @classmethod
