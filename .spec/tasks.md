@@ -141,7 +141,7 @@ Never fabricate a PR URL.
 - [x] **T011** Media Ingest Stage
 - [x] **T012** Proxy Generation
 - [x] **T013** PySceneDetect Adapter
-- [ ] **T014** Scene Detection Stage
+- [x] **T014** Scene Detection Stage
 - [ ] **T015** Frame Sampler
 
 # Phase 2 — Audio Intelligence
