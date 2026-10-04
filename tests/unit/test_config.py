@@ -14,7 +14,7 @@ MODELS_YAML = REPO / "config" / "models.yaml"
 
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in list(__import__("os").environ):
-        if var == "MOVIE_REVIEW_CONFIG" or var.startswith("MOVIE_REVIEW__"):
+        if var == "MOVIE_REVIEW_CONFIG" or var.startswith("MOVIE_REVIEW_"):
             monkeypatch.delenv(var, raising=False)
 
 
