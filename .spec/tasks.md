@@ -123,7 +123,7 @@ Never fabricate a PR URL.
   Dependencies: T004, T005  
   Deliverable: persistent job lifecycle and valid state transitions.
 
-- [ ] **T007** Artifact Manager  
+- [x] **T007** Artifact Manager  
   Dependencies: T002, T004  
   Deliverable: deterministic artifact paths, hashes, atomic writes, integrity validation.
 
