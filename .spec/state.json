@@ -1,0 +1,1010 @@
+{
+  "version": 1,
+  "updated_at": "2026-10-04T20:28:31.712341+00:00",
+  "tasks": {
+    "T001": {
+      "title": "Bootstrap Python Project",
+      "status": "done",
+      "depends_on": [],
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-04T20:28:31.712341+00:00",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T002": {
+      "title": "Project Configuration",
+      "status": "pending",
+      "depends_on": [
+        "T001"
+      ],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T003": {
+      "title": "Structured Logging",
+      "status": "pending",
+      "depends_on": [
+        "T001",
+        "T002"
+      ],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T004": {
+      "title": "Domain Models",
+      "status": "pending",
+      "depends_on": [
+        "T001"
+      ],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T005": {
+      "title": "SQLite Repository",
+      "status": "pending",
+      "depends_on": [
+        "T004"
+      ],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T006": {
+      "title": "Job State Machine",
+      "status": "pending",
+      "depends_on": [
+        "T004",
+        "T005"
+      ],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T007": {
+      "title": "Artifact Manager",
+      "status": "pending",
+      "depends_on": [
+        "T002",
+        "T004"
+      ],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T008": {
+      "title": "Cache Manager",
+      "status": "pending",
+      "depends_on": [
+        "T004",
+        "T007"
+      ],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T009": {
+      "title": "CLI Skeleton",
+      "status": "pending",
+      "depends_on": [
+        "T002",
+        "T006",
+        "T007",
+        "T008"
+      ],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T010": {
+      "title": "FFmpeg Adapter",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T011": {
+      "title": "Media Ingest Stage",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T012": {
+      "title": "Proxy Generation",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T013": {
+      "title": "PySceneDetect Adapter",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T014": {
+      "title": "Scene Detection Stage",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T015": {
+      "title": "Frame Sampler",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T016": {
+      "title": "ASR Port",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T017": {
+      "title": "Whisper MLX Adapter",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T018": {
+      "title": "Transcript Stage",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T019": {
+      "title": "Transcript Normalization",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T020": {
+      "title": "Diarization Port",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T021": {
+      "title": "Initial Diarization Adapter",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T022": {
+      "title": "VLM Port",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T023": {
+      "title": "Qwen3-VL Adapter",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T024": {
+      "title": "Scene Analysis Prompt",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T025": {
+      "title": "Scene Visual Analysis Stage",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T026": {
+      "title": "Adaptive Sampling Feedback",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T027": {
+      "title": "Character Repository",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T028": {
+      "title": "Character Discovery",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T029": {
+      "title": "Character Linking",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T030": {
+      "title": "Location Extraction",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T031": {
+      "title": "Event Schema/Repository",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T032": {
+      "title": "Event Extraction Prompt",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T033": {
+      "title": "Event Extraction Stage",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T034": {
+      "title": "Evidence Registry",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T035": {
+      "title": "Relationship Graph",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T036": {
+      "title": "Story Arc Extraction",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T037": {
+      "title": "Theme Extraction",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T038": {
+      "title": "Twist Detection",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T039": {
+      "title": "Build movie-analysis.json",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T040": {
+      "title": "Style Profile Loader",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T041": {
+      "title": "Review Planner",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T042": {
+      "title": "Story Analyst",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T043": {
+      "title": "Review Writer Prompt",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T044": {
+      "title": "Script Writer",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T045": {
+      "title": "Claim Extraction",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T046": {
+      "title": "Evidence Retrieval",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T047": {
+      "title": "Fact Checker",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T048": {
+      "title": "Continuity Checker",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T049": {
+      "title": "Script Repair Loop",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T050": {
+      "title": "Duration Controller",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T051": {
+      "title": "TTS Port",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T052": {
+      "title": "Qwen3-TTS Adapter",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T053": {
+      "title": "TTS Chunker",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T054": {
+      "title": "TTS Concatenation",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T055": {
+      "title": "TTS Duration Reconciliation",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T056": {
+      "title": "Visual Planner",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T057": {
+      "title": "Clip Selector",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T058": {
+      "title": "Render Manifest",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T059": {
+      "title": "Subtitle Generator",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T060": {
+      "title": "Audio Mixer",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T061": {
+      "title": "FFmpeg Renderer",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T062": {
+      "title": "Render Validation",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T063": {
+      "title": "QC Domain Model",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T064": {
+      "title": "Evidence Coverage Metric",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T065": {
+      "title": "Timeline Consistency Metric",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T066": {
+      "title": "Character Consistency Metric",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T067": {
+      "title": "Visual Alignment Metric",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T068": {
+      "title": "Final Quality Gate",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T069": {
+      "title": "Quality Report",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T070": {
+      "title": "Stage Retry",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T071": {
+      "title": "OOM Recovery",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T072": {
+      "title": "Interrupted Job Recovery",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T073": {
+      "title": "Artifact Integrity",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T074": {
+      "title": "Model Benchmark CLI",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T075": {
+      "title": "Pipeline Benchmark",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T076": {
+      "title": "Memory Benchmark",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T077": {
+      "title": "Balanced Profile",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T078": {
+      "title": "Golden Movie Fixtures",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T079": {
+      "title": "Ground Truth Annotations",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T080": {
+      "title": "Plot Accuracy Evaluation",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T081": {
+      "title": "Hallucination Evaluation",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T082": {
+      "title": "Evidence Coverage Evaluation",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T083": {
+      "title": "Regression Test Runner",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T084": {
+      "title": "process Command",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T085": {
+      "title": "resume",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T086": {
+      "title": "Stage-Range Execution",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T087": {
+      "title": "inspect",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T088": {
+      "title": "validate",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T089": {
+      "title": "Job Dashboard",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T090": {
+      "title": "Movie Timeline",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T091": {
+      "title": "Character Explorer",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T092": {
+      "title": "Story Graph Viewer",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T093": {
+      "title": "Script Editor",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T094": {
+      "title": "Visual Timeline Editor",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T095": {
+      "title": "QC Report UI",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T096": {
+      "title": "Metadata Generator",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T097": {
+      "title": "Thumbnail Generator",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    },
+    "T098": {
+      "title": "YouTube Publishing Adapter",
+      "status": "pending",
+      "depends_on": [],
+      "attempts": 0,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+    }
+  }
+}

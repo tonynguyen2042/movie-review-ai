@@ -99,7 +99,7 @@ Never fabricate a PR URL.
 
 # Phase 0 — Foundation
 
-- [ ] **T001** Bootstrap Python Project  
+- [x] **T001** Bootstrap Python Project  
   Dependencies: none  
   Deliverable: Python 3.12+ package, pyproject, package layout, dev tooling.
 
