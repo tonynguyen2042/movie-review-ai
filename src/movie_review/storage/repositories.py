@@ -34,13 +34,23 @@ def _parse_dt(value: str) -> datetime:
 
 
 def save_job(conn: sqlite3.Connection, job: Job) -> None:
+    # NOTE: UPDATE (not REPLACE) — replacing the parent row would fire
+    # ON DELETE CASCADE and wipe the job's movies/scenes/evidence/claims.
     with conn:
         conn.execute(
             """
-            INSERT OR REPLACE INTO jobs
+            INSERT INTO jobs
                 (job_id, input_file, status, failed_stage, error,
                  retry_count, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id) DO UPDATE SET
+                input_file = excluded.input_file,
+                status = excluded.status,
+                failed_stage = excluded.failed_stage,
+                error = excluded.error,
+                retry_count = excluded.retry_count,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at
             """,
             (
                 job.job_id,

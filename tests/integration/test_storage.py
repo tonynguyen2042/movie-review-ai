@@ -14,6 +14,7 @@ from movie_review.domain import (
     Evidence,
     EvidenceType,
     Job,
+    JobStatus,
     Movie,
     MovieMetadata,
     Scene,
@@ -88,6 +89,15 @@ def test_scene_list_ordered_and_replaceable(db: sqlite3.Connection, job: Job) ->
     assert len(repo.list_scenes(db, job.job_id)) == 2
     assert repo.get_scene(db, job.job_id, "s2") is not None
     assert repo.get_scene(db, job.job_id, "missing") is None
+
+
+def test_resaving_job_preserves_children(db: sqlite3.Connection, job: Job) -> None:
+    """Re-saving a job (e.g. a lifecycle transition) must not cascade-wipe rows."""
+    repo.save_scene(db, job.job_id, Scene(scene_id="s", start=0.0, end=1.0, duration=1.0))
+    updated = job.model_copy(update={"status": JobStatus.INGESTING})
+    repo.save_job(db, updated)
+    assert repo.get_job(db, job.job_id) == updated
+    assert repo.get_scene(db, job.job_id, "s") is not None
 
 
 def test_foreign_keys_enforced(db: sqlite3.Connection) -> None:
