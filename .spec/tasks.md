@@ -107,7 +107,7 @@ Never fabricate a PR URL.
   Dependencies: T001  
   Deliverable: typed settings, environment overrides, default configuration.
 
-- [ ] **T003** Structured Logging  
+- [x] **T003** Structured Logging  
   Dependencies: T001, T002  
   Deliverable: JSON logging with job/stage context.
 
