@@ -1,0 +1,1 @@
+"""Character discovery and linking."""
