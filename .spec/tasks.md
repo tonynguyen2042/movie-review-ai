@@ -149,7 +149,7 @@ Never fabricate a PR URL.
 - [x] **T016** ASR Port
 - [x] **T017** Whisper MLX Adapter
 - [x] **T018** Transcript Stage
-- [ ] **T019** Transcript Normalization
+- [x] **T019** Transcript Normalization
 - [ ] **T020** Diarization Port
 - [ ] **T021** Initial Diarization Adapter
 
