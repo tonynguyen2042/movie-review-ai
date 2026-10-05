@@ -59,8 +59,7 @@ def test_mentions_round_trip(db: sqlite3.Connection) -> None:
     assert mention.character_id == "char_001"
 
 
-def test_schema_v3_migrates_from_v2(tmp_path: Path) -> None:
-    assert SCHEMA_VERSION == 3
+def test_schema_migrates_from_v2(tmp_path: Path) -> None:
     path = tmp_path / "v2.db"
     with connect(path) as conn:
         for statement in [*MIGRATION_1, *MIGRATION_2]:
@@ -69,8 +68,8 @@ def test_schema_v3_migrates_from_v2(tmp_path: Path) -> None:
     with connect(path) as conn:
         from movie_review.storage.database import migrate
 
-        assert migrate(conn) == 3
-        assert get_schema_version(conn) == 3
+        assert migrate(conn) == SCHEMA_VERSION
+        assert get_schema_version(conn) == SCHEMA_VERSION
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }

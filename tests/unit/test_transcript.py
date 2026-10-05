@@ -228,8 +228,7 @@ def test_audio_extraction_real(tmp_path: Path) -> None:
     assert dest.stat().st_size > 44
 
 
-def test_schema_v2_migrates_from_v1(tmp_path: Path) -> None:
-    assert SCHEMA_VERSION == 2
+def test_schema_migrates_from_v1(tmp_path: Path) -> None:
     path = tmp_path / "v1.db"
     with connect(path) as conn:
         for statement in MIGRATION_1:
@@ -237,7 +236,7 @@ def test_schema_v2_migrates_from_v1(tmp_path: Path) -> None:
         conn.execute("PRAGMA user_version = 1")
     with connect(path) as conn:
         assert get_schema_version(conn) == 1
-        assert migrate(conn) == 2
+        assert migrate(conn) == SCHEMA_VERSION
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
