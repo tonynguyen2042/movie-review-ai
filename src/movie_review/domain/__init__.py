@@ -12,6 +12,7 @@ from movie_review.domain.job import Job
 from movie_review.domain.location import Location
 from movie_review.domain.mention import CharacterMention
 from movie_review.domain.movie import Movie, MovieMetadata
+from movie_review.domain.render import PlannedClip, VisualPlan
 from movie_review.domain.review import (
     OutlineSection,
     ReviewParagraph,
@@ -49,6 +50,8 @@ __all__ = [
     "ReviewPlan",
     "ReviewScript",
     "ReviewSection",
+    "PlannedClip",
+    "VisualPlan",
     "Scene",
     "SceneAnalysis",
     "StoryArc",
