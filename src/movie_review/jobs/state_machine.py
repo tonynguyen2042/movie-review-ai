@@ -27,12 +27,13 @@ TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
     JobStatus.AUDIO_READY: frozenset({JobStatus.EDIT_PLAN_READY}),
     JobStatus.EDIT_PLAN_READY: frozenset({JobStatus.RENDERED}),
     JobStatus.RENDERED: frozenset({JobStatus.QUALITY_CHECKED}),
-    JobStatus.QUALITY_CHECKED: frozenset({JobStatus.COMPLETED}),
+    JobStatus.QUALITY_CHECKED: frozenset({JobStatus.COMPLETED, JobStatus.NEEDS_REVIEW}),
     JobStatus.COMPLETED: frozenset(),
+    JobStatus.NEEDS_REVIEW: frozenset(),
     JobStatus.FAILED: frozenset(),
 }
 
-_TERMINAL = frozenset({JobStatus.COMPLETED, JobStatus.FAILED})
+_TERMINAL = frozenset({JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.NEEDS_REVIEW})
 
 
 class InvalidTransitionError(ValueError):
