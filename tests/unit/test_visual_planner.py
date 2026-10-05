@@ -99,6 +99,18 @@ def test_location_context_tier() -> None:
     assert by_scene["scene_000003"].priority == 3
 
 
+def test_object_tier() -> None:
+    scenes = _scenes() + [_scene("scene_000003", 20.0, 30.0)]
+    analyses = {
+        "scene_000001": SceneAnalysis(scene_id="scene_000001", objects=["photograph"]),
+        "scene_000002": SceneAnalysis(scene_id="scene_000002"),
+        "scene_000003": SceneAnalysis(scene_id="scene_000003", objects=["photograph"]),
+    }
+    plan = plan_visuals(_script(_paragraph("p1", "event_00001")), scenes, analyses, _events())
+    by_scene = {c.scene_id: c for c in plan.paragraph_clips}
+    assert by_scene["scene_000003"].reason == "relevant object"
+
+
 def test_no_refs_falls_back_to_establishing() -> None:
     plan = plan_visuals(_script(_paragraph("p1")), _scenes(), _analyses(), _events())
     [clip] = plan.paragraph_clips
