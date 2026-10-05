@@ -1,4 +1,4 @@
-"""Typer CLI (T009, T084, T085, T086, T087, T088).
+"""Typer CLI (T009, T084, T085, T086, T087, T088, T089).
 
 Commands parse arguments, wire configuration/logging/jobs, and execute the
 pipeline. Stages run sequentially with checkpointing and resume support.
@@ -219,3 +219,25 @@ def stages() -> None:
 def version() -> None:
     """Print the package version."""
     typer.echo(__version__)
+
+
+@app.command()
+def dashboard(
+    host: Annotated[str, typer.Option(help="Host to bind to.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port to listen on.")] = 8080,
+    db_path: DbOption = None,
+    open_browser: Annotated[bool, typer.Option(help="Open browser on start.")] = False,
+) -> None:
+    """Start the web job dashboard (T089)."""
+    from movie_review.ui.dashboard import run_dashboard
+    typer.echo(f"Starting dashboard at http://{host}:{port}")
+    typer.echo("Press Ctrl+C to stop")
+    dashboard = run_dashboard(host, port, db_path, open_browser)
+    try:
+        # Keep running until interrupted
+        import time
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        typer.echo("\nStopping dashboard...")
+        dashboard.stop()
