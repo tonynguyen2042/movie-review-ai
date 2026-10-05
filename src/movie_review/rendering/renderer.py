@@ -206,14 +206,13 @@ def render(
     except ff.ProcessError as exc:
         raise RenderError(f"Cannot mux {target}: {exc}") from exc
 
-    subtitle_path: Path | None = target.with_name(SUBTITLE_FILENAME)
+    resolved_subtitles: Path | None = None
     if subtitles_srt is not None:
+        resolved_subtitles = target.with_name(SUBTITLE_FILENAME)
         try:
-            subtitle_path.write_bytes(Path(subtitles_srt).read_bytes())
+            resolved_subtitles.write_bytes(Path(subtitles_srt).read_bytes())
         except OSError as exc:
             raise RenderError(f"Cannot write subtitles: {exc}") from exc
-    else:
-        subtitle_path = None
     try:
         meta = probe_fn(str(target))
         duration = float(getattr(meta, "duration_seconds", 0.0))
@@ -227,7 +226,7 @@ def render(
         ulog.log_event(_logger, event="render.completed", status="ok")
     return RenderResult(
         path=target,
-        subtitle_path=subtitle_path,
+        subtitle_path=resolved_subtitles,
         duration_seconds=duration,
         cache_hit=False,
     )
