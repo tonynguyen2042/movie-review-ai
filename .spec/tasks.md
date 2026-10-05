@@ -180,7 +180,7 @@ Never fabricate a PR URL.
 # Phase 5 — Review Intelligence
 
 - [x] **T040** Style Profile Loader
-- [ ] **T041** Review Planner
+- [x] **T041** Review Planner
 - [ ] **T042** Story Analyst
 - [ ] **T043** Review Writer Prompt
 - [ ] **T044** Script Writer
