@@ -201,7 +201,7 @@ Never fabricate a PR URL.
 
 # Phase 7 — Visual Editing
 
-- [ ] **T056** Visual Planner
+- [x] **T056** Visual Planner
 - [ ] **T057** Clip Selector
 - [ ] **T058** Render Manifest
 - [ ] **T059** Subtitle Generator
