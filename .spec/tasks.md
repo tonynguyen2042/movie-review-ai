@@ -186,7 +186,7 @@ Never fabricate a PR URL.
 - [x] **T044** Script Writer
 - [x] **T045** Claim Extraction
 - [x] **T046** Evidence Retrieval
-- [ ] **T047** Fact Checker
+- [x] **T047** Fact Checker
 - [ ] **T048** Continuity Checker
 - [ ] **T049** Script Repair Loop
 - [ ] **T050** Duration Controller
