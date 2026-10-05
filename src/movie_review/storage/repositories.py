@@ -19,6 +19,8 @@ from movie_review.domain import (
     Claim,
     ClaimStatus,
     ClaimType,
+    Event,
+    EventType,
     Evidence,
     EvidenceType,
     Job,
@@ -487,6 +489,67 @@ def list_locations(conn: sqlite3.Connection, job_id: str) -> list[Location]:
         "SELECT * FROM locations WHERE job_id = ? ORDER BY first_seen", (job_id,)
     ).fetchall()
     return [_row_to_location(row) for row in rows]
+
+
+# -- events -----------------------------------------------------------------
+
+
+def save_event(conn: sqlite3.Connection, job_id: str, event: Event) -> None:
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO events
+                (job_id, id, type, timestamp, characters_json, location,
+                 description, importance, evidence_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id, id) DO UPDATE SET
+                type = excluded.type,
+                timestamp = excluded.timestamp,
+                characters_json = excluded.characters_json,
+                location = excluded.location,
+                description = excluded.description,
+                importance = excluded.importance,
+                evidence_json = excluded.evidence_json
+            """,
+            (
+                job_id,
+                event.id,
+                event.type.value,
+                event.timestamp,
+                json.dumps(event.characters),
+                event.location,
+                event.description,
+                event.importance,
+                json.dumps(event.evidence),
+            ),
+        )
+
+
+def _row_to_event(row: sqlite3.Row) -> Event:
+    return Event(
+        id=row["id"],
+        type=EventType(row["type"]),
+        timestamp=row["timestamp"],
+        characters=list(json.loads(row["characters_json"])),
+        location=row["location"],
+        description=row["description"],
+        importance=row["importance"],
+        evidence=list(json.loads(row["evidence_json"])),
+    )
+
+
+def get_event(conn: sqlite3.Connection, job_id: str, event_id: str) -> Event | None:
+    row = conn.execute(
+        "SELECT * FROM events WHERE job_id = ? AND id = ?", (job_id, event_id)
+    ).fetchone()
+    return _row_to_event(row) if row is not None else None
+
+
+def list_events(conn: sqlite3.Connection, job_id: str) -> list[Event]:
+    rows = conn.execute(
+        "SELECT * FROM events WHERE job_id = ? ORDER BY timestamp", (job_id,)
+    ).fetchall()
+    return [_row_to_event(row) for row in rows]
 
 
 # -- artifacts ------------------------------------------------------------
