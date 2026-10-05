@@ -150,7 +150,7 @@ Never fabricate a PR URL.
 - [x] **T017** Whisper MLX Adapter
 - [x] **T018** Transcript Stage
 - [x] **T019** Transcript Normalization
-- [ ] **T020** Diarization Port
+- [x] **T020** Diarization Port
 - [ ] **T021** Initial Diarization Adapter
 
 # Phase 3 — Visual Intelligence
