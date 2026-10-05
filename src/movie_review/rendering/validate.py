@@ -21,10 +21,6 @@ from movie_review.utils import logging as ulog
 _logger = logging.getLogger(__name__)
 
 
-class RenderValidationError(Exception):
-    """Validation could not run (missing inputs, unreadable files)."""
-
-
 @dataclass(frozen=True)
 class ValidationCheck:
     """One named check with its outcome."""

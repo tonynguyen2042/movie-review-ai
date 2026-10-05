@@ -33,7 +33,6 @@ from movie_review.rendering.subtitles import (
     write_srt,
 )
 from movie_review.rendering.validate import (
-    RenderValidationError,
     ValidationCheck,
     ValidationReport,
     validate_render,
@@ -51,7 +50,6 @@ __all__ = [
     "SelectedClip",
     "SubtitleCue",
     "SubtitleError",
-    "RenderValidationError",
     "ValidationCheck",
     "ValidationReport",
     "VisualPlan",
