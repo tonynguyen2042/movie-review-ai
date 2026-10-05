@@ -157,7 +157,7 @@ Never fabricate a PR URL.
 
 - [x] **T022** VLM Port
 - [x] **T023** Qwen3-VL Adapter
-- [ ] **T024** Scene Analysis Prompt
+- [x] **T024** Scene Analysis Prompt
 - [ ] **T025** Scene Visual Analysis Stage
 - [ ] **T026** Adaptive Sampling Feedback
 
