@@ -14,6 +14,7 @@ from movie_review.domain.mention import CharacterMention
 from movie_review.domain.movie import Movie, MovieMetadata
 from movie_review.domain.scene import Scene
 from movie_review.domain.scene_analysis import SceneAnalysis
+from movie_review.domain.story import StoryArc, StoryElement
 from movie_review.domain.transcript import TranscriptSegment
 
 __all__ = [
@@ -37,6 +38,8 @@ __all__ = [
     "Relationship",
     "Scene",
     "SceneAnalysis",
+    "StoryArc",
+    "StoryElement",
     "StoryGraph",
     "TranscriptSegment",
 ]
