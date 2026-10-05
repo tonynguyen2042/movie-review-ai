@@ -434,13 +434,15 @@
     },
     "T035": {
       "title": "Relationship Graph",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-05T01:35:22.850603+00:00",
+      "started_at": "2026-10-05T01:32:38.816016+00:00",
+      "completed_at": "2026-10-05T01:35:22.850603+00:00"
     },
     "T036": {
       "title": "Story Arc Extraction",
