@@ -411,6 +411,40 @@ def list_mentions(conn: sqlite3.Connection, job_id: str) -> list[CharacterMentio
     ]
 
 
+# -- speakers -------------------------------------------------------------
+
+
+def save_speaker_link(
+    conn: sqlite3.Connection,
+    job_id: str,
+    speaker_id: str,
+    character_id: str | None,
+    confidence: float,
+) -> None:
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO speakers (job_id, speaker_id, character_id, confidence)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(job_id, speaker_id) DO UPDATE SET
+                character_id = excluded.character_id,
+                confidence = excluded.confidence
+            """,
+            (job_id, speaker_id, character_id, confidence),
+        )
+
+
+def list_speaker_links(
+    conn: sqlite3.Connection, job_id: str
+) -> list[tuple[str, str | None, float]]:
+    rows = conn.execute(
+        "SELECT speaker_id, character_id, confidence FROM speakers "
+        "WHERE job_id = ? ORDER BY speaker_id",
+        (job_id,),
+    ).fetchall()
+    return [(row["speaker_id"], row["character_id"], row["confidence"]) for row in rows]
+
+
 # -- artifacts ------------------------------------------------------------
 
 
