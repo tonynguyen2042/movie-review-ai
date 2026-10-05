@@ -72,14 +72,6 @@ def run_transcript(
     model = active.model if isinstance(active, WhisperMLXAdapter) else type(active).__name__
 
     audio_path = artifacts.artifact_path(ctx.jobs_dir, ctx.job_id, "audio", AUDIO_FILENAME)
-    extract = extract_fn or extract_dialogue_audio
-    try:
-        extract(src, audio_path, ctx.settings.media.ffmpeg)
-    except AudioExtractionError as exc:
-        if owns_completion:
-            ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
-        raise TranscriptError(str(exc)) from exc
-
     file_hash = artifacts.sha256_file(src)
     spec = CacheSpec(
         stage=STAGE_NAME,
@@ -98,9 +90,23 @@ def run_transcript(
         try:
             segments = [TranscriptSegment.model_validate(item) for item in cached["segments"]]
         except (KeyError, TypeError, ValueError) as exc:
+            if owns_completion:
+                ctx.manager.fail(ctx.job_id, STAGE_NAME, f"cached transcript corrupt: {exc}")
             raise TranscriptError(f"Cached transcript.json is corrupt for {src}") from exc
         cache_hit = True
+        if not audio_path.is_file():
+            try:
+                (extract_fn or extract_dialogue_audio)(src, audio_path, ctx.settings.media.ffmpeg)
+            except AudioExtractionError as exc:
+                raise TranscriptError(str(exc)) from exc
     else:
+        extract = extract_fn or extract_dialogue_audio
+        try:
+            extract(src, audio_path, ctx.settings.media.ffmpeg)
+        except AudioExtractionError as exc:
+            if owns_completion:
+                ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
+            raise TranscriptError(str(exc)) from exc
         try:
             segments = active.transcribe(audio_path, language=language)
         except Exception as exc:  # Backend errors vary; classify with chaining (cf. T013).

@@ -163,6 +163,17 @@ def test_stage_asr_failure_fails_job(tmp_path: Path) -> None:
     assert harness.port.unloaded is True
 
 
+def test_stage_hit_regenerates_missing_audio(tmp_path: Path) -> None:
+    harness = _harness(tmp_path)
+    first = harness.stage()
+    assert first.audio_path.is_file()
+    first.audio_path.unlink()
+    harness.port.fail_on_call = True
+    second = harness.stage()
+    assert second.cache_hit is True
+    assert second.audio_path.is_file()
+
+
 def test_stage_rerun_past_transcript_ready(tmp_path: Path) -> None:
     harness = _harness(tmp_path)
     harness.stage()
