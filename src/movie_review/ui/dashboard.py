@@ -56,17 +56,20 @@ class JobDashboard:
             job_row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
             if not job_row:
                 return None
-            
+
             job = dict(job_row)
-            
+
             # Get artifacts
-            artifact_rows = conn.execute("""
+            artifact_rows = conn.execute(
+                """
                 SELECT artifact_id, stage, version, created_at, input_hash,
                        output_hash, model, prompt_version
                 FROM artifacts WHERE job_id = ? ORDER BY version
-            """, (job_id,)).fetchall()
+            """,
+                (job_id,),
+            ).fetchall()
             job["artifacts"] = [dict(row) for row in artifact_rows]
-            
+
             return job
         finally:
             conn.close()
@@ -74,9 +77,9 @@ class JobDashboard:
     def start(self, open_browser: bool = False) -> None:
         """Start the dashboard HTTP server."""
         dashboard = self
-        
+
         class DashboardHandler(http.server.BaseHTTPRequestHandler):
-            def do_GET(self):
+            def do_GET(self) -> None:
                 if self.path == "/" or self.path == "/index.html":
                     self._serve_index()
                 elif self.path == "/api/jobs":
@@ -89,20 +92,20 @@ class JobDashboard:
                 else:
                     self.send_response(404)
                     self.end_headers()
-            
-            def _serve_index(self):
+
+            def _serve_index(self) -> None:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(dashboard._index_html().encode("utf-8"))
-            
-            def _serve_jobs(self):
+
+            def _serve_jobs(self) -> None:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps(dashboard.get_jobs()).encode("utf-8"))
-            
-            def _serve_job_details(self, job_id: str):
+
+            def _serve_job_details(self, job_id: str) -> None:
                 job = dashboard.get_job_details(job_id)
                 if job:
                     self.send_response(200)
@@ -112,23 +115,24 @@ class JobDashboard:
                 else:
                     self.send_response(404)
                     self.end_headers()
-            
-            def _serve_status(self):
+
+            def _serve_status(self) -> None:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
-            
-            def log_message(self, format, *args):
+
+            def log_message(self, format: str, *args: object) -> None:
                 # Suppress default log messages
                 pass
-        
+
         self._server = http.server.HTTPServer((self.host, self.port), DashboardHandler)
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
-        
+
         if open_browser:
             import webbrowser
+
             webbrowser.open(f"http://{self.host}:{self.port}")
 
     def stop(self) -> None:
@@ -298,7 +302,12 @@ class JobDashboard:
 </html>"""
 
 
-def run_dashboard(host: str = "127.0.0.1", port: int = 8080, db_path: Optional[str] = None, open_browser: bool = False) -> JobDashboard:
+def run_dashboard(
+    host: str = "127.0.0.1",
+    port: int = 8080,
+    db_path: Optional[str] = None,
+    open_browser: bool = False,
+) -> JobDashboard:
     """Convenience function to create and start a dashboard."""
     dashboard = JobDashboard(host, port, db_path)
     dashboard.start(open_browser)

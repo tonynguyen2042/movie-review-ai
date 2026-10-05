@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from movie_review.artifacts import manager as artifacts
+from movie_review.ui.safe_json import json_for_script
 
 
 @dataclass(frozen=True)
@@ -197,7 +198,7 @@ class VisualTimelineEditor:
 
     def _html_template(self, data: dict[str, Any]) -> str:
         """Generate HTML with interactive visual timeline editor."""
-        json_data = json.dumps(data)
+        json_data = json_for_script(data)
         # Pre-render the tracks HTML in Python
         tracks_html = self._render_tracks(data["tracks"])
         return (

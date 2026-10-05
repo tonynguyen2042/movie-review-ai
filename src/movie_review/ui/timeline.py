@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from movie_review.artifacts import manager as artifacts
+from movie_review.ui.safe_json import json_for_script
 from movie_review.config.settings import load_settings
 
 
@@ -215,7 +216,7 @@ class MovieTimeline:
     
     def _html_template(self, data: dict[str, Any]) -> str:
         """Generate HTML with interactive timeline using vanilla JS."""
-        json_data = json.dumps(data)
+        json_data = json_for_script(data)
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>

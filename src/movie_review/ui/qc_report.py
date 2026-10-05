@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from movie_review.artifacts import manager as artifacts
+from movie_review.ui.safe_json import json_for_script
 
 
 class QualityReportUI:
@@ -96,7 +97,7 @@ class QualityReportUI:
 
     def _html_template(self, data: dict[str, Any]) -> str:
         """Generate HTML with the QC report summary."""
-        json_data = json.dumps(data)
+        json_data = json_for_script(data)
         metrics_html = self._render_metrics_html(data["metrics"])
         verdict_class = "pass" if data["passed"] else "fail"
         verdict_text = "PASSED" if data["passed"] else "FAILED"

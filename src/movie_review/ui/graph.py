@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from movie_review.artifacts import manager as artifacts
+from movie_review.ui.safe_json import json_for_script
 
 
 @dataclass(frozen=True)
@@ -282,7 +283,7 @@ class StoryGraph:
     
     def _html_template(self, data: dict[str, Any]) -> str:
         """Generate HTML with interactive graph using vanilla JS (force-directed)."""
-        json_data = json.dumps(data)
+        json_data = json_for_script(data)
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>

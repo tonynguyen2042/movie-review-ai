@@ -7,16 +7,18 @@ relationships, and evidence from the movie analysis.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
 from movie_review.artifacts import manager as artifacts
+from movie_review.ui.safe_json import json_for_script
 
 
 @dataclass(frozen=True)
 class CharacterDetail:
     """Full character detail for explorer."""
+
     id: str
     name: str
     aliases: list[str]
@@ -24,47 +26,35 @@ class CharacterDetail:
     first_seen: float
     last_seen: float
     confidence: float
-    scenes: list[str] = None
-    events: list[str] = None
-    relationships: list[dict[str, Any]] = None
-    mentions: list[dict[str, Any]] = None
-    evidence: list[str] = None
-    
-    def __post_init__(self):
-        if self.scenes is None:
-            object.__setattr__(self, 'scenes', [])
-        if self.events is None:
-            object.__setattr__(self, 'events', [])
-        if self.relationships is None:
-            object.__setattr__(self, 'relationships', [])
-        if self.mentions is None:
-            object.__setattr__(self, 'mentions', [])
-        if self.evidence is None:
-            object.__setattr__(self, 'evidence', [])
+    scenes: list[str] = field(default_factory=list)
+    events: list[str] = field(default_factory=list)
+    relationships: list[dict[str, Any]] = field(default_factory=list)
+    mentions: list[dict[str, Any]] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
 
 
 class CharacterExplorer:
     """Character browser for movie analysis."""
-    
+
     def __init__(self, jobs_dir: str | Path, job_id: str):
         self.jobs_dir = Path(jobs_dir)
         self.job_id = job_id
-    
+
     def load(self) -> dict[str, Any]:
         """Load all character data from job artifacts."""
         analysis_path = self.jobs_dir / self.job_id / "movie-analysis.json"
-        
+
         if not analysis_path.is_file():
             return self._build_from_artifacts()
-        
+
         document = artifacts.read_json(analysis_path)
         return self._build_from_analysis(document)
-    
+
     def _build_from_analysis(self, document: dict[str, Any]) -> dict[str, Any]:
         """Build character explorer from canonical movie-analysis.json."""
         characters = []
         char_by_id = {}
-        
+
         for char in document.get("characters", []):
             detail = CharacterDetail(
                 id=char.get("id", ""),
@@ -77,7 +67,7 @@ class CharacterExplorer:
             )
             characters.append(detail)
             char_by_id[detail.id] = detail
-        
+
         # Enrich with scene appearances
         for scene in document.get("scenes", []):
             analysis = scene.get("analysis")
@@ -87,59 +77,67 @@ class CharacterExplorer:
                     for char in characters:
                         if char.name == char_name or char_name in char.aliases:
                             if scene.get("scene_id") not in char.scenes:
-                                object.__getattribute__(char, 'scenes').append(scene.get("scene_id"))
-        
+                                object.__getattribute__(char, "scenes").append(
+                                    scene.get("scene_id")
+                                )
+
         # Enrich with events
         for event in document.get("events", []):
             for char_id in event.get("characters", []):
                 if char_id in char_by_id:
                     if event.get("id") not in char_by_id[char_id].events:
-                        object.__getattribute__(char_by_id[char_id], 'events').append(event.get("id"))
-        
+                        object.__getattribute__(char_by_id[char_id], "events").append(
+                            event.get("id")
+                        )
+
         # Enrich with relationships
         for rel in document.get("relationships", []):
             subj = rel.get("subject")
             obj = rel.get("object")
             if subj in char_by_id:
-                object.__getattribute__(char_by_id[subj], 'relationships').append({
-                    "relation": rel.get("relation"),
-                    "target": obj,
-                    "evidence": rel.get("evidence", []),
-                    "confidence": rel.get("confidence", 0.0),
-                })
+                object.__getattribute__(char_by_id[subj], "relationships").append(
+                    {
+                        "relation": rel.get("relation"),
+                        "target": obj,
+                        "evidence": rel.get("evidence", []),
+                        "confidence": rel.get("confidence", 0.0),
+                    }
+                )
             if obj in char_by_id:
-                object.__getattribute__(char_by_id[obj], 'relationships').append({
-                    "relation": rel.get("relation"),
-                    "target": subj,
-                    "evidence": rel.get("evidence", []),
-                    "confidence": rel.get("confidence", 0.0),
-                    "inverse": True,
-                })
-        
+                object.__getattribute__(char_by_id[obj], "relationships").append(
+                    {
+                        "relation": rel.get("relation"),
+                        "target": subj,
+                        "evidence": rel.get("evidence", []),
+                        "confidence": rel.get("confidence", 0.0),
+                        "inverse": True,
+                    }
+                )
+
         # Enrich with evidence
         for ev in document.get("evidence", []):
             # Evidence can be linked to characters through events/scenes
             pass
-        
+
         # Sort by first_seen
         characters.sort(key=lambda c: c.first_seen)
-        
+
         return {
             "job_id": self.job_id,
             "characters": [self._detail_to_dict(c) for c in characters],
             "total": len(characters),
         }
-    
+
     def _build_from_artifacts(self) -> dict[str, Any]:
         """Fallback: build from individual artifact files."""
         chars_path = self.jobs_dir / self.job_id / "characters" / "characters.json"
         mentions_path = self.jobs_dir / self.job_id / "characters" / "mentions.json"
         relationships_path = self.jobs_dir / self.job_id / "relationships" / "relationships.json"
         events_path = self.jobs_dir / self.job_id / "events" / "events.json"
-        
+
         characters = []
         char_by_id = {}
-        
+
         if chars_path.is_file():
             doc = artifacts.read_json(chars_path)
             for char in doc.get("characters", []):
@@ -154,54 +152,62 @@ class CharacterExplorer:
                 )
                 characters.append(detail)
                 char_by_id[detail.id] = detail
-        
+
         if mentions_path.is_file():
             doc = artifacts.read_json(mentions_path)
             for mention in doc.get("mentions", []):
                 char_id = mention.get("character_id")
                 if char_id in char_by_id:
-                    object.__getattribute__(char_by_id[char_id], 'mentions').append({
-                        "mention": mention.get("mention"),
-                        "segment_id": mention.get("source_segment_id"),
-                        "timestamp": mention.get("timestamp"),
-                    })
-        
+                    object.__getattribute__(char_by_id[char_id], "mentions").append(
+                        {
+                            "mention": mention.get("mention"),
+                            "segment_id": mention.get("source_segment_id"),
+                            "timestamp": mention.get("timestamp"),
+                        }
+                    )
+
         if relationships_path.is_file():
             doc = artifacts.read_json(relationships_path)
             for rel in doc.get("relationships", []):
                 subj = rel.get("subject")
                 obj = rel.get("object")
                 if subj in char_by_id:
-                    object.__getattribute__(char_by_id[subj], 'relationships').append({
-                        "relation": rel.get("relation"),
-                        "target": obj,
-                        "evidence": rel.get("evidence", []),
-                        "confidence": rel.get("confidence", 0.0),
-                    })
+                    object.__getattribute__(char_by_id[subj], "relationships").append(
+                        {
+                            "relation": rel.get("relation"),
+                            "target": obj,
+                            "evidence": rel.get("evidence", []),
+                            "confidence": rel.get("confidence", 0.0),
+                        }
+                    )
                 if obj in char_by_id:
-                    object.__getattribute__(char_by_id[obj], 'relationships').append({
-                        "relation": rel.get("relation"),
-                        "target": subj,
-                        "evidence": rel.get("evidence", []),
-                        "confidence": rel.get("confidence", 0.0),
-                        "inverse": True,
-                    })
-        
+                    object.__getattribute__(char_by_id[obj], "relationships").append(
+                        {
+                            "relation": rel.get("relation"),
+                            "target": subj,
+                            "evidence": rel.get("evidence", []),
+                            "confidence": rel.get("confidence", 0.0),
+                            "inverse": True,
+                        }
+                    )
+
         if events_path.is_file():
             doc = artifacts.read_json(events_path)
             for event in doc.get("events", []):
                 for char_id in event.get("characters", []):
                     if char_id in char_by_id:
-                        object.__getattribute__(char_by_id[char_id], 'events').append(event.get("id"))
-        
+                        object.__getattribute__(char_by_id[char_id], "events").append(
+                            event.get("id")
+                        )
+
         characters.sort(key=lambda c: c.first_seen)
-        
+
         return {
             "job_id": self.job_id,
             "characters": [self._detail_to_dict(c) for c in characters],
             "total": len(characters),
         }
-    
+
     def _detail_to_dict(self, detail: CharacterDetail) -> dict[str, Any]:
         return {
             "id": detail.id,
@@ -220,25 +226,66 @@ class CharacterExplorer:
             "relationships": detail.relationships,
             "mentions": detail.mentions,
         }
-    
+
+    def _render_char_list(self, characters: list[dict[str, Any]]) -> str:
+        """Render the character sidebar as HTML (Python side).
+
+        Mirrors the client-side ``_render_char_list`` so the pre-rendered
+        markup and the JS refresh path agree.
+        """
+        if not characters:
+            return '<div class="empty-state">No characters found for this job</div>'
+
+        def escape_html(text: str) -> str:
+            return (
+                text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace('"', "&quot;")
+                .replace("'", "&#39;")
+            )
+
+        items = []
+        for character in characters:
+            char_id = escape_html(str(character.get("id", "")))
+            name = escape_html(str(character.get("name", "")))
+            aliases = character.get("aliases") or []
+            alias_html = ""
+            if aliases:
+                joined = escape_html(", ".join(str(a) for a in aliases))
+                alias_html = f" <small>({joined})</small>"
+            confidence = float(character.get("confidence", 0.0)) * 100
+            items.append(
+                f'<div class="char-item" data-id="{char_id}" '
+                f"onclick=\"selectCharacter('{char_id}')\">\n"
+                f'    <div class="char-name">{name}{alias_html}</div>\n'
+                '    <div class="char-meta">\n'
+                f"        <span>{character.get('scene_count', 0)} scenes</span>\n"
+                f"        <span>{character.get('event_count', 0)} events</span>\n"
+                f"        <span>{confidence:.0f}%</span>\n"
+                "    </div>\n"
+                "</div>\n"
+            )
+        return "".join(items)
+
     def to_json(self) -> str:
         """Export character data as JSON."""
         return json.dumps(self.load(), indent=2)
-    
+
     def to_html(self) -> str:
         """Generate standalone HTML character explorer."""
         data = self.load()
         return self._html_template(data)
-    
+
     def _html_template(self, data: dict[str, Any]) -> str:
         """Generate HTML with interactive character browser."""
-        json_data = json.dumps(data)
+        json_data = json_for_script(data)
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Character Explorer - Job {data['job_id']}</title>
+    <title>Character Explorer - Job {data["job_id"]}</title>
     <style>
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fafafa; }}
@@ -275,11 +322,11 @@ class CharacterExplorer:
     <div class="container">
         <header>
             <h1>Character Explorer</h1>
-            <div class="meta">Job: {data['job_id']} | {data['total']} characters</div>
+            <div class="meta">Job: {data["job_id"]} | {data["total"]} characters</div>
         </header>
         
         <div class="char-list" id="charList">
-            {self._render_char_list(data['characters'])}
+            {self._render_char_list(data["characters"])}
         </div>
         
         <div class="char-detail" id="charDetail">
