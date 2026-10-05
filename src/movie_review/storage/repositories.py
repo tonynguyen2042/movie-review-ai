@@ -24,6 +24,7 @@ from movie_review.domain import (
     Movie,
     MovieMetadata,
     Scene,
+    TranscriptSegment,
 )
 
 
@@ -276,6 +277,52 @@ def get_claim(conn: sqlite3.Connection, job_id: str, claim_id: str) -> Claim | N
 def list_claims(conn: sqlite3.Connection, job_id: str) -> list[Claim]:
     rows = conn.execute("SELECT * FROM claims WHERE job_id = ?", (job_id,)).fetchall()
     return [_row_to_claim(row) for row in rows]
+
+
+# -- transcript -----------------------------------------------------------
+
+
+def save_transcript_segments(
+    conn: sqlite3.Connection, job_id: str, segments: list[TranscriptSegment]
+) -> None:
+    with conn:
+        conn.execute("DELETE FROM transcript_segments WHERE job_id = ?", (job_id,))
+        conn.executemany(
+            """
+            INSERT INTO transcript_segments
+                (job_id, segment_id, start, end, text, language, confidence)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    job_id,
+                    segment.segment_id,
+                    segment.start,
+                    segment.end,
+                    segment.text,
+                    segment.language,
+                    segment.confidence,
+                )
+                for segment in segments
+            ],
+        )
+
+
+def list_transcript_segments(conn: sqlite3.Connection, job_id: str) -> list[TranscriptSegment]:
+    rows = conn.execute(
+        "SELECT * FROM transcript_segments WHERE job_id = ? ORDER BY start", (job_id,)
+    ).fetchall()
+    return [
+        TranscriptSegment(
+            segment_id=row["segment_id"],
+            start=row["start"],
+            end=row["end"],
+            text=row["text"],
+            language=row["language"],
+            confidence=row["confidence"],
+        )
+        for row in rows
+    ]
 
 
 # -- artifacts ------------------------------------------------------------
