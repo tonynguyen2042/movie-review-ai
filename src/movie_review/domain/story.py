@@ -43,3 +43,13 @@ class Theme(BaseModel):
     theme: str = Field(min_length=1)
     evidence: list[str] = Field(default_factory=list)
     confidence: Confidence = 1.0
+
+
+class Twist(BaseModel):
+    """One plot twist candidate with foreshadowing evidence."""
+
+    id: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    revealed_at: float = Field(ge=0.0)
+    foreshadowed_by: list[str] = Field(min_length=1)
+    confidence: Confidence = 1.0
