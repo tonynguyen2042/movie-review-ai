@@ -8,6 +8,7 @@ from movie_review.domain.evidence import Evidence
 from movie_review.domain.job import Job
 from movie_review.domain.movie import Movie, MovieMetadata
 from movie_review.domain.scene import Scene
+from movie_review.domain.scene_analysis import SceneAnalysis
 from movie_review.domain.transcript import TranscriptSegment
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "Movie",
     "MovieMetadata",
     "Scene",
+    "SceneAnalysis",
     "TranscriptSegment",
 ]
