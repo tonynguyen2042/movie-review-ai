@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, PositiveInt
 
+from movie_review.domain.claim import Claim
+
 
 class OutlineSection(BaseModel):
     """One planned review section (spec section 27)."""
@@ -20,3 +22,27 @@ class ReviewPlan(BaseModel):
 
     sections: list[OutlineSection] = Field(min_length=1)
     total_seconds: PositiveInt
+
+
+class ReviewParagraph(BaseModel):
+    """One narratable paragraph with tracked claims (spec section 31)."""
+
+    id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    target_seconds: PositiveInt
+    claims: list[Claim] = Field(default_factory=list)
+    visual_intent: str = ""
+
+
+class ReviewSection(BaseModel):
+    """One script section of paragraphs."""
+
+    id: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+    paragraphs: list[ReviewParagraph] = Field(min_length=1)
+
+
+class ReviewScript(BaseModel):
+    """Primary script representation; Markdown renders from this (spec 31)."""
+
+    sections: list[ReviewSection] = Field(min_length=1)

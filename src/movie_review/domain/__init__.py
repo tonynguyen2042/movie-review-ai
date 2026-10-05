@@ -12,7 +12,13 @@ from movie_review.domain.job import Job
 from movie_review.domain.location import Location
 from movie_review.domain.mention import CharacterMention
 from movie_review.domain.movie import Movie, MovieMetadata
-from movie_review.domain.review import OutlineSection, ReviewPlan
+from movie_review.domain.review import (
+    OutlineSection,
+    ReviewParagraph,
+    ReviewPlan,
+    ReviewScript,
+    ReviewSection,
+)
 from movie_review.domain.scene import Scene
 from movie_review.domain.scene_analysis import SceneAnalysis
 from movie_review.domain.story import StoryArc, StoryElement, Theme, Twist
@@ -38,7 +44,10 @@ __all__ = [
     "OutlineSection",
     "RelationType",
     "Relationship",
+    "ReviewParagraph",
     "ReviewPlan",
+    "ReviewScript",
+    "ReviewSection",
     "Scene",
     "SceneAnalysis",
     "StoryArc",
