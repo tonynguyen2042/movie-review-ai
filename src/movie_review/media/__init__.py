@@ -1,5 +1,11 @@
-"""Media probing, process, scene-detection, and frame adapters (T010-T015)."""
+"""Media probing, process, detection, frame, and audio adapters (T010-T018)."""
 
+from movie_review.media.audio import (
+    CHANNELS,
+    SAMPLE_RATE,
+    AudioExtractionError,
+    extract_dialogue_audio,
+)
 from movie_review.media.ffmpeg import (
     BinaryNotFoundError,
     FFmpegError,
@@ -34,6 +40,9 @@ from movie_review.media.scenes import (
 )
 
 __all__ = [
+    "CHANNELS",
+    "SAMPLE_RATE",
+    "AudioExtractionError",
     "DEFAULT_ADAPTIVE_THRESHOLD",
     "DEFAULT_CONTENT_THRESHOLD",
     "DEFAULT_MIN_SCENE_LEN",
@@ -51,6 +60,7 @@ __all__ = [
     "SamplingResult",
     "check",
     "detect_scenes",
+    "extract_dialogue_audio",
     "extract_frame",
     "ffmpeg_version",
     "frame_filename",
