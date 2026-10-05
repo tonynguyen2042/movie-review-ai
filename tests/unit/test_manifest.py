@@ -124,3 +124,16 @@ def test_assemble_unknown_job(tmp_path: Path) -> None:
     harness.ctx.job_id = "job_2"
     with pytest.raises(ManifestError, match="Unknown job"):
         harness.assemble()
+
+
+def test_changed_clips_miss_cache(tmp_path: Path) -> None:
+    harness = _harness(tmp_path)
+    harness.assemble()
+    result = assemble_manifest(
+        [_paragraph("p1")],
+        {"p1": _clip("p1", 1.0, 4.0)},
+        {"p1": 10.0},
+        100.0,
+        harness.ctx,
+    )
+    assert result.cache_hit is False

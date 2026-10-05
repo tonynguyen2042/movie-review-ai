@@ -135,7 +135,17 @@ def assemble_manifest(
             stage=STAGE_NAME,
             stage_version=STAGE_VERSION,
             input_hash=artifacts.sha256_bytes(
-                "|".join(f"{p.id}:{narration_seconds.get(p.id)}" for p in paragraphs).encode()
+                "|".join(
+                    [
+                        ",".join(
+                            f"{p.id}:{narration_seconds.get(p.id)}:{clips[p.id].scene_id}:"
+                            f"{clips[p.id].start:.3f}:{clips[p.id].end:.3f}"
+                            for p in paragraphs
+                            if p.id in clips
+                        ),
+                        f"{movie_duration_seconds:.3f}",
+                    ]
+                ).encode()
             ),
             generation_config={
                 "max_total_seconds": max_total_seconds,
