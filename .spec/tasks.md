@@ -147,7 +147,7 @@ Never fabricate a PR URL.
 # Phase 2 — Audio Intelligence
 
 - [x] **T016** ASR Port
-- [ ] **T017** Whisper MLX Adapter
+- [x] **T017** Whisper MLX Adapter
 - [ ] **T018** Transcript Stage
 - [ ] **T019** Transcript Normalization
 - [ ] **T020** Diarization Port
