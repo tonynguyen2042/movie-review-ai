@@ -119,7 +119,9 @@ def write_script(
             spec = CacheSpec(
                 stage=STAGE_NAME,
                 stage_version=STAGE_VERSION,
-                input_hash=artifacts.sha256_bytes(f"{section.id}|{story}|{share}".encode()),
+                input_hash=artifacts.sha256_bytes(
+                    f"{section.id}|{story}|{share}|{style.name}|{spoilers or style.spoilers}".encode()
+                ),
                 model_id=model_id,
                 prompt_version=f"{prompt.name}:{prompt.version}",
             )
