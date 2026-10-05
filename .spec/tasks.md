@@ -184,7 +184,7 @@ Never fabricate a PR URL.
 - [x] **T042** Story Analyst
 - [x] **T043** Review Writer Prompt
 - [x] **T044** Script Writer
-- [ ] **T045** Claim Extraction
+- [x] **T045** Claim Extraction
 - [ ] **T046** Evidence Retrieval
 - [ ] **T047** Fact Checker
 - [ ] **T048** Continuity Checker
