@@ -219,7 +219,7 @@ Never fabricate a PR URL.
 - [x] **T068** Final Quality Gate
 - [x] **T069** Quality Report
 - [x] **T070** Stage Retry
-- [ ] **T071** OOM Recovery
+- [x] **T071** OOM Recovery
 - [ ] **T072** Interrupted Job Recovery
 - [ ] **T073** Artifact Integrity
 - [ ] **T074** Model Benchmark CLI
