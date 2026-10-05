@@ -206,13 +206,15 @@
     },
     "T016": {
       "title": "ASR Port",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-05T00:41:10.703891+00:00",
+      "started_at": "2026-10-05T00:39:34.182872+00:00",
+      "completed_at": "2026-10-05T00:41:10.703891+00:00"
     },
     "T017": {
       "title": "Whisper MLX Adapter",
