@@ -14,6 +14,8 @@ from datetime import datetime
 
 from movie_review.domain import (
     Artifact,
+    Character,
+    CharacterMention,
     Claim,
     ClaimStatus,
     ClaimType,
@@ -320,6 +322,90 @@ def list_transcript_segments(conn: sqlite3.Connection, job_id: str) -> list[Tran
             text=row["text"],
             language=row["language"],
             confidence=row["confidence"],
+        )
+        for row in rows
+    ]
+
+
+# -- characters -----------------------------------------------------------
+
+
+def save_character(conn: sqlite3.Connection, job_id: str, character: Character) -> None:
+    with conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO characters
+                (job_id, id, name, aliases_json, gender,
+                 first_seen, last_seen, confidence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                character.id,
+                character.name,
+                json.dumps(character.aliases),
+                character.gender,
+                character.first_seen,
+                character.last_seen,
+                character.confidence,
+            ),
+        )
+
+
+def _row_to_character(row: sqlite3.Row) -> Character:
+    return Character(
+        id=row["id"],
+        name=row["name"],
+        aliases=list(json.loads(row["aliases_json"])),
+        gender=row["gender"],
+        first_seen=row["first_seen"],
+        last_seen=row["last_seen"],
+        confidence=row["confidence"],
+    )
+
+
+def get_character(conn: sqlite3.Connection, job_id: str, character_id: str) -> Character | None:
+    row = conn.execute(
+        "SELECT * FROM characters WHERE job_id = ? AND id = ?", (job_id, character_id)
+    ).fetchone()
+    return _row_to_character(row) if row is not None else None
+
+
+def list_characters(conn: sqlite3.Connection, job_id: str) -> list[Character]:
+    rows = conn.execute(
+        "SELECT * FROM characters WHERE job_id = ? ORDER BY first_seen", (job_id,)
+    ).fetchall()
+    return [_row_to_character(row) for row in rows]
+
+
+def save_mention(conn: sqlite3.Connection, job_id: str, mention: CharacterMention) -> None:
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO character_mentions
+                (job_id, mention, source_segment_id, timestamp, character_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                mention.mention,
+                mention.source_segment_id,
+                mention.timestamp,
+                mention.character_id,
+            ),
+        )
+
+
+def list_mentions(conn: sqlite3.Connection, job_id: str) -> list[CharacterMention]:
+    rows = conn.execute(
+        "SELECT * FROM character_mentions WHERE job_id = ? ORDER BY timestamp", (job_id,)
+    ).fetchall()
+    return [
+        CharacterMention(
+            mention=row["mention"],
+            source_segment_id=row["source_segment_id"],
+            timestamp=row["timestamp"],
+            character_id=row["character_id"],
         )
         for row in rows
     ]
