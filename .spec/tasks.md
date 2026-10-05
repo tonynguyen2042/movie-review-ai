@@ -205,7 +205,7 @@ Never fabricate a PR URL.
 - [x] **T057** Clip Selector
 - [x] **T058** Render Manifest
 - [x] **T059** Subtitle Generator
-- [ ] **T060** Audio Mixer
+- [x] **T060** Audio Mixer
 - [ ] **T061** FFmpeg Renderer
 - [ ] **T062** Render Validation
 
