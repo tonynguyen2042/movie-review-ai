@@ -156,7 +156,7 @@ Never fabricate a PR URL.
 # Phase 3 — Visual Intelligence
 
 - [x] **T022** VLM Port
-- [ ] **T023** Qwen3-VL Adapter
+- [x] **T023** Qwen3-VL Adapter
 - [ ] **T024** Scene Analysis Prompt
 - [ ] **T025** Scene Visual Analysis Stage
 - [ ] **T026** Adaptive Sampling Feedback
