@@ -1,8 +1,7 @@
-"""Typer CLI skeleton (T009).
+"""Typer CLI (T009, T084, T085, T086, T087, T088).
 
-Commands parse arguments, wire configuration/logging/jobs, and persist job
-records. Stage execution itself arrives with later phases; unimplemented
-operations fail loudly instead of pretending to work.
+Commands parse arguments, wire configuration/logging/jobs, and execute the
+pipeline. Stages run sequentially with checkpointing and resume support.
 """
 
 from __future__ import annotations
@@ -20,6 +19,12 @@ from movie_review.config.settings import load_settings
 from movie_review.domain import Job
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.state_machine import JobNotFoundError
+from movie_review.pipeline.orchestrator import (
+    STAGE_SEQUENCE,
+    resume_job,
+    run_pipeline,
+    validate_job,
+)
 from movie_review.storage.database import bootstrap
 from movie_review.utils import logging as ulog
 
@@ -78,8 +83,11 @@ def process(
     spoilers: Annotated[str, typer.Option(help="Spoiler level.")] = "full",
     output: Annotated[str, typer.Option(help="Output directory.")] = "./output",
     db_path: DbOption = None,
+    stage_from: Annotated[str | None, typer.Option("--stage-from", help="Start from stage (T086).")] = None,
+    stage_to: Annotated[str | None, typer.Option("--stage-to", help="Run up to stage (T086).")] = None,
+    no_run: Annotated[bool, typer.Option("--no-run", help="Create job only, do not run pipeline.")] = False,
 ) -> None:
-    """Accept a movie, persist a job record, and queue it for processing."""
+    """Accept a movie, create a job, and optionally run the full pipeline."""
     if not Path(movie).is_file():
         raise typer.BadParameter(f"Input file not found: {movie}")
     minutes = _parse_duration(duration)
@@ -99,7 +107,23 @@ def process(
             output=output,
         )
     typer.echo(f"job_id={job.job_id} status={job.status.value}")
-    typer.echo("Pipeline stages arrive in later phases (T010+); job is queued.")
+
+    if no_run:
+        typer.echo("Pipeline execution skipped (--no-run). Use 'resume' to start.")
+        return
+
+    # Run the pipeline
+    results = run_pipeline(job.job_id, movie, db_path, start_stage=stage_from, end_stage=stage_to)
+
+    # Report results
+    for result in results:
+        status = "OK" if result.success else "FAILED"
+        typer.echo(f"  {result.stage}: {status} ({result.duration_ms}ms)")
+        if result.error:
+            typer.echo(f"    error: {result.error}", err=True)
+
+    if any(not r.success for r in results):
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -117,33 +141,78 @@ def inspect(
 def validate(
     job_id: Annotated[str, typer.Argument(help="Job ID.")], db_path: DbOption = None
 ) -> None:
-    """Check a job record is well-formed and report its state."""
+    """Check a job record is well-formed and validate its artifacts."""
+    is_valid = validate_job(job_id, db_path)
     manager, conn = _manager(db_path)
     with conn:
         job = _load_job(manager, job_id)
-    typer.echo(f"job_id={job.job_id} status={job.status.value} valid=true")
+    typer.echo(f"job_id={job.job_id} status={job.status.value} valid={is_valid}")
+    if not is_valid:
+        raise typer.Exit(code=1)
 
 
 @app.command()
 def resume(
-    job_id: Annotated[str, typer.Argument(help="Job ID.")], db_path: DbOption = None
+    job_id: Annotated[str, typer.Argument(help="Job ID.")],
+    db_path: DbOption = None,
 ) -> None:
-    """Resume an interrupted job (full behavior in T085)."""
-    manager, conn = _manager(db_path)
-    with conn:
-        _load_job(manager, job_id)
-    typer.echo("resume is not implemented yet (T085); job state unchanged.", err=True)
-    raise typer.Exit(code=1)
+    """Resume an interrupted job from its last checkpoint."""
+    results = resume_job(job_id, db_path)
+    for result in results:
+        status = "OK" if result.success else "FAILED"
+        typer.echo(f"  {result.stage}: {status} ({result.duration_ms}ms)")
+        if result.error:
+            typer.echo(f"    error: {result.error}", err=True)
+    if any(not r.success for r in results):
+        raise typer.Exit(code=1)
 
 
 @app.command()
-def retry(job_id: Annotated[str, typer.Argument(help="Job ID.")], db_path: DbOption = None) -> None:
-    """Retry a failed job (full behavior in T070)."""
+def retry(
+    job_id: Annotated[str, typer.Argument(help="Job ID.")],
+    db_path: DbOption = None,
+    stage: Annotated[str | None, typer.Option("--stage", help="Specific stage to retry (T070).")] = None,
+) -> None:
+    """Retry a failed job or specific stage."""
+    from movie_review.pipeline.retry import RetryPolicy, run_with_retry
+    from movie_review.jobs.recovery import recovery_plan
+    
     manager, conn = _manager(db_path)
     with conn:
-        _load_job(manager, job_id)
-    typer.echo("retry is not implemented yet (T070); job state unchanged.", err=True)
-    raise typer.Exit(code=1)
+        job = _load_job(manager, job_id)
+    
+    if job.status != job.status.FAILED:
+        typer.echo(f"Job {job_id} is not in FAILED state (current: {job.status.value})", err=True)
+        raise typer.Exit(code=1)
+    
+    # Get recovery plan to find failed stage
+    plan = recovery_plan(manager, job_id)
+    target_stage = stage or plan.resume_stage
+    
+    typer.echo(f"Retrying stage: {target_stage}")
+    
+    # Run with retry policy
+    policy = RetryPolicy(max_attempts=3, backoff_seconds=2.0)
+    
+    def _run_stage():
+        results = run_pipeline(job_id, job.input_file, db_path, start_stage=target_stage, end_stage=target_stage)
+        if not results or not results[0].success:
+            raise RuntimeError(f"Stage {target_stage} failed: {results[0].error if results else 'no result'}")
+        return results[0]
+    
+    try:
+        run_with_retry(_run_stage, policy, stage=target_stage)
+        typer.echo(f"Stage {target_stage} succeeded on retry")
+    except Exception as exc:
+        typer.echo(f"Retry exhausted for {target_stage}: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def stages() -> None:
+    """List available pipeline stages in execution order (T086)."""
+    for stage_name, desc in STAGE_SEQUENCE:
+        typer.echo(f"  {stage_name}: {desc}")
 
 
 @app.command()
