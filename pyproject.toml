@@ -5,6 +5,7 @@ description = "Local-first AI pipeline that converts movies into review videos"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "numpy>=2.5.3",
   "pydantic>=2.0",
   "pydantic-settings>=2.15.0",
   "pyyaml>=6.0",

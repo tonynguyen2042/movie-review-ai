@@ -58,7 +58,7 @@ def read_mono_pcm16(path: str | Path, sample_rate: int = SAMPLE_RATE) -> np.ndar
                 frames = wav.readframes(wav.getnframes())
                 channels = wav.getnchannels()
                 rate = wav.getframerate()
-        except wave.Error as exc:
+        except (wave.Error, OSError) as exc:
             raise DiarizationError(f"Cannot read WAV {src}: {exc}") from exc
         samples = np.frombuffer(frames, dtype=np.int16).astype(np.float64)
         if channels > 1:
