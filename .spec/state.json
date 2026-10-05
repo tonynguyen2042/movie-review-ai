@@ -710,13 +710,15 @@
     },
     "T058": {
       "title": "Render Manifest",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-05T02:52:03.600668+00:00",
+      "started_at": "2026-10-05T02:46:59.916797+00:00",
+      "completed_at": "2026-10-05T02:52:03.600668+00:00"
     },
     "T059": {
       "title": "Subtitle Generator",

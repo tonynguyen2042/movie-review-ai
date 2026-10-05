@@ -203,7 +203,7 @@ Never fabricate a PR URL.
 
 - [x] **T056** Visual Planner
 - [x] **T057** Clip Selector
-- [ ] **T058** Render Manifest
+- [x] **T058** Render Manifest
 - [ ] **T059** Subtitle Generator
 - [ ] **T060** Audio Mixer
 - [ ] **T061** FFmpeg Renderer
