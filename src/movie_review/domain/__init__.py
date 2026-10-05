@@ -2,6 +2,7 @@
 
 from movie_review.domain.artifact import Artifact
 from movie_review.domain.claim import Claim
+from movie_review.domain.diarization import DiarizedSegment
 from movie_review.domain.enums import ClaimStatus, ClaimType, EvidenceType, JobStatus
 from movie_review.domain.evidence import Evidence
 from movie_review.domain.job import Job
@@ -14,6 +15,7 @@ __all__ = [
     "Claim",
     "ClaimStatus",
     "ClaimType",
+    "DiarizedSegment",
     "Evidence",
     "EvidenceType",
     "Job",
