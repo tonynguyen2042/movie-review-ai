@@ -120,7 +120,9 @@ def write_script(
                 stage=STAGE_NAME,
                 stage_version=STAGE_VERSION,
                 input_hash=artifacts.sha256_bytes(
-                    f"{section.id}|{story}|{share}|{style.name}|{spoilers or style.spoilers}".encode()
+                    "|".join(
+                        [section.id, story, str(share), style.name, spoilers or style.spoilers]
+                    ).encode()
                 ),
                 model_id=model_id,
                 prompt_version=f"{prompt.name}:{prompt.version}",
