@@ -23,6 +23,7 @@ from movie_review.domain.scene import Scene
 from movie_review.domain.scene_analysis import SceneAnalysis
 from movie_review.domain.story import StoryArc, StoryElement, Theme, Twist
 from movie_review.domain.transcript import TranscriptSegment
+from movie_review.domain.tts import SpeechAudio, TTSRequest
 
 __all__ = [
     "Artifact",
@@ -54,6 +55,8 @@ __all__ = [
     "StoryElement",
     "StoryGraph",
     "Theme",
+    "SpeechAudio",
+    "TTSRequest",
     "TranscriptSegment",
     "Twist",
 ]
