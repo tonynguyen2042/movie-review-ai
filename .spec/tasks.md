@@ -151,7 +151,7 @@ Never fabricate a PR URL.
 - [x] **T018** Transcript Stage
 - [x] **T019** Transcript Normalization
 - [x] **T020** Diarization Port
-- [ ] **T021** Initial Diarization Adapter
+- [x] **T021** Initial Diarization Adapter
 
 # Phase 3 — Visual Intelligence
 
