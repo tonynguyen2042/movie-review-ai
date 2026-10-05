@@ -7,6 +7,7 @@ from movie_review.domain.diarization import DiarizedSegment
 from movie_review.domain.enums import ClaimStatus, ClaimType, EvidenceType, JobStatus
 from movie_review.domain.event import Event, EventType
 from movie_review.domain.evidence import Evidence
+from movie_review.domain.graph import Relationship, RelationType, StoryGraph
 from movie_review.domain.job import Job
 from movie_review.domain.location import Location
 from movie_review.domain.mention import CharacterMention
@@ -32,7 +33,10 @@ __all__ = [
     "Location",
     "Movie",
     "MovieMetadata",
+    "RelationType",
+    "Relationship",
     "Scene",
     "SceneAnalysis",
+    "StoryGraph",
     "TranscriptSegment",
 ]
