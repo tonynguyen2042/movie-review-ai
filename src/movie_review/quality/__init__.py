@@ -1,4 +1,4 @@
-"""Quality metrics and gates (T063 model, T064-T067 metrics, T068 gate)."""
+"""Quality metrics, gates, and reports (T063-T069)."""
 
 from movie_review.quality.characters import character_consistency
 from movie_review.quality.coverage import evidence_coverage
