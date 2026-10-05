@@ -215,7 +215,7 @@ Never fabricate a PR URL.
 - [x] **T064** Evidence Coverage Metric
 - [x] **T065** Timeline Consistency Metric
 - [x] **T066** Character Consistency Metric
-- [ ] **T067** Visual Alignment Metric
+- [x] **T067** Visual Alignment Metric
 - [ ] **T068** Final Quality Gate
 - [ ] **T069** Quality Report
 - [ ] **T070** Stage Retry
