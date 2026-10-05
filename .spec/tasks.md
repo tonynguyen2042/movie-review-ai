@@ -174,7 +174,7 @@ Never fabricate a PR URL.
 - [x] **T035** Relationship Graph
 - [x] **T036** Story Arc Extraction
 - [x] **T037** Theme Extraction
-- [ ] **T038** Twist Detection
+- [x] **T038** Twist Detection
 - [ ] **T039** Build `movie-analysis.json`
 
 # Phase 5 — Review Intelligence
