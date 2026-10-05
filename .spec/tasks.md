@@ -218,7 +218,7 @@ Never fabricate a PR URL.
 - [x] **T067** Visual Alignment Metric
 - [x] **T068** Final Quality Gate
 - [x] **T069** Quality Report
-- [ ] **T070** Stage Retry
+- [x] **T070** Stage Retry
 - [ ] **T071** OOM Recovery
 - [ ] **T072** Interrupted Job Recovery
 - [ ] **T073** Artifact Integrity

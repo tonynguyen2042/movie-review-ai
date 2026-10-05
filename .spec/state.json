@@ -854,13 +854,15 @@
     },
     "T070": {
       "title": "Stage Retry",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-05T03:37:38.208497+00:00",
+      "started_at": "2026-10-05T03:35:52.697080+00:00",
+      "completed_at": "2026-10-05T03:37:38.208497+00:00"
     },
     "T071": {
       "title": "OOM Recovery",
