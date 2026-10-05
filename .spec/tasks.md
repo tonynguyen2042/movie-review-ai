@@ -166,7 +166,7 @@ Never fabricate a PR URL.
 - [x] **T027** Character Repository
 - [x] **T028** Character Discovery
 - [x] **T029** Character Linking
-- [ ] **T030** Location Extraction
+- [x] **T030** Location Extraction
 - [ ] **T031** Event Schema/Repository
 - [ ] **T032** Event Extraction Prompt
 - [ ] **T033** Event Extraction Stage
