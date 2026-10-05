@@ -23,6 +23,7 @@ from movie_review.domain import (
     EvidenceType,
     Job,
     JobStatus,
+    Location,
     Movie,
     MovieMetadata,
     Scene,
@@ -443,6 +444,49 @@ def list_speaker_links(
         (job_id,),
     ).fetchall()
     return [(row["speaker_id"], row["character_id"], row["confidence"]) for row in rows]
+
+
+# -- locations ------------------------------------------------------------
+
+
+def save_location(conn: sqlite3.Connection, job_id: str, location: Location) -> None:
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO locations (job_id, id, name, first_seen, last_seen, confidence)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id, id) DO UPDATE SET
+                name = excluded.name,
+                first_seen = excluded.first_seen,
+                last_seen = excluded.last_seen,
+                confidence = excluded.confidence
+            """,
+            (
+                job_id,
+                location.id,
+                location.name,
+                location.first_seen,
+                location.last_seen,
+                location.confidence,
+            ),
+        )
+
+
+def _row_to_location(row: sqlite3.Row) -> Location:
+    return Location(
+        id=row["id"],
+        name=row["name"],
+        first_seen=row["first_seen"],
+        last_seen=row["last_seen"],
+        confidence=row["confidence"],
+    )
+
+
+def list_locations(conn: sqlite3.Connection, job_id: str) -> list[Location]:
+    rows = conn.execute(
+        "SELECT * FROM locations WHERE job_id = ? ORDER BY first_seen", (job_id,)
+    ).fetchall()
+    return [_row_to_location(row) for row in rows]
 
 
 # -- artifacts ------------------------------------------------------------

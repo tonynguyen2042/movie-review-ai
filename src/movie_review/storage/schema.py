@@ -5,7 +5,7 @@ artifacts. Later tasks add their tables as new migration versions; existing
 statements are append-only history and must not be edited.
 """
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 MIGRATION_1 = [
     """
@@ -141,9 +141,24 @@ MIGRATION_4 = [
     """,
 ]
 
+MIGRATION_5 = [
+    """
+    CREATE TABLE IF NOT EXISTS locations (
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        first_seen REAL NOT NULL,
+        last_seen REAL NOT NULL,
+        confidence REAL NOT NULL,
+        PRIMARY KEY (job_id, id)
+    )
+    """,
+]
+
 MIGRATIONS: dict[int, list[str]] = {
     1: MIGRATION_1,
     2: MIGRATION_2,
     3: MIGRATION_3,
     4: MIGRATION_4,
+    5: MIGRATION_5,
 }
