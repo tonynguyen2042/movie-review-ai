@@ -21,6 +21,7 @@ from movie_review.domain import (
 )
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect, get_schema_version, migrate
+from movie_review.storage.schema import SCHEMA_VERSION
 
 
 @pytest.fixture()
@@ -42,11 +43,11 @@ def job(db: sqlite3.Connection) -> Job:
 def test_bootstrap_records_schema_version(tmp_path: Path) -> None:
     path = bootstrap(tmp_path / "a.db")
     with connect(path) as conn:
-        assert get_schema_version(conn) == 1
+        assert get_schema_version(conn) == SCHEMA_VERSION
     # Idempotent: re-running changes nothing and loses nothing.
     bootstrap(path)
     with connect(path) as conn:
-        assert get_schema_version(conn) == 1
+        assert get_schema_version(conn) == SCHEMA_VERSION
 
 
 def test_migrate_rejects_newer_database(tmp_path: Path) -> None:
