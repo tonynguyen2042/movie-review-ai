@@ -181,7 +181,7 @@ Never fabricate a PR URL.
 
 - [x] **T040** Style Profile Loader
 - [x] **T041** Review Planner
-- [ ] **T042** Story Analyst
+- [x] **T042** Story Analyst
 - [ ] **T043** Review Writer Prompt
 - [ ] **T044** Script Writer
 - [ ] **T045** Claim Extraction
