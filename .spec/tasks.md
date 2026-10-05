@@ -163,7 +163,7 @@ Never fabricate a PR URL.
 
 # Phase 4 — Movie Knowledge Base
 
-- [ ] **T027** Character Repository
+- [x] **T027** Character Repository
 - [ ] **T028** Character Discovery
 - [ ] **T029** Character Linking
 - [ ] **T030** Location Extraction
