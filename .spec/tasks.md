@@ -193,7 +193,7 @@ Never fabricate a PR URL.
 
 # Phase 6 — Narration
 
-- [ ] **T051** TTS Port
+- [x] **T051** TTS Port
 - [ ] **T052** Qwen3-TTS Adapter
 - [ ] **T053** TTS Chunker
 - [ ] **T054** TTS Concatenation
