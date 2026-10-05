@@ -1,0 +1,24 @@
+# Documentary style profile: measured, thorough, spoiler-aware.
+name: documentary
+language: en
+target_duration_seconds: 1200
+target_wpm: 140
+tone:
+  conversational: 0.3
+  analytical: 0.9
+  humorous: 0.1
+  dramatic: 0.4
+content:
+  plot_detail: 0.9
+  character_analysis: 0.8
+  theme_analysis: 0.85
+  ending_explanation: 1.0
+spoilers: full
+hook:
+  max_seconds: 60
+pacing:
+  fast: 0.3
+  average_paragraph_seconds: 20
+  transitions: low
+  commentary: high
+  repetition: low

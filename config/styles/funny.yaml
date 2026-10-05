@@ -1,0 +1,24 @@
+# Funny style profile: light, fast, spoiler-light by default.
+name: funny
+language: en
+target_duration_seconds: 600
+target_wpm: 160
+tone:
+  conversational: 0.9
+  analytical: 0.3
+  humorous: 0.95
+  dramatic: 0.5
+content:
+  plot_detail: 0.5
+  character_analysis: 0.5
+  theme_analysis: 0.2
+  ending_explanation: 0.5
+spoilers: partial
+hook:
+  max_seconds: 30
+pacing:
+  fast: 0.9
+  average_paragraph_seconds: 8
+  transitions: high
+  commentary: high
+  repetition: medium

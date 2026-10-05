@@ -1,0 +1,24 @@
+# YouTube style profile (README section 26).
+name: youtube
+language: en
+target_duration_seconds: 1200
+target_wpm: 150
+tone:
+  conversational: 0.8
+  analytical: 0.55
+  humorous: 0.35
+  dramatic: 0.75
+content:
+  plot_detail: 0.8
+  character_analysis: 0.65
+  theme_analysis: 0.5
+  ending_explanation: 1.0
+spoilers: full
+hook:
+  max_seconds: 45
+pacing:
+  fast: 0.65
+  average_paragraph_seconds: 12
+  transitions: medium
+  commentary: high
+  repetition: low

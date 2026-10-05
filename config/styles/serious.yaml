@@ -1,0 +1,24 @@
+# Serious style profile: sober analysis, full spoilers for depth.
+name: serious
+language: en
+target_duration_seconds: 1500
+target_wpm: 140
+tone:
+  conversational: 0.4
+  analytical: 0.95
+  humorous: 0.05
+  dramatic: 0.6
+content:
+  plot_detail: 0.85
+  character_analysis: 0.9
+  theme_analysis: 0.95
+  ending_explanation: 1.0
+spoilers: full
+hook:
+  max_seconds: 45
+pacing:
+  fast: 0.35
+  average_paragraph_seconds: 18
+  transitions: low
+  commentary: high
+  repetition: low
