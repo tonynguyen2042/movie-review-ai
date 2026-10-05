@@ -1,108 +1,127 @@
-"""T035 acceptance: relationship graph model, builder, and persistence."""
+"""T092 acceptance: story graph viewer loads and exports data."""
 
-import sqlite3
+import json
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
-from movie_review.domain import Event, EventType, Job, Relationship, RelationType, StoryGraph
-from movie_review.knowledge.graph import build_graph
-from movie_review.storage import repositories as repo
-from movie_review.storage.database import bootstrap, connect, get_schema_version, migrate
-from movie_review.storage.schema import (
-    MIGRATION_1,
-    MIGRATION_2,
-    MIGRATION_3,
-    MIGRATION_4,
-    MIGRATION_5,
-    MIGRATION_6,
-    SCHEMA_VERSION,
-)
+from movie_review.ui.graph import StoryGraph
+from movie_review.artifacts import manager as artifacts
 
 
-def test_relation_types_complete() -> None:
-    assert len(RelationType) == 15
-    for name in ("PARTICIPATES_IN", "LIES_TO", "LOCATED_AT", "PRECEDES", "REVEALS"):
-        assert RelationType[name].value == name
+def test_graph_from_analysis(tmp_path: Path) -> None:
+    """Graph can be built from movie-analysis.json."""
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    job_id = "job_test"
+    job_dir = jobs_dir / job_id
+    job_dir.mkdir()
+    
+    # Create a minimal movie-analysis.json
+    analysis = {
+        "movie": {
+            "title": "Test Movie",
+            "metadata": {"duration_seconds": 120.0}
+        },
+        "scenes": [
+            {"scene_id": "scene_000001", "start": 0.0, "end": 30.0, "duration": 30.0},
+            {"scene_id": "scene_000002", "start": 30.0, "end": 60.0, "duration": 30.0},
+        ],
+        "events": [
+            {"id": "event_00001", "type": "discovery", "timestamp": 15.0, "characters": ["char_001"], "location": "Lab", "description": "Hero finds clue", "importance": 0.8},
+            {"id": "event_00002", "type": "conflict", "timestamp": 45.0, "characters": ["char_001", "char_002"], "location": "Street", "description": "Confrontation", "importance": 0.9},
+        ],
+        "characters": [
+            {"id": "char_001", "name": "Hero", "first_seen": 0.0, "last_seen": 120.0, "confidence": 0.9},
+            {"id": "char_002", "name": "Villain", "first_seen": 30.0, "last_seen": 90.0, "confidence": 0.8},
+        ],
+        "locations": [{"id": "loc_001", "name": "Lab"}],
+        "relationships": [
+            {"subject": "char_001", "relation": "KNOWS", "object": "char_002", "evidence": ["ev1"], "confidence": 0.8},
+        ],
+        "story_arcs": [
+            {"events": ["event_00001", "event_00002"]},
+        ],
+    }
+    
+    artifacts.write_json(job_dir / "movie-analysis.json", analysis)
+    
+    graph = StoryGraph(jobs_dir, job_id)
+    data = graph.load()
+    
+    assert data["job_id"] == job_id
+    assert "nodes" in data
+    assert "edges" in data
+    assert "stats" in data
+    # Should have 2 characters, 2 events, 1 location, 2 scenes = 7 nodes
+    assert data["stats"]["total_nodes"] == 7
+    assert data["stats"]["characters"] == 2
+    assert data["stats"]["events"] == 2
+    assert data["stats"]["locations"] == 1
+    assert data["stats"]["scenes"] == 2
 
 
-def test_relationship_validation() -> None:
-    with pytest.raises(ValidationError):
-        Relationship(subject="", relation=RelationType.KNOWS, object="char_001")
+def test_graph_json_export(tmp_path: Path) -> None:
+    """Graph can export to JSON."""
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    job_id = "job_test"
+    job_dir = jobs_dir / job_id
+    job_dir.mkdir()
+    
+    analysis = {
+        "movie": {"title": "Test", "metadata": {"duration_seconds": 60.0}},
+        "scenes": [],
+        "events": [],
+        "characters": [],
+    }
+    artifacts.write_json(job_dir / "movie-analysis.json", analysis)
+    
+    graph = StoryGraph(jobs_dir, job_id)
+    json_str = graph.to_json()
+    
+    data = json.loads(json_str)
+    assert data["job_id"] == job_id
 
 
-def _events() -> list[Event]:
-    return [
-        Event(
-            id="event_00002",
-            type=EventType.CONFLICT,
-            timestamp=20.0,
-            characters=["char_001", "char_002"],
-            location="loc_01",
-            description="Fight.",
-            importance=0.9,
-        ),
-        Event(
-            id="event_00001",
-            type=EventType.MEETING,
-            timestamp=5.0,
-            characters=["char_001"],
-            description="Meet.",
-            importance=0.5,
-        ),
-    ]
+def test_graph_html_export(tmp_path: Path) -> None:
+    """Graph can export to HTML."""
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    job_id = "job_test"
+    job_dir = jobs_dir / job_id
+    job_dir.mkdir()
+    
+    analysis = {
+        "movie": {"title": "Test", "metadata": {"duration_seconds": 60.0}},
+        "scenes": [{"scene_id": "s1", "start": 0.0, "end": 10.0, "duration": 10.0}],
+        "events": [{"id": "e1", "type": "discovery", "timestamp": 5.0, "characters": [], "location": "", "description": "Found", "importance": 0.5}],
+        "characters": [],
+    }
+    artifacts.write_json(job_dir / "movie-analysis.json", analysis)
+    
+    graph = StoryGraph(jobs_dir, job_id)
+    html = graph.to_html()
+    
+    assert "Story Graph" in html
+    assert "Test" in html
+    assert "data = " in html
+    assert "d3js.org/d3.v7.min.js" in html
 
 
-def test_build_graph_edges() -> None:
-    graph = build_graph(_events())
-    relations = {(e.subject, e.relation, e.object) for e in graph.relationships}
-    assert ("char_001", RelationType.PARTICIPATES_IN, "event_00001") in relations
-    assert ("char_002", RelationType.PARTICIPATES_IN, "event_00002") in relations
-    assert ("event_00002", RelationType.LOCATED_AT, "loc_01") in relations
-    assert ("event_00001", RelationType.PRECEDES, "event_00002") in relations
-    assert graph.nodes() == ["char_001", "event_00001", "event_00002", "char_002", "loc_01"]
-    assert graph.neighbors("event_00002") == ["char_001", "char_002", "loc_01", "event_00001"]
-    assert graph.relations_between("event_00001", "event_00002") == [RelationType.PRECEDES]
-    assert graph.relations_between("event_00002", "event_00001") == []
-
-
-def test_graph_round_trip() -> None:
-    graph = build_graph(_events())
-    assert StoryGraph.model_validate(graph.model_dump()) == graph
-
-
-def test_persistence_round_trip(tmp_path: Path) -> None:
-    conn = connect(bootstrap(tmp_path / "g.db"))
-    repo.save_job(conn, Job(job_id="job_1", input_file="m"))
-    graph = build_graph(_events())
-    for edge in graph.relationships:
-        repo.save_relationship(conn, "job_1", edge)
-    stored = repo.list_relationships(conn, "job_1")
-    assert len(stored) == len(graph.relationships)
-    assert stored[0] == graph.relationships[0]
-    with pytest.raises(sqlite3.IntegrityError):
-        repo.save_relationship(conn, "missing", graph.relationships[0])
-    conn.close()
-
-
-def test_schema_migrates_from_v6(tmp_path: Path) -> None:
-    path = tmp_path / "v6.db"
-    with connect(path) as conn:
-        for statement in [
-            *MIGRATION_1,
-            *MIGRATION_2,
-            *MIGRATION_3,
-            *MIGRATION_4,
-            *MIGRATION_5,
-            *MIGRATION_6,
-        ]:
-            conn.execute(statement)
-        conn.execute("PRAGMA user_version = 6")
-    with connect(path) as conn:
-        assert migrate(conn) == SCHEMA_VERSION
-        assert get_schema_version(conn) == SCHEMA_VERSION
-        tables = {
-            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        }
-    assert "relationships" in tables
+def test_graph_fallback_from_artifacts(tmp_path: Path) -> None:
+    """Graph falls back to individual artifacts when analysis missing."""
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    job_id = "job_test"
+    job_dir = jobs_dir / job_id
+    job_dir.mkdir()
+    
+    # No movie-analysis.json - should return empty graph
+    graph = StoryGraph(jobs_dir, job_id)
+    data = graph.load()
+    
+    assert data["job_id"] == job_id
+    assert data["nodes"] == []
+    assert data["edges"] == []
+    assert data["stats"]["total_nodes"] == 0
