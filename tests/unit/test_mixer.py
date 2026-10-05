@@ -63,6 +63,13 @@ def test_music_trimmed_to_narration(tmp_path: Path) -> None:
     assert result.duration_seconds == pytest.approx(1.0)
 
 
+def test_short_music_padded(tmp_path: Path) -> None:
+    narration = _tone(tmp_path / "n.wav", 2.0)
+    music = _tone(tmp_path / "m.wav", 1.0)
+    result = mix(narration, tmp_path / "out.wav", music)
+    assert result.duration_seconds == pytest.approx(2.0)
+
+
 def test_rate_mismatch_rejected(tmp_path: Path) -> None:
     narration = _tone(tmp_path / "n.wav", 1.0)
     music = _tone(tmp_path / "m.wav", 1.0, rate=8000)
