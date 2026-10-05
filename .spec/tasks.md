@@ -172,7 +172,7 @@ Never fabricate a PR URL.
 - [x] **T033** Event Extraction Stage
 - [x] **T034** Evidence Registry
 - [x] **T035** Relationship Graph
-- [ ] **T036** Story Arc Extraction
+- [x] **T036** Story Arc Extraction
 - [ ] **T037** Theme Extraction
 - [ ] **T038** Twist Detection
 - [ ] **T039** Build `movie-analysis.json`
