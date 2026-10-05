@@ -386,13 +386,15 @@
     },
     "T031": {
       "title": "Event Schema/Repository",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-05T01:22:30.415119+00:00",
+      "started_at": "2026-10-05T01:21:00.283782+00:00",
+      "completed_at": "2026-10-05T01:22:30.415119+00:00"
     },
     "T032": {
       "title": "Event Extraction Prompt",
