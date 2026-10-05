@@ -83,12 +83,13 @@ def concatenate(
         )
 
     assert params is not None
+    frame_bytes = params.nchannels * params.sampwidth
     with wave.open(str(target), "wb") as wav:
         wav.setnchannels(params.nchannels)
         wav.setsampwidth(params.sampwidth)
         wav.setframerate(params.framerate)
         wav.writeframes(b"".join(frames))
-    duration = sum(len(part) / params.sampwidth / params.framerate for part in frames)
+    duration = sum(len(part) / frame_bytes / params.framerate for part in frames)
     meta_path = Path(metadata_dest) if metadata_dest else target.with_suffix(".json")
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     artifacts.write_json(meta_path, {"segments": segments, "duration_seconds": duration})
