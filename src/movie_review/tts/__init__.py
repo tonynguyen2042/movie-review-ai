@@ -1,4 +1,4 @@
-"""Text-to-speech ports, adapters, chunking, and concat (T051-T054)."""
+"""Text-to-speech ports, adapters, chunking, concat, reconcile (T051-T055)."""
 
 from movie_review.tts.chunks import (
     ChunkResult,
@@ -19,6 +19,13 @@ from movie_review.tts.concat import (
 )
 from movie_review.tts.port import TTSError, TTSPort, TTSUnavailableError
 from movie_review.tts.qwen_tts import QwenTTSAdapter
+from movie_review.tts.reconcile import (
+    ReconcileResult,
+    ReconciliationError,
+    measure_wav,
+    reconcile_script,
+    run_reconciliation,
+)
 
 __all__ = [
     "ChunkResult",
@@ -27,13 +34,18 @@ __all__ = [
     "METADATA_FILENAME",
     "NARRATION_FILENAME",
     "QwenTTSAdapter",
+    "ReconcileResult",
+    "ReconciliationError",
     "TTSChunk",
     "TTSError",
     "TTSPort",
     "TTSUnavailableError",
     "chunk_filename",
     "concatenate",
+    "measure_wav",
     "plan_chunks",
+    "reconcile_script",
+    "run_reconciliation",
     "split_sentences",
     "synthesize_chunk",
     "synthesize_chunks",
