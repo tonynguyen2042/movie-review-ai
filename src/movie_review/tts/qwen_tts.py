@@ -15,6 +15,7 @@ from movie_review.tts.port import TTSError, TTSPort, TTSUnavailableError
 
 RawBackend = Callable[[TTSRequest], tuple[bytes, int]]
 
+# Backend PCM is 16-bit mono: 2 bytes per sample.
 _BYTES_PER_SAMPLE = 2
 
 
