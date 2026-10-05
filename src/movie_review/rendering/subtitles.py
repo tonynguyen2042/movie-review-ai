@@ -45,7 +45,7 @@ def parse_timestamp(value: str) -> float:
     return hours * 3600 + minutes * 60 + secs + millis / 1000
 
 
-class SubtitleError(Exception):
+class SubtitleError(ValueError):
     """Subtitle generation failed in a classified way."""
 
 

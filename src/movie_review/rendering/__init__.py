@@ -1,4 +1,4 @@
-"""Visual planning, rendering, manifest, subtitles, audio, renderer (T056-T061)."""
+"""Visual planning, rendering, manifest, subtitles, audio, renderer, validation (T056-T062)."""
 
 from movie_review.domain import VisualPlan
 from movie_review.rendering.audio import MixError, MixResult, mix
@@ -32,6 +32,12 @@ from movie_review.rendering.subtitles import (
     parse_timestamp,
     write_srt,
 )
+from movie_review.rendering.validate import (
+    RenderValidationError,
+    ValidationCheck,
+    ValidationReport,
+    validate_render,
+)
 
 __all__ = [
     "ClipSelectionError",
@@ -45,6 +51,9 @@ __all__ = [
     "SelectedClip",
     "SubtitleCue",
     "SubtitleError",
+    "RenderValidationError",
+    "ValidationCheck",
+    "ValidationReport",
     "VisualPlan",
     "assemble_manifest",
     "build_cues",
@@ -60,5 +69,6 @@ __all__ = [
     "render",
     "render_job",
     "select_clips",
+    "validate_render",
     "write_srt",
 ]
