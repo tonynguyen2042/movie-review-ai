@@ -146,6 +146,26 @@ def extract_frame(
     return target
 
 
+def frames_cache_key(
+    file_hash: str, scenes: list[tuple[str, float, float]], cfg: SamplingConfig
+) -> str:
+    """Cache key for a sampling plan (shared with feedback resampling)."""
+    spec = CacheSpec(
+        stage=STAGE_NAME,
+        stage_version=STAGE_VERSION,
+        input_hash=file_hash,
+        generation_config={
+            "scenes": [[sid, start, end] for sid, start, end in scenes],
+            "short_threshold": cfg.short_threshold,
+            "medium_threshold": cfg.medium_threshold,
+            "short_frames": cfg.short_frames,
+            "medium_frames": cfg.medium_frames,
+            "long_frames": cfg.long_frames,
+        },
+    )
+    return cache_key(spec)
+
+
 def sample_movie(
     source: str | Path,
     scenes: list[tuple[str, float, float]],
@@ -164,20 +184,7 @@ def sample_movie(
     if not src.is_file():
         raise FrameSamplingError(f"Input file not found: {src}")
     file_hash = artifacts.sha256_file(src)
-    spec = CacheSpec(
-        stage=STAGE_NAME,
-        stage_version=STAGE_VERSION,
-        input_hash=file_hash,
-        generation_config={
-            "scenes": [[sid, start, end] for sid, start, end in scenes],
-            "short_threshold": cfg.short_threshold,
-            "medium_threshold": cfg.medium_threshold,
-            "short_frames": cfg.short_frames,
-            "medium_frames": cfg.medium_frames,
-            "long_frames": cfg.long_frames,
-        },
-    )
-    key = cache_key(spec)
+    key = frames_cache_key(file_hash, scenes, cfg)
     frames_dir = Path(jobs_dir) / job_id / STAGE_NAME
     pointer = cache.lookup_json(key)
     if isinstance(pointer, dict):
