@@ -206,7 +206,7 @@ Never fabricate a PR URL.
 - [x] **T058** Render Manifest
 - [x] **T059** Subtitle Generator
 - [x] **T060** Audio Mixer
-- [ ] **T061** FFmpeg Renderer
+- [x] **T061** FFmpeg Renderer
 - [ ] **T062** Render Validation
 
 # Phase 8 — Quality & Benchmark
