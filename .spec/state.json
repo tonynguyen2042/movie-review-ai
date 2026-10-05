@@ -1058,13 +1058,14 @@
     },
     "T090": {
       "title": "Movie Timeline",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
       "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-05T14:53:24.973444+00:00",
+      "completed_at": "2026-10-05T14:53:24.973444+00:00"
     },
     "T091": {
       "title": "Character Explorer",
