@@ -159,7 +159,7 @@ Never fabricate a PR URL.
 - [x] **T023** Qwen3-VL Adapter
 - [x] **T024** Scene Analysis Prompt
 - [x] **T025** Scene Visual Analysis Stage
-- [ ] **T026** Adaptive Sampling Feedback
+- [x] **T026** Adaptive Sampling Feedback
 
 # Phase 4 — Movie Knowledge Base
 
