@@ -1,4 +1,4 @@
-"""Visual planning, rendering, manifest, subtitles, and audio (T056-T060)."""
+"""Visual planning, rendering, manifest, subtitles, audio, renderer (T056-T061)."""
 
 from movie_review.domain import VisualPlan
 from movie_review.rendering.audio import MixError, MixResult, mix
@@ -15,6 +15,13 @@ from movie_review.rendering.manifest import (
     build_manifest,
 )
 from movie_review.rendering.planner import paragraph_claim_refs, plan_visuals
+from movie_review.rendering.renderer import (
+    REVIEW_FILENAME,
+    RenderError,
+    RenderResult,
+    render,
+    render_job,
+)
 from movie_review.rendering.subtitles import (
     SubtitleCue,
     SubtitleError,
@@ -32,6 +39,9 @@ __all__ = [
     "ManifestResult",
     "MixError",
     "MixResult",
+    "REVIEW_FILENAME",
+    "RenderError",
+    "RenderResult",
     "SelectedClip",
     "SubtitleCue",
     "SubtitleError",
@@ -47,6 +57,8 @@ __all__ = [
     "parse_srt",
     "parse_timestamp",
     "plan_visuals",
+    "render",
+    "render_job",
     "select_clips",
     "write_srt",
 ]

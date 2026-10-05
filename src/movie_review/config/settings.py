@@ -100,6 +100,8 @@ class RenderingSettings(BaseModel):
     width: PositiveInt = 1920
     height: PositiveInt = 1080
     fps: PositiveInt = 30
+    preset: str = "veryfast"
+    crf: int = Field(ge=0, le=51, default=23)
 
 
 class SceneDetectionSettings(BaseModel):

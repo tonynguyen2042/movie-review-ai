@@ -31,6 +31,8 @@ pipeline:
     width: 1920
     height: 1080
     fps: 30
+    preset: veryfast
+    crf: 23
 
 source_video:
   max_clip_seconds: 8.0
