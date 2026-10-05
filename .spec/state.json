@@ -1034,43 +1034,50 @@
     },
     "T085": {
       "title": "resume",
-      "status": "review",
+      "status": "done",
       "depends_on": [],
       "attempts": 0,
       "implementation": "passed",
       "tests": "passed",
-      "review": "pending",
-      "updated_at": "2026-10-05T14:37:22.227326+00:00"
+      "review": "approved",
+      "updated_at": "2026-10-05T14:38:10.077581+00:00",
+      "completed_at": "2026-10-05T14:38:10.077581+00:00"
     },
     "T086": {
       "title": "Stage-Range Execution",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-05T14:38:10.354175+00:00",
+      "started_at": "2026-10-05T14:38:10.150573+00:00",
+      "completed_at": "2026-10-05T14:38:10.354175+00:00"
     },
     "T087": {
       "title": "inspect",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-05T14:38:10.659989+00:00",
+      "started_at": "2026-10-05T14:38:10.427377+00:00",
+      "completed_at": "2026-10-05T14:38:10.659989+00:00"
     },
     "T088": {
       "title": "validate",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending",
-      "updated_at": "2026-10-04T20:28:31.712341+00:00"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "updated_at": "2026-10-05T14:38:10.940679+00:00",
+      "started_at": "2026-10-05T14:38:10.728525+00:00",
+      "completed_at": "2026-10-05T14:38:10.940679+00:00"
     },
     "T089": {
       "title": "Job Dashboard",
