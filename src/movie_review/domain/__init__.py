@@ -5,6 +5,7 @@ from movie_review.domain.character import Character
 from movie_review.domain.claim import Claim
 from movie_review.domain.diarization import DiarizedSegment
 from movie_review.domain.enums import ClaimStatus, ClaimType, EvidenceType, JobStatus
+from movie_review.domain.event import Event, EventType
 from movie_review.domain.evidence import Evidence
 from movie_review.domain.job import Job
 from movie_review.domain.location import Location
@@ -22,6 +23,8 @@ __all__ = [
     "ClaimStatus",
     "ClaimType",
     "DiarizedSegment",
+    "Event",
+    "EventType",
     "Evidence",
     "EvidenceType",
     "Job",
