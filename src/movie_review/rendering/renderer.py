@@ -40,7 +40,7 @@ class RenderResult:
     """Rendered output with measured duration."""
 
     path: Path
-    subtitle_path: Path
+    subtitle_path: Path | None
     duration_seconds: float
     cache_hit: bool
 
@@ -206,12 +206,14 @@ def render(
     except ff.ProcessError as exc:
         raise RenderError(f"Cannot mux {target}: {exc}") from exc
 
-    subtitle_path = target.with_name(SUBTITLE_FILENAME)
+    subtitle_path: Path | None = target.with_name(SUBTITLE_FILENAME)
     if subtitles_srt is not None:
         try:
             subtitle_path.write_bytes(Path(subtitles_srt).read_bytes())
         except OSError as exc:
             raise RenderError(f"Cannot write subtitles: {exc}") from exc
+    else:
+        subtitle_path = None
     try:
         meta = probe_fn(str(target))
         duration = float(getattr(meta, "duration_seconds", 0.0))
@@ -231,21 +233,27 @@ def render(
     )
 
 
+def _hash_file(path: str | Path, label: str) -> str:
+    """SHA-256 of an input file or a classified error."""
+    try:
+        return artifacts.sha256_file(path)
+    except OSError as exc:
+        raise RenderError(f"Cannot hash {label} {path}: {exc}") from exc
+
+
 def render_job(
     manifest: RenderManifest,
     source_movie: str | Path,
     narration_wav: str | Path,
     subtitles_srt: str | Path | None,
     ctx: StageContext,
-    width: int = 1920,
-    height: int = 1080,
-    fps: int = 30,
-    preset: str = "veryfast",
-    crf: int = 23,
     run_fn: Callable[..., str] = ff.check,
     probe_fn: Callable[[str], object] = ff.probe,
 ) -> RenderResult:
-    """Render for a job through to ``RENDERED`` with artifact recording."""
+    """Render for a job through to ``RENDERED`` with artifact recording.
+
+    Encoder settings always come from configuration (no shadow parameters).
+    """
     started = time.perf_counter()
     try:
         job = ctx.manager.get(ctx.job_id)
@@ -257,10 +265,22 @@ def render_job(
 
     dest = artifacts.artifact_path(ctx.jobs_dir, ctx.job_id, STAGE_NAME, REVIEW_FILENAME)
     rendering = ctx.settings.pipeline.rendering
+    source_hash = _hash_file(source_movie, "source movie")
+    narration_hash = _hash_file(narration_wav, "narration")
+    subtitle_hash = _hash_file(subtitles_srt, "subtitles") if subtitles_srt else "none"
     manifest_key = artifacts.sha256_bytes(
         "|".join(
-            f"{s.paragraph_id}:{s.scene_id}:{s.start:.3f}:{s.clip_end:.3f}:{s.duration:.3f}"
-            for s in manifest.segments
+            [
+                source_hash,
+                narration_hash,
+                subtitle_hash,
+                *(
+                    f"{s.paragraph_id}:{s.scene_id}:{s.start:.3f}:"
+                    f"{s.clip_start:.3f}:{s.clip_end:.3f}:{s.duration:.3f}"
+                    for s in manifest.segments
+                ),
+                f"{manifest.total_seconds:.3f}",
+            ]
         ).encode()
     )
     key = cache_key(
@@ -287,7 +307,7 @@ def render_job(
             ctx.manager.transition(ctx.job_id, JobStatus.RENDERED)
         return RenderResult(
             path=dest,
-            subtitle_path=dest.with_name(SUBTITLE_FILENAME),
+            subtitle_path=dest.with_name(SUBTITLE_FILENAME) if subtitles_srt else None,
             duration_seconds=manifest.total_seconds,
             cache_hit=True,
         )
@@ -311,6 +331,10 @@ def render_job(
         if owns_completion:
             ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
         raise
+    except Exception as exc:
+        if owns_completion:
+            ctx.manager.fail(ctx.job_id, STAGE_NAME, f"unexpected: {exc}")
+        raise RenderError(f"Render failed: {exc}") from exc
     ctx.cache.store_json(key, {"output_hash": artifacts.sha256_file(dest)})
     repo.save_artifact(
         ctx.conn,

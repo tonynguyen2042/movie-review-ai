@@ -210,6 +210,7 @@ def test_render_job_lifecycle_and_cache(tmp_path: Path) -> None:
     source, narration = _files(tmp_path)
     first = harness.render(_manifest(), source, narration, fake)
     assert first.cache_hit is False
+    assert first.subtitle_path is None
     assert harness.ctx.manager.get("job_1").status is JobStatus.RENDERED
     assert repo.get_artifact(harness.conn, "job_1-review") is not None
 
