@@ -173,7 +173,7 @@ Never fabricate a PR URL.
 - [x] **T034** Evidence Registry
 - [x] **T035** Relationship Graph
 - [x] **T036** Story Arc Extraction
-- [ ] **T037** Theme Extraction
+- [x] **T037** Theme Extraction
 - [ ] **T038** Twist Detection
 - [ ] **T039** Build `movie-analysis.json`
 
