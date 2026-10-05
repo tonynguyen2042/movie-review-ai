@@ -183,7 +183,7 @@ Never fabricate a PR URL.
 - [x] **T041** Review Planner
 - [x] **T042** Story Analyst
 - [x] **T043** Review Writer Prompt
-- [ ] **T044** Script Writer
+- [x] **T044** Script Writer
 - [ ] **T045** Claim Extraction
 - [ ] **T046** Evidence Retrieval
 - [ ] **T047** Fact Checker
