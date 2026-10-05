@@ -28,6 +28,8 @@ from movie_review.domain import (
     Location,
     Movie,
     MovieMetadata,
+    Relationship,
+    RelationType,
     Scene,
     TranscriptSegment,
 )
@@ -550,6 +552,42 @@ def list_events(conn: sqlite3.Connection, job_id: str) -> list[Event]:
         "SELECT * FROM events WHERE job_id = ? ORDER BY timestamp", (job_id,)
     ).fetchall()
     return [_row_to_event(row) for row in rows]
+
+
+# -- relationships ----------------------------------------------------------
+
+
+def save_relationship(conn: sqlite3.Connection, job_id: str, relationship: Relationship) -> None:
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO relationships
+                (job_id, subject, relation, object, evidence_json, confidence)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                relationship.subject,
+                relationship.relation.value,
+                relationship.object,
+                json.dumps(relationship.evidence),
+                relationship.confidence,
+            ),
+        )
+
+
+def list_relationships(conn: sqlite3.Connection, job_id: str) -> list[Relationship]:
+    rows = conn.execute("SELECT * FROM relationships WHERE job_id = ?", (job_id,)).fetchall()
+    return [
+        Relationship(
+            subject=row["subject"],
+            relation=RelationType(row["relation"]),
+            object=row["object"],
+            evidence=list(json.loads(row["evidence_json"])),
+            confidence=row["confidence"],
+        )
+        for row in rows
+    ]
 
 
 # -- artifacts ------------------------------------------------------------
