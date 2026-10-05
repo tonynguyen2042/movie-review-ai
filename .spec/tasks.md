@@ -195,7 +195,7 @@ Never fabricate a PR URL.
 
 - [x] **T051** TTS Port
 - [x] **T052** Qwen3-TTS Adapter
-- [ ] **T053** TTS Chunker
+- [x] **T053** TTS Chunker
 - [ ] **T054** TTS Concatenation
 - [ ] **T055** TTS Duration Reconciliation
 
