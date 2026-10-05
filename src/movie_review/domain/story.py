@@ -35,3 +35,11 @@ class StoryArc(BaseModel):
     description: str = ""
     event_ids: list[str] = Field(default_factory=list)
     confidence: Confidence = 1.0
+
+
+class Theme(BaseModel):
+    """One extracted theme with grounding event references."""
+
+    theme: str = Field(min_length=1)
+    evidence: list[str] = Field(default_factory=list)
+    confidence: Confidence = 1.0
