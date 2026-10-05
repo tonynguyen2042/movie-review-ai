@@ -1,8 +1,9 @@
 """Visual planner: narration paragraphs → evidence scenes (T056, spec 36-37).
 
-Priority order: direct evidence clips, character reaction shots, then an
-establishing fallback. Exact time ranges arrive with clip selection (T057);
-this stage only ranks scenes per paragraph.
+Priority order: direct evidence clips, character reaction shots,
+location/context matches, object matches, then an establishing fallback.
+Exact time ranges arrive with clip selection (T057); this stage only ranks
+scenes per paragraph.
 """
 
 from __future__ import annotations
@@ -100,7 +101,22 @@ def _rank_scenes(
         for scene_id, analysis in analyses.items():
             if wanted & set(analysis.characters):
                 _add(scene_id, "character reaction")
-    # 3. Establishing fallback: opening scene.
+    # 3-4. Location/context and object matches from ranked scenes.
+    anchors = [scene_id for scene_id, _ in ranked]
+    anchor_locations = {
+        analyses[scene_id].location for scene_id in anchors if scene_id in analyses
+    } - {""}
+    anchor_objects: set[str] = set()
+    for scene_id in anchors:
+        if scene_id in analyses:
+            anchor_objects.update(analyses[scene_id].objects)
+    for scene_id, analysis in analyses.items():
+        if analysis.location and analysis.location in anchor_locations:
+            _add(scene_id, "location context")
+    for scene_id, analysis in analyses.items():
+        if anchor_objects & set(analysis.objects):
+            _add(scene_id, "relevant object")
+    # 5. Establishing fallback: opening scene.
     if spans and not ranked:
         first = min(spans.values(), key=lambda s: s.start)
         _add(first.scene_id, "establishing fallback")
