@@ -168,7 +168,7 @@ Never fabricate a PR URL.
 - [x] **T029** Character Linking
 - [x] **T030** Location Extraction
 - [x] **T031** Event Schema/Repository
-- [ ] **T032** Event Extraction Prompt
+- [x] **T032** Event Extraction Prompt
 - [ ] **T033** Event Extraction Stage
 - [ ] **T034** Evidence Registry
 - [ ] **T035** Relationship Graph
