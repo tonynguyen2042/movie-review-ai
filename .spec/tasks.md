@@ -169,7 +169,7 @@ Never fabricate a PR URL.
 - [x] **T030** Location Extraction
 - [x] **T031** Event Schema/Repository
 - [x] **T032** Event Extraction Prompt
-- [ ] **T033** Event Extraction Stage
+- [x] **T033** Event Extraction Stage
 - [ ] **T034** Evidence Registry
 - [ ] **T035** Relationship Graph
 - [ ] **T036** Story Arc Extraction
