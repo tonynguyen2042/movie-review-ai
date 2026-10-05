@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.ui.safe_json import json_for_script
@@ -113,11 +113,6 @@ class CharacterExplorer:
                         "inverse": True,
                     }
                 )
-
-        # Enrich with evidence
-        for ev in document.get("evidence", []):
-            # Evidence can be linked to characters through events/scenes
-            pass
 
         # Sort by first_seen
         characters.sort(key=lambda c: c.first_seen)

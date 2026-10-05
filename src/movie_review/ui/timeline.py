@@ -9,11 +9,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.ui.safe_json import json_for_script
-from movie_review.config.settings import load_settings
 
 
 @dataclass(frozen=True)
@@ -23,7 +22,7 @@ class TimelineScene:
     start: float
     end: float
     duration: float
-    analysis: Optional[dict[str, Any]] = None
+    analysis: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

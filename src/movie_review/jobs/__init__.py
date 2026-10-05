@@ -1,6 +1,7 @@
-"""Job state machine and lifecycle (T006)."""
+"""Job state machine and lifecycle (T006 machine, T072 recovery)."""
 
 from movie_review.jobs.manager import JobManager
+from movie_review.jobs.recovery import RecoveryPlan, recovery_plan
 from movie_review.jobs.state_machine import (
     TRANSITIONS,
     InvalidTransitionError,
@@ -14,6 +15,8 @@ __all__ = [
     "InvalidTransitionError",
     "JobManager",
     "JobNotFoundError",
+    "RecoveryPlan",
     "allowed",
+    "recovery_plan",
     "transition",
 ]

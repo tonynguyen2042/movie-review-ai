@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.ui.safe_json import json_for_script
@@ -23,9 +23,9 @@ class GraphNode:
     label: str
     type: str  # character, event, location, scene
     group: str  # for coloring
-    x: Optional[float] = None
-    y: Optional[float] = None
-    metadata: Optional[dict[str, Any]] = None
+    x: float | None = None
+    y: float | None = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,7 @@ class GraphEdge:
     target: str
     relation: str
     weight: float = 1.0
-    metadata: Optional[dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 class StoryGraph:

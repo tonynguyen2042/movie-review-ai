@@ -10,9 +10,8 @@ import http.server
 import json
 import sqlite3
 import threading
-import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from movie_review.config.settings import load_settings
 from movie_review.storage.database import bootstrap
@@ -21,12 +20,12 @@ from movie_review.storage.database import bootstrap
 class JobDashboard:
     """Web dashboard for job monitoring."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8080, db_path: Optional[str] = None):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8080, db_path: str | None = None):
         self.host = host
         self.port = port
         self.db_path = db_path
-        self._server: Optional[http.server.HTTPServer] = None
-        self._thread: Optional[threading.Thread] = None
+        self._server: http.server.HTTPServer | None = None
+        self._thread: threading.Thread | None = None
 
     def _get_db_path(self) -> Path:
         if self.db_path:
@@ -48,7 +47,7 @@ class JobDashboard:
         finally:
             conn.close()
 
-    def get_job_details(self, job_id: str) -> Optional[dict[str, Any]]:
+    def get_job_details(self, job_id: str) -> dict[str, Any] | None:
         """Fetch detailed info for a single job including artifacts."""
         conn = sqlite3.connect(str(bootstrap(self._get_db_path())))
         conn.row_factory = sqlite3.Row
@@ -305,7 +304,7 @@ class JobDashboard:
 def run_dashboard(
     host: str = "127.0.0.1",
     port: int = 8080,
-    db_path: Optional[str] = None,
+    db_path: str | None = None,
     open_browser: bool = False,
 ) -> JobDashboard:
     """Convenience function to create and start a dashboard."""
