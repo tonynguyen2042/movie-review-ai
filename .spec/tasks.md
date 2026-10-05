@@ -189,7 +189,7 @@ Never fabricate a PR URL.
 - [x] **T047** Fact Checker
 - [x] **T048** Continuity Checker
 - [x] **T049** Script Repair Loop
-- [ ] **T050** Duration Controller
+- [x] **T050** Duration Controller
 
 # Phase 6 — Narration
 
