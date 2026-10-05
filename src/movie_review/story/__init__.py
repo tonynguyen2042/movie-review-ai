@@ -1,5 +1,6 @@
-"""Story, event, and theme extraction (T033 events, T036 arcs, T037 themes, T038 twists)."""
+"""Story extraction and analysis (events, arcs, themes, twists, analyst)."""
 
+from movie_review.story.analyst import StoryAnalyst, StoryBrief
 from movie_review.story.arcs import ArcsResult, StoryArcError, extract_story_arcs
 from movie_review.story.events import EventExtractionError, EventsResult, run_event_extraction
 from movie_review.story.themes import ThemeExtractionError, ThemesResult, extract_themes
@@ -9,7 +10,9 @@ __all__ = [
     "ArcsResult",
     "EventExtractionError",
     "EventsResult",
+    "StoryAnalyst",
     "StoryArcError",
+    "StoryBrief",
     "ThemeExtractionError",
     "ThemesResult",
     "TwistExtractionError",
