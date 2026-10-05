@@ -9,13 +9,13 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.recovery import recovery_plan
-from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
 from movie_review.utils import logging as ulog
 
@@ -104,9 +104,9 @@ def run_stage(
 
 def _build_context(job_id: str, movie_path: str | Path, db_path: str | None) -> PipelineContext:
     """Build runtime context from settings and job database."""
+    from movie_review.cache.manager import CacheManager
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
-    from movie_review.cache.manager import CacheManager
     
     settings = load_settings()
     resolved_db = Path(db_path) if db_path else Path(settings.paths.data_dir) / "jobs.db"
@@ -162,12 +162,12 @@ def run_pipeline(
     return results
 
 
-def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext], Any]]:
+def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | None:
     """Map stage name to its execution function using lazy imports."""
     
     def ingest_fn(ctx: PipelineContext):
-        from movie_review.media.ingest import ingest_movie
         from movie_review.domain import JobStatus
+        from movie_review.media.ingest import ingest_movie
         job = ctx.manager.get(ctx.job_id)
         if job.status in (JobStatus.CREATED, JobStatus.INGESTING):
             ctx.manager.transition(ctx.job_id, JobStatus.INGESTING)
@@ -209,8 +209,8 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         )
     
     def vision_fn(ctx: PipelineContext):
-        from movie_review.vision.analysis import run_visual_analysis
         from movie_review.storage import repositories as repo
+        from movie_review.vision.analysis import run_visual_analysis
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
         segments = repo.list_transcript_segments(ctx.conn, ctx.job_id)
         # Frames need to be sampled - for now empty
@@ -230,8 +230,8 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
     def characters_fn(ctx: PipelineContext):
         from movie_review.characters.discovery import discover_characters, save_discovery
         from movie_review.characters.linking import link_characters
-        from movie_review.storage import repositories as repo
         from movie_review.domain import SceneAnalysis
+        from movie_review.storage import repositories as repo
         
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
         analyses_list = []
@@ -254,9 +254,9 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         return result
     
     def locations_fn(ctx: PipelineContext):
+        from movie_review.domain import SceneAnalysis
         from movie_review.knowledge.locations import extract_locations, scene_locations
         from movie_review.storage import repositories as repo
-        from movie_review.domain import SceneAnalysis
         
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
         vision_path = Path(ctx.jobs_dir) / ctx.job_id / "vision" / "vision.json"
@@ -278,9 +278,9 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         return locations
     
     def events_fn(ctx: PipelineContext):
-        from movie_review.story.events import run_event_extraction
-        from movie_review.storage import repositories as repo
         from movie_review.domain import SceneAnalysis
+        from movie_review.storage import repositories as repo
+        from movie_review.story.events import run_event_extraction
         
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
         analyses_list = []
@@ -309,8 +309,8 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         )
     
     def arcs_fn(ctx: PipelineContext):
-        from movie_review.story.arcs import extract_story_arcs
         from movie_review.storage import repositories as repo
+        from movie_review.story.arcs import extract_story_arcs
         
         events = repo.list_events(ctx.conn, ctx.job_id)
         characters = repo.list_characters(ctx.conn, ctx.job_id)
@@ -326,8 +326,8 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         )
     
     def themes_fn(ctx: PipelineContext):
-        from movie_review.story.themes import extract_themes
         from movie_review.storage import repositories as repo
+        from movie_review.story.themes import extract_themes
         
         events = repo.list_events(ctx.conn, ctx.job_id)
         characters = repo.list_characters(ctx.conn, ctx.job_id)
@@ -343,8 +343,8 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         )
     
     def twists_fn(ctx: PipelineContext):
-        from movie_review.story.twists import extract_twists
         from movie_review.storage import repositories as repo
+        from movie_review.story.twists import extract_twists
         
         events = repo.list_events(ctx.conn, ctx.job_id)
         characters = repo.list_characters(ctx.conn, ctx.job_id)
@@ -371,9 +371,9 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         ))
     
     def review_fn(ctx: PipelineContext):
-        from movie_review.review.writer import write_script
         from movie_review.review.planner import plan_review
         from movie_review.review.styles import load_style
+        from movie_review.review.writer import write_script
         from movie_review.storage import repositories as repo
         
         job = ctx.manager.get(ctx.job_id)
@@ -402,9 +402,9 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         )
     
     def tts_chunks_fn(ctx: PipelineContext):
+        from movie_review.domain import ReviewScript
         from movie_review.tts.chunks import plan_chunks, synthesize_chunks
         from movie_review.tts.qwen_tts import QwenTTSAdapter
-        from movie_review.domain import ReviewScript
         
         script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
         import json
@@ -418,17 +418,14 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         return synthesize_chunks(chunks, port, ctx.jobs_dir, ctx.job_id)
     
     def tts_concat_fn(ctx: PipelineContext):
-        from movie_review.tts.concat import concatenate
-        from movie_review.tts.chunks import ChunkResult
-        from movie_review.storage import repositories as repo
         
         # Load chunk results from artifacts
         # This is simplified - in practice would load from chunk metadata
         pass
     
     def tts_reconcile_fn(ctx: PipelineContext):
-        from movie_review.tts.reconcile import run_reconciliation
         from movie_review.domain import ReviewScript
+        from movie_review.tts.reconcile import run_reconciliation
         
         script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
         import json
@@ -453,10 +450,10 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         )
     
     def render_manifest_fn(ctx: PipelineContext):
+        from movie_review.domain import ReviewScript, SceneAnalysis
         from movie_review.rendering.manifest import assemble_manifest
         from movie_review.rendering.planner import plan_visuals
         from movie_review.storage import repositories as repo
-        from movie_review.domain import ReviewScript, SceneAnalysis
         
         script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
         import json
@@ -487,7 +484,6 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         clips = {}
         for pc in visual_plan.paragraph_clips:
             if pc.paragraph_id not in clips:
-                from movie_review.rendering.clips import SelectedClip
                 clip = repo.get_clip(ctx.conn, ctx.job_id, pc.paragraph_id)  # would need to implement
                 if clip:
                     clips[pc.paragraph_id] = clip
@@ -506,9 +502,8 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         )
     
     def render_fn(ctx: PipelineContext):
-        from movie_review.rendering.renderer import render_job
-        from movie_review.storage import repositories as repo
         from movie_review.domain import RenderManifest
+        from movie_review.rendering.renderer import render_job
         
         manifest_path = Path(ctx.jobs_dir) / ctx.job_id / "render" / "render-manifest.json"
         import json
@@ -528,13 +523,8 @@ def _get_stage_function(stage_name: str) -> Optional[Callable[[PipelineContext],
         )
     
     def quality_fn(ctx: PipelineContext):
-        from movie_review.quality.gates import run_quality_gate
-        from movie_review.quality.coverage import evidence_coverage
-        from movie_review.quality.timeline import timeline_consistency
-        from movie_review.quality.characters import character_consistency
-        from movie_review.quality.visual import visual_alignment
         from movie_review.domain import QualityMetric
-        from movie_review.storage import repositories as repo
+        from movie_review.quality.gates import run_quality_gate
         
         # Build metrics
         metrics: list[QualityMetric] = []
@@ -606,7 +596,7 @@ def validate_job(job_id: str, db_path: str | None = None) -> bool:
     job = manager.get(job_id)
     
     # Run integrity check
-    from movie_review.artifacts import scan_job_integrity, ArtifactRecord
+    from movie_review.artifacts import scan_job_integrity
     # Build artifact records based on job status
     records = _build_artifact_records(job, settings.paths.data_dir)
     report = scan_job_integrity(settings.paths.data_dir, job_id, records)
