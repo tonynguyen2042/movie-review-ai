@@ -185,7 +185,7 @@ Never fabricate a PR URL.
 - [x] **T043** Review Writer Prompt
 - [x] **T044** Script Writer
 - [x] **T045** Claim Extraction
-- [ ] **T046** Evidence Retrieval
+- [x] **T046** Evidence Retrieval
 - [ ] **T047** Fact Checker
 - [ ] **T048** Continuity Checker
 - [ ] **T049** Script Repair Loop
