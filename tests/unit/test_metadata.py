@@ -141,6 +141,51 @@ def test_generate_metadata_rejects_empty_script() -> None:
         generate_metadata(ReviewScript.model_construct(sections=[]), "The Lighthouse")
 
 
+def test_build_tags_folds_possessives_into_base_form() -> None:
+    """Possessive forms collapse onto the base word (no duplicate tags)."""
+    script = ReviewScript(
+        sections=[
+            ReviewSection(
+                id="s1",
+                type="intro",
+                paragraphs=[
+                    _paragraph("p1", "brother brother brother's captain's", 10),
+                ],
+            )
+        ]
+    )
+    tags = build_tags(script)
+    assert "brother" in tags
+    assert "brother's" not in tags
+    assert "captain" in tags
+    assert "captain's" not in tags
+    assert tags.count("brother") == 1
+
+
+def test_build_description_preserves_line_structure() -> None:
+    """Chapter markers stay on their own lines instead of collapsing."""
+    script = ReviewScript(
+        sections=[
+            ReviewSection(
+                id="s1",
+                type="intro",
+                paragraphs=[_paragraph("p1", "Opening line one.", 30)],
+            ),
+            ReviewSection(
+                id="s2",
+                type="analysis",
+                paragraphs=[_paragraph("p2", "Opening line two.", 30)],
+            ),
+        ]
+    )
+    chapters = build_chapters(script)
+    description = build_description(script, "Blackrock", chapters)
+    lines = description.splitlines()
+    assert lines[0] == "Blackrock review."
+    assert "Chapters:" in lines
+    assert lines[-3:] == ["Chapters:", "- 0:00 Intro", "- 0:30 Analysis"]
+
+
 def test_metadata_is_deterministic() -> None:
     """The same script yields identical metadata (stable hashes/artifacts)."""
     first = generate_metadata(_script(), "The Lighthouse", ["Mystery"])

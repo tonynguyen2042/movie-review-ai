@@ -80,6 +80,7 @@ _TAG_STOPWORDS = frozenset(
 )
 
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z'-]*")
+_POSSESSIVE_RE = re.compile(r"'s?$")
 
 
 class MetadataError(ValueError):
@@ -105,13 +106,29 @@ class VideoMetadata:
     chapters: list[Chapter] = field(default_factory=list)
 
 
+def _collapse(text: str) -> str:
+    """Collapse all whitespace (including newlines) into single spaces."""
+    return " ".join(text.split())
+
+
 def _truncate(value: str, limit: int) -> str:
     """Trim to ``limit`` characters, breaking on a word boundary when possible."""
-    cleaned = " ".join(value.split())
+    cleaned = _collapse(value)
     if len(cleaned) <= limit:
         return cleaned
     clipped = cleaned[:limit]
     boundary = clipped.rfind(" ")
+    if boundary > 0:
+        clipped = clipped[:boundary]
+    return clipped.rstrip()
+
+
+def _truncate_lines(value: str, limit: int) -> str:
+    """Trim while preserving line structure (newlines kept intact)."""
+    if len(value) <= limit:
+        return value
+    clipped = value[:limit]
+    boundary = clipped.rfind("\n")
     if boundary > 0:
         clipped = clipped[:boundary]
     return clipped.rstrip()
@@ -147,7 +164,7 @@ def build_description(
 ) -> str:
     """Build a description: summary paragraph followed by a chapter list."""
     body = script_text(script)
-    summary = _truncate(body, DESCRIPTION_MAX_CHARS - 500)
+    summary = _truncate_lines(body, DESCRIPTION_MAX_CHARS - 500)
     lines: list[str] = []
     if movie_title:
         lines.append(f"{movie_title} review.")
@@ -156,14 +173,14 @@ def build_description(
     lines.append("Chapters:")
     for chapter in chapters or []:
         lines.append(f"- {_format_clock(chapter.start_seconds)} {chapter.title}")
-    return _truncate("\n".join(lines), DESCRIPTION_MAX_CHARS)
+    return _truncate_lines("\n".join(lines), DESCRIPTION_MAX_CHARS)
 
 
 def build_tags(script: ReviewScript, extra: list[str] | None = None) -> list[str]:
     """Derive topical tags from the script text plus explicit extras."""
     counts: dict[str, int] = {}
     for word in _WORD_RE.findall(script_text(script)):
-        token = word.lower()
+        token = _POSSESSIVE_RE.sub("", word.lower()).rstrip("'")
         if len(token) < 3 or token in _TAG_STOPWORDS:
             continue
         counts[token] = counts.get(token, 0) + 1
