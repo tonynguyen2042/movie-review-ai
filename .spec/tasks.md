@@ -211,7 +211,7 @@ Never fabricate a PR URL.
 
 # Phase 8 — Quality & Benchmark
 
-- [ ] **T063** QC Domain Model
+- [x] **T063** QC Domain Model
 - [ ] **T064** Evidence Coverage Metric
 - [ ] **T065** Timeline Consistency Metric
 - [ ] **T066** Character Consistency Metric
