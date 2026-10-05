@@ -11,6 +11,7 @@ from movie_review.quality.gates import (
     evaluate_gate,
     run_quality_gate,
 )
+from movie_review.quality.report import QualityReportResult, build_quality_report
 from movie_review.quality.timeline import timeline_consistency
 from movie_review.quality.visual import visual_alignment
 
@@ -19,6 +20,8 @@ __all__ = [
     "MAX_DURATION_ERROR",
     "GateResult",
     "QualityGateError",
+    "QualityReportResult",
+    "build_quality_report",
     "character_consistency",
     "duration_metric",
     "evaluate_gate",
