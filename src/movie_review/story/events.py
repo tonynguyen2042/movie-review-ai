@@ -1,7 +1,7 @@
 """Event extraction stage: analyses + dialogue → LLM → ``events.json`` (T033).
 
 Follows the pipeline stage contract with the T011 lifecycle pattern, moving
-``VISUAL_ANALYSIS_READY`` → ``EVENTS_READY``. Scenes are processed in order
+``CHARACTERS_READY`` → ``EVENTS_READY``. Scenes are processed in order
 with prior events as continuity context (P3 small windows); IDs are assigned
 after a global timestamp sort. Uses the shared reasoning port (T033
 prerequisite) and the T032 prompt.
