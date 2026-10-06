@@ -24,14 +24,20 @@ class MemoryBenchResult:
 
 
 def benchmark_memory(operation: str, fn: Callable[[], Any]) -> MemoryBenchResult:
-    """Run ``fn`` under tracemalloc and report peak bytes."""
-    tracemalloc.start()
+    """Run ``fn`` under tracemalloc and report peak bytes.
+
+    Tracing is only stopped if this call started it, so benchmarking from
+    inside an already-profiled process does not disable the caller's tracing.
+    """
+    owns_tracing = not tracemalloc.is_tracing()
+    if owns_tracing:
+        tracemalloc.start()
     try:
         fn()
-        _, peak = tracemalloc.get_traced_memory()
-        current, _ = tracemalloc.get_traced_memory()
+        current, peak = tracemalloc.get_traced_memory()
     finally:
-        tracemalloc.stop()
+        if owns_tracing:
+            tracemalloc.stop()
     return MemoryBenchResult(
         operation=operation,
         peak_bytes=peak,

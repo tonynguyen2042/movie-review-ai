@@ -28,6 +28,13 @@ class HallucinationReport:
 
     @property
     def passed(self) -> bool:
+        """True while unsupported majors stay under the threshold.
+
+        A claim set with no major claims (e.g. an opinion-only review)
+        reports ``passed``. That is deliberate: interpretation and opinion
+        are explicitly excluded from this metric, so there is nothing to
+        penalise. Pinned by ``test_hallucination_ignores_opinion``.
+        """
         return self.rate < MAX_UNSUPPORTED_MAJOR_RATE
 
 

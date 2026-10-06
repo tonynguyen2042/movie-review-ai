@@ -13,6 +13,11 @@ from movie_review.domain import JobStatus
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.state_machine import JobNotFoundError
 
+
+class RecoveryMappingError(Exception):
+    """A job status has no resume mapping (an internal gap, not a missing job)."""
+
+
 _RESUME_STAGE: dict[JobStatus, str] = {
     JobStatus.CREATED: "ingest",
     JobStatus.INGESTING: "ingest",
@@ -61,7 +66,10 @@ def recovery_plan(manager: JobManager, job_id: str) -> RecoveryPlan:
         )
     resume = _RESUME_STAGE.get(job.status)
     if resume is None:
-        raise JobNotFoundError(f"No resume mapping for status {job.status}")
+        # Deliberately not JobNotFoundError: the job exists, the mapping table
+        # is incomplete. Conflating the two would make callers report a missing
+        # job for what is really an internal gap.
+        raise RecoveryMappingError(f"No resume mapping for status {job.status}")
     if resume in ("done", "manual"):
         reason = "already complete" if resume == "done" else "awaiting human review"
     else:
