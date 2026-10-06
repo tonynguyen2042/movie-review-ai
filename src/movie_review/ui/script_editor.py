@@ -18,6 +18,7 @@ from movie_review.ui.safe_json import json_for_script
 @dataclass(frozen=True)
 class ScriptParagraph:
     """Paragraph in the review script."""
+
     id: str
     section_id: str
     text: str
@@ -28,6 +29,7 @@ class ScriptParagraph:
 @dataclass(frozen=True)
 class ScriptSection:
     """Section in the review script."""
+
     id: str
     type: str
     target_seconds: float
@@ -38,53 +40,57 @@ class ScriptSection:
 
 class ScriptEditor:
     """Script editor for review script."""
-    
+
     def __init__(self, jobs_dir: str | Path, job_id: str):
         self.jobs_dir = Path(jobs_dir)
         self.job_id = job_id
-    
+
     def load(self) -> dict[str, Any]:
         """Load script from job artifacts."""
         script_path = self.jobs_dir / self.job_id / "review-script.json"
-        
+
         if not script_path.is_file():
             return self._empty_script()
-        
+
         document = artifacts.read_json(script_path)
         return self._build_from_script(document)
-    
+
     def _build_from_script(self, document: dict[str, Any]) -> dict[str, Any]:
         """Build editor data from review script."""
         script_data = document.get("script", {})
         sections = []
-        
+
         for section in script_data.get("sections", []):
             paragraphs = []
             for para in section.get("paragraphs", []):
-                paragraphs.append(ScriptParagraph(
-                    id=para.get("id", ""),
-                    section_id=section.get("id", ""),
-                    text=para.get("text", ""),
-                    claims=para.get("claims", []),
-                    target_seconds=para.get("target_seconds", 0.0),
-                ))
-            
-            sections.append(ScriptSection(
-                id=section.get("id", ""),
-                type=section.get("type", ""),
-                target_seconds=section.get("target_seconds", 0),
-                purpose=section.get("purpose", ""),
-                event_ids=section.get("event_ids", []),
-                paragraphs=paragraphs,
-            ))
-        
+                paragraphs.append(
+                    ScriptParagraph(
+                        id=para.get("id", ""),
+                        section_id=section.get("id", ""),
+                        text=para.get("text", ""),
+                        claims=para.get("claims", []),
+                        target_seconds=para.get("target_seconds", 0.0),
+                    )
+                )
+
+            sections.append(
+                ScriptSection(
+                    id=section.get("id", ""),
+                    type=section.get("type", ""),
+                    target_seconds=section.get("target_seconds", 0),
+                    purpose=section.get("purpose", ""),
+                    event_ids=section.get("event_ids", []),
+                    paragraphs=paragraphs,
+                )
+            )
+
         sections.sort(key=lambda s: s.id)
-        
+
         # Calculate word count
         total_words = sum(len(p.text.split()) for s in sections for p in s.paragraphs)
-        
+
         word_count = script_data.get("word_count", total_words)
-        
+
         return {
             "job_id": self.job_id,
             "sections": [self._section_to_dict(s) for s in sections],
@@ -93,7 +99,7 @@ class ScriptEditor:
             "total_words": total_words,
             "word_count": word_count,
         }
-    
+
     def _empty_script(self) -> dict[str, Any]:
         """Return empty script structure."""
         return {
@@ -104,7 +110,7 @@ class ScriptEditor:
             "total_words": 0,
             "word_count": 0,
         }
-    
+
     def _section_to_dict(self, section: ScriptSection) -> dict[str, Any]:
         return {
             "id": section.id,
@@ -123,16 +129,16 @@ class ScriptEditor:
                 for p in section.paragraphs
             ],
         }
-    
+
     def to_json(self) -> str:
         """Export script as JSON."""
         return json.dumps(self.load(), indent=2)
-    
+
     def to_html(self) -> str:
         """Generate standalone HTML script editor."""
         data = self.load()
         return self._html_template(data)
-    
+
     def _html_template(self, data: dict[str, Any]) -> str:
         """Generate HTML with interactive script editor."""
         json_data = json_for_script(data)
@@ -140,10 +146,10 @@ class ScriptEditor:
         script_html = self._render_script_html(data)
         return (
             "<!DOCTYPE html>\n"
-            "<html lang=\"en\">\n"
+            '<html lang="en">\n'
             "<head>\n"
-            "    <meta charset=\"UTF-8\">\n"
-            "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+            '    <meta charset="UTF-8">\n'
+            '    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
             f"    <title>Script Editor - Job {data['job_id']}</title>\n"
             "    <style>\n"
             "        * { box-sizing: border-box; margin: 0; padding: 0; }\n"
@@ -191,26 +197,26 @@ class ScriptEditor:
             "    </style>\n"
             "</head>\n"
             "<body>\n"
-            "    <div class=\"container\">\n"
+            '    <div class="container">\n'
             "        <header>\n"
             f"            <h1>Script Editor</h1>\n"
-            f"            <div class=\"meta\">Job: {data['job_id']}</div>\n"
+            f'            <div class="meta">Job: {data["job_id"]}</div>\n'
             "        </header>\n"
             "\n"
-            "        <div class=\"stats\">\n"
-            f"            <div class=\"stat\"><div class=\"value\">{data['total_sections']}</div><div class=\"label\">Sections</div></div>\n"
-            f"            <div class=\"stat\"><div class=\"value\">{data['total_paragraphs']}</div><div class=\"label\">Paragraphs</div></div>\n"
-            f"            <div class=\"stat\"><div class=\"value\">{data['total_words']}</div><div class=\"label\">Words</div></div>\n"
-            f"            <div class=\"stat\"><div class=\"value\">{data['word_count']}</div><div class=\"label\">Target</div></div>\n"
+            '        <div class="stats">\n'
+            f'            <div class="stat"><div class="value">{data["total_sections"]}</div><div class="label">Sections</div></div>\n'
+            f'            <div class="stat"><div class="value">{data["total_paragraphs"]}</div><div class="label">Paragraphs</div></div>\n'
+            f'            <div class="stat"><div class="value">{data["total_words"]}</div><div class="label">Words</div></div>\n'
+            f'            <div class="stat"><div class="value">{data["word_count"]}</div><div class="label">Target</div></div>\n'
             "        </div>\n"
             "\n"
-            "        <div class=\"toolbar\">\n"
-            "            <button class=\"btn btn-success\" onclick=\"saveScript()\">Save Changes</button>\n"
-            "            <button class=\"btn btn-secondary\" onclick=\"exportScript()\">Export JSON</button>\n"
-            "            <button class=\"btn-secondary\" onclick=\"exportText()\">Export Text</button>\n"
+            '        <div class="toolbar">\n'
+            '            <button class="btn btn-success" onclick="saveScript()">Save Changes</button>\n'
+            '            <button class="btn btn-secondary" onclick="exportScript()">Export JSON</button>\n'
+            '            <button class="btn-secondary" onclick="exportText()">Export Text</button>\n'
             "        </div>\n"
             "\n"
-            "        <div class=\"script-editor\" id=\"scriptEditor\">\n"
+            '        <div class="script-editor" id="scriptEditor">\n'
             f"            {script_html}\n"
             "        </div>\n"
             "    </div>\n"
@@ -225,7 +231,7 @@ class ScriptEditor:
             "            updatedData.sections = data.sections.map(section => ({\n"
             "                ...section,\n"
             "                paragraphs: section.paragraphs.map(para => {\n"
-            "                    const textEl = document.querySelector(`[data-para-id=\"${para.id}\"] .paragraph-text`);\n"
+            '                    const textEl = document.querySelector(`[data-para-id="${para.id}"] .paragraph-text`);\n'
             "                    return {\n"
             "                        ...para,\n"
             "                        text: textEl?.dataset.text || para.text,\n"
@@ -319,24 +325,23 @@ class ScriptEditor:
             "</body>\n"
             "</html>"
         )
-    
+
     def _render_script_html(self, data: dict[str, Any]) -> str:
         """Render script sections as HTML (Python side)."""
         if not data.get("sections") or len(data["sections"]) == 0:
             return '<div class="empty-state">No script found for this job</div>'
-        
+
         def escape_html(text: str) -> str:
             quot = "&" + "quot;"
             apos = "'"
             return (
-                text
-                .replace("&", "&")
+                text.replace("&", "&")
                 .replace("<", "<")
                 .replace(">", ">")
                 .replace('"', quot)
                 .replace("'", apos)
             )
-        
+
         sections_html = []
         for section in data["sections"]:
             paragraphs_html = []
@@ -346,41 +351,57 @@ class ScriptEditor:
                     claims_list = []
                     for claim in para["claims"]:
                         claim_class = claim.get("type", "").lower()
-                        badge = ' <span class="evidence-badge">\u2713</span>' if claim.get("evidence") else ""
-                        claims_list.append(f'<span class="claim {claim_class}" data-claim-id="{claim.get("claim_id", "")}">{escape_html(claim.get("text", ""))}{badge}</span>')
+                        badge = (
+                            ' <span class="evidence-badge">\u2713</span>'
+                            if claim.get("evidence")
+                            else ""
+                        )
+                        claims_list.append(
+                            f'<span class="claim {claim_class}" data-claim-id="{claim.get("claim_id", "")}">{escape_html(claim.get("text", ""))}{badge}</span>'
+                        )
                     claims_html = f'<div class="claims">{"".join(claims_list)}</div>'
-                
+
                 paragraphs_html.append(
                     '<div class="paragraph" data-para-id="' + para["id"] + '">\n'
                     '    <div class="paragraph-header">\n'
-                    '        <span class="paragraph-id">' + para["id"] + '</span>\n'
-                    '        <span>' + str(para.get("word_count", 0)) + ' words | ' + f'{para.get("target_seconds", 0):.1f}' + 's target</span>\n'
-                    '    </div>\n'
-                    '    <div class="paragraph-text" data-text="' + escape_html(para.get("text", "")) + '">' + escape_html(para.get("text", "")) + '</div>\n'
-                    + claims_html + '\n'
-                    '</div>\n'
+                    '        <span class="paragraph-id">' + para["id"] + "</span>\n"
+                    "        <span>"
+                    + str(para.get("word_count", 0))
+                    + " words | "
+                    + f"{para.get('target_seconds', 0):.1f}"
+                    + "s target</span>\n"
+                    "    </div>\n"
+                    '    <div class="paragraph-text" data-text="'
+                    + escape_html(para.get("text", ""))
+                    + '">'
+                    + escape_html(para.get("text", ""))
+                    + "</div>\n"
+                    + claims_html
+                    + "\n"
+                    "</div>\n"
                 )
-            
+
             sections_html.append(
                 '<div class="section" data-section-id="' + section["id"] + '">\n'
                 '    <div class="section-header">\n'
                 '        <div class="section-info">\n'
-                '            <span class="section-type">' + section["type"] + '</span>\n'
-                '            <span class="section-purpose">' + escape_html(section.get("purpose", "")) + '</span>\n'
-                '        </div>\n'
+                '            <span class="section-type">' + section["type"] + "</span>\n"
+                '            <span class="section-purpose">'
+                + escape_html(section.get("purpose", ""))
+                + "</span>\n"
+                "        </div>\n"
                 '        <div class="section-stats">\n'
-                '            <span>' + str(len(section["paragraphs"])) + ' paragraphs</span>\n'
-                '            <span>' + str(section.get("target_seconds", 0)) + 's target</span>\n'
-                '        </div>\n'
-                '    </div>\n'
-                '    <div class="section-body">\n'
-                + "".join(paragraphs_html) + '\n'
-                '    </div>\n'
-                '</div>\n'
+                "            <span>" + str(len(section["paragraphs"])) + " paragraphs</span>\n"
+                "            <span>" + str(section.get("target_seconds", 0)) + "s target</span>\n"
+                "        </div>\n"
+                "    </div>\n"
+                '    <div class="section-body">\n' + "".join(paragraphs_html) + "\n"
+                "    </div>\n"
+                "</div>\n"
             )
-        
+
         return "".join(sections_html)
-    
+
     def _render_script(self, data: dict[str, Any]) -> str:
         """Deprecated: kept for compatibility. Use _render_script_html instead."""
         return self._render_script_html(data)

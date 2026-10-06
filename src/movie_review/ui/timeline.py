@@ -18,6 +18,7 @@ from movie_review.ui.safe_json import json_for_script
 @dataclass(frozen=True)
 class TimelineScene:
     """Scene data for timeline display."""
+
     scene_id: str
     start: float
     end: float
@@ -28,6 +29,7 @@ class TimelineScene:
 @dataclass(frozen=True)
 class TimelineEvent:
     """Event data for timeline display."""
+
     id: str
     type: str
     timestamp: float
@@ -40,6 +42,7 @@ class TimelineEvent:
 @dataclass(frozen=True)
 class TimelineCharacter:
     """Character data for timeline display."""
+
     id: str
     name: str
     first_seen: float
@@ -49,61 +52,67 @@ class TimelineCharacter:
 
 class MovieTimeline:
     """Generates timeline visualization data from job artifacts."""
-    
+
     def __init__(self, jobs_dir: str | Path, job_id: str):
         self.jobs_dir = Path(jobs_dir)
         self.job_id = job_id
-    
+
     def load(self) -> dict[str, Any]:
         """Load all timeline data from job artifacts."""
         analysis_path = self.jobs_dir / self.job_id / "movie-analysis.json"
-        
+
         if not analysis_path.is_file():
             # Try to build from individual artifacts
             return self._build_from_artifacts()
-        
+
         document = artifacts.read_json(analysis_path)
         return self._build_from_analysis(document)
-    
+
     def _build_from_analysis(self, document: dict[str, Any]) -> dict[str, Any]:
         """Build timeline from canonical movie-analysis.json."""
         scenes = []
         for scene in document.get("scenes", []):
-            scenes.append(TimelineScene(
-                scene_id=scene.get("scene_id", ""),
-                start=scene.get("start", 0.0),
-                end=scene.get("end", 0.0),
-                duration=scene.get("duration", 0.0),
-                analysis=scene.get("analysis"),
-            ))
-        
+            scenes.append(
+                TimelineScene(
+                    scene_id=scene.get("scene_id", ""),
+                    start=scene.get("start", 0.0),
+                    end=scene.get("end", 0.0),
+                    duration=scene.get("duration", 0.0),
+                    analysis=scene.get("analysis"),
+                )
+            )
+
         events = []
         for event in document.get("events", []):
-            events.append(TimelineEvent(
-                id=event.get("id", ""),
-                type=event.get("type", ""),
-                timestamp=event.get("timestamp", 0.0),
-                characters=event.get("characters", []),
-                location=event.get("location", ""),
-                description=event.get("description", ""),
-                importance=event.get("importance", 0.0),
-            ))
-        
+            events.append(
+                TimelineEvent(
+                    id=event.get("id", ""),
+                    type=event.get("type", ""),
+                    timestamp=event.get("timestamp", 0.0),
+                    characters=event.get("characters", []),
+                    location=event.get("location", ""),
+                    description=event.get("description", ""),
+                    importance=event.get("importance", 0.0),
+                )
+            )
+
         characters = []
         for char in document.get("characters", []):
-            characters.append(TimelineCharacter(
-                id=char.get("id", ""),
-                name=char.get("name", ""),
-                first_seen=char.get("first_seen", 0.0),
-                last_seen=char.get("last_seen", 0.0),
-                confidence=char.get("confidence", 0.0),
-            ))
-        
+            characters.append(
+                TimelineCharacter(
+                    id=char.get("id", ""),
+                    name=char.get("name", ""),
+                    first_seen=char.get("first_seen", 0.0),
+                    last_seen=char.get("last_seen", 0.0),
+                    confidence=char.get("confidence", 0.0),
+                )
+            )
+
         # Sort by timestamp
         scenes.sort(key=lambda s: s.start)
         events.sort(key=lambda e: e.timestamp)
         characters.sort(key=lambda c: c.first_seen)
-        
+
         return {
             "job_id": self.job_id,
             "movie_title": document.get("movie", {}).get("title", "Unknown"),
@@ -113,54 +122,60 @@ class MovieTimeline:
             "characters": [self._character_to_dict(c) for c in characters],
             "locations": document.get("locations", []),
         }
-    
+
     def _build_from_artifacts(self) -> dict[str, Any]:
         """Fallback: build timeline from individual artifact files."""
         scenes_path = self.jobs_dir / self.job_id / "scenes" / "scenes.json"
         events_path = self.jobs_dir / self.job_id / "events" / "events.json"
         chars_path = self.jobs_dir / self.job_id / "characters" / "characters.json"
-        
+
         scenes = []
         if scenes_path.is_file():
             doc = artifacts.read_json(scenes_path)
             for scene in doc.get("scenes", []):
-                scenes.append(TimelineScene(
-                    scene_id=scene.get("scene_id", ""),
-                    start=scene.get("start", 0.0),
-                    end=scene.get("end", 0.0),
-                    duration=scene.get("duration", 0.0),
-                ))
-        
+                scenes.append(
+                    TimelineScene(
+                        scene_id=scene.get("scene_id", ""),
+                        start=scene.get("start", 0.0),
+                        end=scene.get("end", 0.0),
+                        duration=scene.get("duration", 0.0),
+                    )
+                )
+
         events = []
         if events_path.is_file():
             doc = artifacts.read_json(events_path)
             for event in doc.get("events", []):
-                events.append(TimelineEvent(
-                    id=event.get("id", ""),
-                    type=event.get("type", ""),
-                    timestamp=event.get("timestamp", 0.0),
-                    characters=event.get("characters", []),
-                    location=event.get("location", ""),
-                    description=event.get("description", ""),
-                    importance=event.get("importance", 0.0),
-                ))
-        
+                events.append(
+                    TimelineEvent(
+                        id=event.get("id", ""),
+                        type=event.get("type", ""),
+                        timestamp=event.get("timestamp", 0.0),
+                        characters=event.get("characters", []),
+                        location=event.get("location", ""),
+                        description=event.get("description", ""),
+                        importance=event.get("importance", 0.0),
+                    )
+                )
+
         characters = []
         if chars_path.is_file():
             doc = artifacts.read_json(chars_path)
             for char in doc.get("characters", []):
-                characters.append(TimelineCharacter(
-                    id=char.get("id", ""),
-                    name=char.get("name", ""),
-                    first_seen=char.get("first_seen", 0.0),
-                    last_seen=char.get("last_seen", 0.0),
-                    confidence=char.get("confidence", 0.0),
-                ))
-        
+                characters.append(
+                    TimelineCharacter(
+                        id=char.get("id", ""),
+                        name=char.get("name", ""),
+                        first_seen=char.get("first_seen", 0.0),
+                        last_seen=char.get("last_seen", 0.0),
+                        confidence=char.get("confidence", 0.0),
+                    )
+                )
+
         scenes.sort(key=lambda s: s.start)
         events.sort(key=lambda e: e.timestamp)
         characters.sort(key=lambda c: c.first_seen)
-        
+
         return {
             "job_id": self.job_id,
             "movie_title": "Unknown",
@@ -170,7 +185,7 @@ class MovieTimeline:
             "characters": [self._character_to_dict(c) for c in characters],
             "locations": [],
         }
-    
+
     def _scene_to_dict(self, scene: TimelineScene) -> dict[str, Any]:
         result = {
             "scene_id": scene.scene_id,
@@ -183,7 +198,7 @@ class MovieTimeline:
             result["characters"] = scene.analysis.get("characters", [])
             result["actions"] = scene.analysis.get("actions", [])
         return result
-    
+
     def _event_to_dict(self, event: TimelineEvent) -> dict[str, Any]:
         return {
             "id": event.id,
@@ -194,7 +209,7 @@ class MovieTimeline:
             "description": event.description,
             "importance": event.importance,
         }
-    
+
     def _character_to_dict(self, char: TimelineCharacter) -> dict[str, Any]:
         return {
             "id": char.id,
@@ -203,16 +218,16 @@ class MovieTimeline:
             "last_seen": char.last_seen,
             "confidence": char.confidence,
         }
-    
+
     def to_json(self) -> str:
         """Export timeline as JSON."""
         return json.dumps(self.load(), indent=2)
-    
+
     def to_html(self) -> str:
         """Generate standalone HTML timeline visualization."""
         data = self.load()
         return self._html_template(data)
-    
+
     def _html_template(self, data: dict[str, Any]) -> str:
         """Generate HTML with interactive timeline using vanilla JS."""
         json_data = json_for_script(data)
@@ -221,7 +236,7 @@ class MovieTimeline:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Movie Timeline - {data['movie_title']}</title>
+    <title>Movie Timeline - {data["movie_title"]}</title>
     <style>
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fafafa; }}
@@ -260,8 +275,8 @@ class MovieTimeline:
 <body>
     <div class="container">
         <header>
-            <h1>Movie Timeline: {data['movie_title']}</h1>
-            <div class="meta">Duration: {data['duration']:.1f}s | Job: {data['job_id']}</div>
+            <h1>Movie Timeline: {data["movie_title"]}</h1>
+            <div class="meta">Duration: {data["duration"]:.1f}s | Job: {data["job_id"]}</div>
         </header>
         
         <div class="legend">

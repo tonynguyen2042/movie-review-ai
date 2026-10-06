@@ -41,6 +41,14 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.per-file-ignores]
+# The UI modules build HTML/CSS/JS inside f-string templates. Those long lines
+# are embedded markup, not Python: ruff format cannot wrap them, and splitting
+# a CSS rule or a tag across lines would make the templates harder to read.
+# Real Python in these files is still held to the 100-column limit.
+"src/movie_review/ui/*.py" = ["E501"]
+"tests/unit/test_dashboard.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

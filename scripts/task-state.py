@@ -3,7 +3,7 @@
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -12,7 +12,7 @@ STATE_FILE = ROOT / ".spec" / "state.json"
 
 
 def now():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def load_state():
@@ -48,8 +48,7 @@ def get_task(state, task_id):
 
 def dependencies_done(state, task):
     return all(
-        state["tasks"].get(dep, {}).get("status") == "done"
-        for dep in task.get("depends_on", [])
+        state["tasks"].get(dep, {}).get("status") == "done" for dep in task.get("depends_on", [])
     )
 
 
@@ -191,10 +190,7 @@ def cmd_status(state, task_id=None):
     if task_id:
         task = get_task(state, task_id)
 
-        print(json.dumps({
-            "id": task_id,
-            **task
-        }, indent=2))
+        print(json.dumps({"id": task_id, **task}, indent=2))
 
         return
 
@@ -202,9 +198,7 @@ def cmd_status(state, task_id=None):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(
-        description="Manage OpenCode task execution state."
-    )
+    parser = argparse.ArgumentParser(description="Manage OpenCode task execution state.")
 
     sub = parser.add_subparsers(dest="command", required=True)
 

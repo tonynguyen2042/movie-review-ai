@@ -17,6 +17,7 @@ def _db(tmp: Path) -> str:
 def _mock_ffprobe(*args, **kwargs):
     """Mock ffprobe to return valid media metadata for fake files."""
     from movie_review.domain import MovieMetadata
+
     return MovieMetadata(
         file="test.mp4",
         sha256="a" * 64,
@@ -93,12 +94,12 @@ def test_resume_retry(tmp_path: Path) -> None:
     with patch("movie_review.media.ffmpeg.probe", side_effect=_mock_ffprobe):
         created = runner.invoke(app, ["process", str(movie), "--db-path", _db(tmp_path)])
     job_id = created.output.split("job_id=")[1].split()[0]
-    
+
     # resume should run (may fail due to missing artifacts, but not "not implemented")
     result = runner.invoke(app, ["resume", job_id, "--db-path", _db(tmp_path)])
     assert result.exit_code != 0  # fails because no artifacts, but not "not implemented"
     assert "not implemented" not in result.output
-    
+
     # retry should run
     result = runner.invoke(app, ["retry", job_id, "--db-path", _db(tmp_path)])
     assert result.exit_code != 0  # fails because job not FAILED

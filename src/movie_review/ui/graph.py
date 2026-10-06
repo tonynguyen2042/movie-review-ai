@@ -19,6 +19,7 @@ from movie_review.ui.safe_json import json_for_script
 @dataclass(frozen=True)
 class GraphNode:
     """Node in the story graph."""
+
     id: str
     label: str
     type: str  # character, event, location, scene
@@ -31,6 +32,7 @@ class GraphNode:
 @dataclass(frozen=True)
 class GraphEdge:
     """Edge in the story graph."""
+
     source: str
     target: str
     relation: str
@@ -40,110 +42,122 @@ class GraphEdge:
 
 class StoryGraph:
     """Generates graph visualization data from movie analysis."""
-    
+
     def __init__(self, jobs_dir: str | Path, job_id: str):
         self.jobs_dir = Path(jobs_dir)
         self.job_id = job_id
-    
+
     def load(self) -> dict[str, Any]:
         """Load all graph data from job artifacts."""
         analysis_path = self.jobs_dir / self.job_id / "movie-analysis.json"
-        
+
         if not analysis_path.is_file():
             return self._build_from_artifacts()
-        
+
         document = artifacts.read_json(analysis_path)
         return self._build_from_analysis(document)
-    
+
     def _build_from_analysis(self, document: dict[str, Any]) -> dict[str, Any]:
         """Build graph from canonical movie-analysis.json."""
         nodes: list[GraphNode] = []
         edges: list[GraphEdge] = []
         node_ids = set()
-        
+
         # Character nodes
         for char in document.get("characters", []):
             node_id = f"char:{char.get('id', '')}"
             if node_id not in node_ids:
-                nodes.append(GraphNode(
-                    id=node_id,
-                    label=char.get("name", "Unknown"),
-                    type="character",
-                    group="character",
-                    metadata={
-                        "first_seen": char.get("first_seen"),
-                        "last_seen": char.get("last_seen"),
-                        "confidence": char.get("confidence"),
-                    }
-                ))
+                nodes.append(
+                    GraphNode(
+                        id=node_id,
+                        label=char.get("name", "Unknown"),
+                        type="character",
+                        group="character",
+                        metadata={
+                            "first_seen": char.get("first_seen"),
+                            "last_seen": char.get("last_seen"),
+                            "confidence": char.get("confidence"),
+                        },
+                    )
+                )
                 node_ids.add(node_id)
-        
+
         # Event nodes
         for event in document.get("events", []):
             node_id = f"event:{event.get('id', '')}"
             if node_id not in node_ids:
-                nodes.append(GraphNode(
-                    id=node_id,
-                    label=f"{event.get('type', 'Event')}: {event.get('description', '')[:40]}",
-                    type="event",
-                    group="event",
-                    metadata={
-                        "event_type": event.get("type"),
-                        "timestamp": event.get("timestamp"),
-                        "importance": event.get("importance"),
-                        "location": event.get("location"),
-                    }
-                ))
+                nodes.append(
+                    GraphNode(
+                        id=node_id,
+                        label=f"{event.get('type', 'Event')}: {event.get('description', '')[:40]}",
+                        type="event",
+                        group="event",
+                        metadata={
+                            "event_type": event.get("type"),
+                            "timestamp": event.get("timestamp"),
+                            "importance": event.get("importance"),
+                            "location": event.get("location"),
+                        },
+                    )
+                )
                 node_ids.add(node_id)
-        
+
         # Location nodes
         for loc in document.get("locations", []):
             node_id = f"location:{loc.get('id', '')}"
             if node_id not in node_ids:
-                nodes.append(GraphNode(
-                    id=node_id,
-                    label=loc.get("name", "Unknown"),
-                    type="location",
-                    group="location",
-                    metadata={
-                        "first_seen": loc.get("first_seen"),
-                        "last_seen": loc.get("last_seen"),
-                    }
-                ))
+                nodes.append(
+                    GraphNode(
+                        id=node_id,
+                        label=loc.get("name", "Unknown"),
+                        type="location",
+                        group="location",
+                        metadata={
+                            "first_seen": loc.get("first_seen"),
+                            "last_seen": loc.get("last_seen"),
+                        },
+                    )
+                )
                 node_ids.add(node_id)
-        
+
         # Scene nodes
         for scene in document.get("scenes", []):
             node_id = f"scene:{scene.get('scene_id', '')}"
             if node_id not in node_ids:
-                location = scene.get("analysis", {}).get("location", "") if scene.get("analysis") else ""
-                nodes.append(GraphNode(
-                    id=node_id,
-                    label=f"Scene {scene.get('scene_id', '')}",
-                    type="scene",
-                    group="scene",
-                    metadata={
-                        "start": scene.get("start"),
-                        "end": scene.get("end"),
-                        "duration": scene.get("duration"),
-                        "location": location,
-                    }
-                ))
+                location = (
+                    scene.get("analysis", {}).get("location", "") if scene.get("analysis") else ""
+                )
+                nodes.append(
+                    GraphNode(
+                        id=node_id,
+                        label=f"Scene {scene.get('scene_id', '')}",
+                        type="scene",
+                        group="scene",
+                        metadata={
+                            "start": scene.get("start"),
+                            "end": scene.get("end"),
+                            "duration": scene.get("duration"),
+                            "location": location,
+                        },
+                    )
+                )
                 node_ids.add(node_id)
-        
+
         # Edges from relationships
         for rel in document.get("relationships", []):
             subj = f"char:{rel.get('subject', '')}"
             obj = f"char:{rel.get('object', '')}"
             if subj in node_ids and obj in node_ids:
-                edges.append(GraphEdge(
-                    source=subj,
-                    target=obj,
-                    relation=rel.get("relation", "RELATED"),
-                    weight=rel.get("confidence", 0.5),
-                    metadata={"evidence": rel.get("evidence", [])}
-                ))
-        
+                edges.append(
+                    GraphEdge(
+                        source=subj,
+                        target=obj,
+                        relation=rel.get("relation", "RELATED"),
+                        weight=rel.get("confidence", 0.5),
+                        metadata={"evidence": rel.get("evidence", [])},
+                    )
+                )
+
         # Edges from event participation
         for event in document.get("events", []):
             event_id = f"event:{event.get('id', '')}"
@@ -152,37 +166,43 @@ class StoryGraph:
             for char_id in event.get("characters", []):
                 char_node = f"char:{char_id}"
                 if char_node in node_ids:
-                    edges.append(GraphEdge(
-                        source=event_id,
-                        target=char_node,
-                        relation="PARTICIPATES_IN",
-                        weight=1.0,
-                    ))
+                    edges.append(
+                        GraphEdge(
+                            source=event_id,
+                            target=char_node,
+                            relation="PARTICIPATES_IN",
+                            weight=1.0,
+                        )
+                    )
             # Location edge
             loc = event.get("location")
             if loc:
                 loc_node = f"location:{loc}"
                 if loc_node in node_ids:
-                    edges.append(GraphEdge(
-                        source=event_id,
-                        target=loc_node,
-                        relation="OCCURS_AT",
-                        weight=1.0,
-                    ))
+                    edges.append(
+                        GraphEdge(
+                            source=event_id,
+                            target=loc_node,
+                            relation="OCCURS_AT",
+                            weight=1.0,
+                        )
+                    )
             # Scene edges - find scene containing event timestamp
             timestamp = event.get("timestamp", 0.0)
             for scene in document.get("scenes", []):
                 if scene.get("start", 0) <= timestamp < scene.get("end", 0):
                     scene_node = f"scene:{scene.get('scene_id', '')}"
                     if scene_node in node_ids:
-                        edges.append(GraphEdge(
-                            source=event_id,
-                            target=scene_node,
-                            relation="OCCURS_IN",
-                            weight=1.0,
-                        ))
+                        edges.append(
+                            GraphEdge(
+                                source=event_id,
+                                target=scene_node,
+                                relation="OCCURS_IN",
+                                weight=1.0,
+                            )
+                        )
                     break
-        
+
         # Edges from scene analysis
         for scene in document.get("scenes", []):
             scene_id = f"scene:{scene.get('scene_id', '')}"
@@ -197,56 +217,84 @@ class StoryGraph:
                         if char.get("name") == char_name or char_name in char.get("aliases", []):
                             char_node = f"char:{char.get('id', '')}"
                             if char_node in node_ids:
-                                edges.append(GraphEdge(
-                                    source=scene_id,
-                                    target=char_node,
-                                    relation="APPEARS_IN",
-                                    weight=1.0,
-                                ))
+                                edges.append(
+                                    GraphEdge(
+                                        source=scene_id,
+                                        target=char_node,
+                                        relation="APPEARS_IN",
+                                        weight=1.0,
+                                    )
+                                )
                             break
                 # Location
                 loc = analysis.get("location")
                 if loc:
                     loc_node = f"location:{loc}"
                     if loc_node in node_ids:
-                        edges.append(GraphEdge(
-                            source=scene_id,
-                            target=loc_node,
-                            relation="SET_IN",
-                            weight=1.0,
-                        ))
-        
+                        edges.append(
+                            GraphEdge(
+                                source=scene_id,
+                                target=loc_node,
+                                relation="SET_IN",
+                                weight=1.0,
+                            )
+                        )
+
         # Temporal edges between consecutive events
         events = sorted(document.get("events", []), key=lambda e: e.get("timestamp", 0.0))
         for i in range(len(events) - 1):
             e1 = f"event:{events[i].get('id', '')}"
-            e2 = f"event:{events[i+1].get('id', '')}"
+            e2 = f"event:{events[i + 1].get('id', '')}"
             if e1 in node_ids and e2 in node_ids:
-                edges.append(GraphEdge(
-                    source=e1,
-                    target=e2,
-                    relation="PRECEDES",
-                    weight=0.8,
-                ))
-        
+                edges.append(
+                    GraphEdge(
+                        source=e1,
+                        target=e2,
+                        relation="PRECEDES",
+                        weight=0.8,
+                    )
+                )
+
         # Story arc edges
         for arc in document.get("story_arcs", []):
             arc_events = arc.get("events", [])
             for i in range(len(arc_events) - 1):
                 e1 = f"event:{arc_events[i]}"
-                e2 = f"event:{arc_events[i+1]}"
+                e2 = f"event:{arc_events[i + 1]}"
                 if e1 in node_ids and e2 in node_ids:
-                    edges.append(GraphEdge(
-                        source=e1,
-                        target=e2,
-                        relation="ARCS_TO",
-                        weight=0.7,
-                    ))
-        
+                    edges.append(
+                        GraphEdge(
+                            source=e1,
+                            target=e2,
+                            relation="ARCS_TO",
+                            weight=0.7,
+                        )
+                    )
+
         # Convert to dicts
-        nodes_data = [{"id": n.id, "label": n.label, "type": n.type, "group": n.group, "x": n.x, "y": n.y, "metadata": n.metadata} for n in nodes]
-        edges_data = [{"source": e.source, "target": e.target, "relation": e.relation, "weight": e.weight, "metadata": e.metadata} for e in edges]
-        
+        nodes_data = [
+            {
+                "id": n.id,
+                "label": n.label,
+                "type": n.type,
+                "group": n.group,
+                "x": n.x,
+                "y": n.y,
+                "metadata": n.metadata,
+            }
+            for n in nodes
+        ]
+        edges_data = [
+            {
+                "source": e.source,
+                "target": e.target,
+                "relation": e.relation,
+                "weight": e.weight,
+                "metadata": e.metadata,
+            }
+            for e in edges
+        ]
+
         return {
             "job_id": self.job_id,
             "movie_title": document.get("movie", {}).get("title", "Unknown"),
@@ -259,9 +307,9 @@ class StoryGraph:
                 "events": len([n for n in nodes_data if n["type"] == "event"]),
                 "locations": len([n for n in nodes_data if n["type"] == "location"]),
                 "scenes": len([n for n in nodes_data if n["type"] == "scene"]),
-            }
+            },
         }
-    
+
     def _build_from_artifacts(self) -> dict[str, Any]:
         """Fallback: build from individual artifact files."""
         # Simplified fallback - return empty graph
@@ -269,18 +317,25 @@ class StoryGraph:
             "job_id": self.job_id,
             "nodes": [],
             "edges": [],
-            "stats": {"total_nodes": 0, "total_edges": 0, "characters": 0, "events": 0, "locations": 0, "scenes": 0}
+            "stats": {
+                "total_nodes": 0,
+                "total_edges": 0,
+                "characters": 0,
+                "events": 0,
+                "locations": 0,
+                "scenes": 0,
+            },
         }
-    
+
     def to_json(self) -> str:
         """Export graph as JSON."""
         return json.dumps(self.load(), indent=2)
-    
+
     def to_html(self) -> str:
         """Generate standalone HTML graph visualization."""
         data = self.load()
         return self._html_template(data)
-    
+
     def _html_template(self, data: dict[str, Any]) -> str:
         """Generate HTML with interactive graph using vanilla JS (force-directed)."""
         json_data = json_for_script(data)
@@ -289,7 +344,7 @@ class StoryGraph:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Story Graph - Job {data['job_id']}</title>
+    <title>Story Graph - Job {data["job_id"]}</title>
     <style>
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fafafa; }}
@@ -321,16 +376,16 @@ class StoryGraph:
     <div class="container">
         <header>
             <h1>Story Graph</h1>
-            <div class="meta">Job: {data['job_id']}</div>
+            <div class="meta">Job: {data["job_id"]}</div>
         </header>
         
         <div class="stats">
-            <div class="stat-card"><div class="value">{data['stats']['total_nodes']}</div><div class="label">Total Nodes</div></div>
-            <div class="stat-card"><div class="value">{data['stats']['total_edges']}</div><div class="label">Total Edges</div></div>
-            <div class="stat-card"><div class="value">{data['stats']['characters']}</div><div class="label">Characters</div></div>
-            <div class="stat-card"><div class="value">{data['stats']['events']}</div><div class="label">Events</div></div>
-            <div class="stat-card"><div class="value">{data['stats']['locations']}</div><div class="label">Locations</div></div>
-            <div class="stat-card"><div class="value">{data['stats']['scenes']}</div><div class="label">Scenes</div></div>
+            <div class="stat-card"><div class="value">{data["stats"]["total_nodes"]}</div><div class="label">Total Nodes</div></div>
+            <div class="stat-card"><div class="value">{data["stats"]["total_edges"]}</div><div class="label">Total Edges</div></div>
+            <div class="stat-card"><div class="value">{data["stats"]["characters"]}</div><div class="label">Characters</div></div>
+            <div class="stat-card"><div class="value">{data["stats"]["events"]}</div><div class="label">Events</div></div>
+            <div class="stat-card"><div class="value">{data["stats"]["locations"]}</div><div class="label">Locations</div></div>
+            <div class="stat-card"><div class="value">{data["stats"]["scenes"]}</div><div class="label">Scenes</div></div>
         </div>
         
         <div class="controls">

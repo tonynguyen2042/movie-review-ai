@@ -59,9 +59,7 @@ def finish(task_id: str, commit_type: str, summary: str) -> None:
     run("pytest", "-q")
 
     if run("git", "status", "--porcelain").stdout.strip():
-        raise SystemExit(
-            "Working tree is not clean. Commit the final task-state update first."
-        )
+        raise SystemExit("Working tree is not clean. Commit the final task-state update first.")
 
     run("git", "push", "-u", "origin", branch)
 

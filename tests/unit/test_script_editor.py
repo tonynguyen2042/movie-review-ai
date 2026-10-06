@@ -3,10 +3,8 @@
 import json
 from pathlib import Path
 
-import pytest
-
-from movie_review.ui.script_editor import ScriptEditor
 from movie_review.artifacts import manager as artifacts
+from movie_review.ui.script_editor import ScriptEditor
 
 
 def test_script_editor_from_script(tmp_path: Path) -> None:
@@ -16,7 +14,7 @@ def test_script_editor_from_script(tmp_path: Path) -> None:
     job_id = "job_test"
     job_dir = jobs_dir / job_id
     job_dir.mkdir()
-    
+
     # Create a minimal review-script.json
     script = {
         "job_id": job_id,
@@ -38,7 +36,12 @@ def test_script_editor_from_script(tmp_path: Path) -> None:
                             "id": "p1",
                             "text": "The movie opens with a mystery.",
                             "claims": [
-                                {"claim_id": "c1", "text": "Movie opens with mystery", "type": "PLOT_FACT", "evidence": ["ev1"]}
+                                {
+                                    "claim_id": "c1",
+                                    "text": "Movie opens with mystery",
+                                    "type": "PLOT_FACT",
+                                    "evidence": ["ev1"],
+                                }
                             ],
                             "target_seconds": 10.0,
                         }
@@ -55,21 +58,26 @@ def test_script_editor_from_script(tmp_path: Path) -> None:
                             "id": "p2",
                             "text": "The climax reveals the truth.",
                             "claims": [
-                                {"claim_id": "c2", "text": "Climax reveals truth", "type": "PLOT_FACT", "evidence": ["ev2"]}
+                                {
+                                    "claim_id": "c2",
+                                    "text": "Climax reveals truth",
+                                    "type": "PLOT_FACT",
+                                    "evidence": ["ev2"],
+                                }
                             ],
                             "target_seconds": 20.0,
                         }
                     ],
                 },
             ],
-        }
+        },
     }
-    
+
     artifacts.write_json(job_dir / "review-script.json", script)
-    
+
     editor = ScriptEditor(jobs_dir, job_id)
     data = editor.load()
-    
+
     assert data["job_id"] == job_id
     assert data["total_sections"] == 2
     assert data["total_paragraphs"] == 2
@@ -89,7 +97,7 @@ def test_script_editor_json_export(tmp_path: Path) -> None:
     job_id = "job_test"
     job_dir = jobs_dir / job_id
     job_dir.mkdir()
-    
+
     script = {
         "job_id": job_id,
         "stage": "review",
@@ -100,10 +108,10 @@ def test_script_editor_json_export(tmp_path: Path) -> None:
         "script": {"sections": []},
     }
     artifacts.write_json(job_dir / "review-script.json", script)
-    
+
     editor = ScriptEditor(jobs_dir, job_id)
     json_str = editor.to_json()
-    
+
     data = json.loads(json_str)
     assert data["job_id"] == job_id
 
@@ -115,7 +123,7 @@ def test_script_editor_html_export(tmp_path: Path) -> None:
     job_id = "job_test"
     job_dir = jobs_dir / job_id
     job_dir.mkdir()
-    
+
     script = {
         "job_id": job_id,
         "stage": "review",
@@ -141,13 +149,13 @@ def test_script_editor_html_export(tmp_path: Path) -> None:
                     ],
                 }
             ],
-        }
+        },
     }
     artifacts.write_json(job_dir / "review-script.json", script)
-    
+
     editor = ScriptEditor(jobs_dir, job_id)
     html = editor.to_html()
-    
+
     assert "Script Editor" in html
     assert "Job" in html
     assert "Save Changes" in html
@@ -161,10 +169,10 @@ def test_script_editor_empty(tmp_path: Path) -> None:
     job_id = "job_test"
     job_dir = jobs_dir / job_id
     job_dir.mkdir()
-    
+
     editor = ScriptEditor(jobs_dir, job_id)
     data = editor.load()
-    
+
     assert data["job_id"] == job_id
     assert data["sections"] == []
     assert data["total_sections"] == 0
