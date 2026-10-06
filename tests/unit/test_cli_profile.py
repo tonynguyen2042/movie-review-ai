@@ -13,8 +13,10 @@ the legacy flag still works as an alias.
 from __future__ import annotations
 
 import importlib
+import json
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -177,6 +179,126 @@ def test_conflicting_flags_are_rejected(tmp_path: Path) -> None:
     )
     assert result.exit_code != 0
     assert "deprecated" in result.output
+
+
+# ---------------------------------------------------------------------------
+# The acceptance log must name the profile that actually runs
+# ---------------------------------------------------------------------------
+
+
+def _accepted_log(output: str) -> dict[str, Any]:
+    for line in output.splitlines():
+        if "cli.process.accepted" in line:
+            parsed: dict[str, Any] = json.loads(line)
+            return parsed
+    raise AssertionError(f"no acceptance event in output: {output!r}")
+
+
+def test_log_states_the_effective_profile_not_just_the_flag(tmp_path: Path) -> None:
+    """`profile: null` told the reader nothing.
+
+    Without --profile the flag value is None and the profile actually in force
+    comes from config/default.yaml. Logging only the flag made a run that had
+    silently chosen an unusable profile look unconfigured.
+    """
+    result = runner.invoke(
+        app,
+        ["process", str(_movie(tmp_path)), "--db-path", _db(tmp_path), "--no-run"],
+    )
+    assert result.exit_code == 0, result.output
+    event = _accepted_log(result.output)
+    assert event["profile"] is not None
+    assert event["profile"] == "balanced"
+    assert event["profile_flag"] is None
+
+
+def test_log_states_the_profile_when_flagged(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            str(_movie(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+            "--no-run",
+            "--profile",
+            "remote",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    event = _accepted_log(result.output)
+    assert event["profile"] == "remote"
+    assert event["profile_flag"] == "remote"
+
+
+def test_log_states_each_slot_backend(tmp_path: Path) -> None:
+    """Which slot runs locally and which goes remote is the whole question."""
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            str(_movie(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+            "--no-run",
+            "--profile",
+            "remote",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    backends = _accepted_log(result.output)["backends"]
+    assert set(backends) == {"asr", "vision", "reasoning", "tts"}
+    assert backends["asr"].startswith("openai_compatible:")
+
+
+# ---------------------------------------------------------------------------
+# Guardrail: MLX cannot run on this host
+# ---------------------------------------------------------------------------
+
+
+def test_warns_when_a_local_slot_cannot_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The failure it prevents costs minutes of audio extraction first."""
+    monkeypatch.setattr(cliapp, "_mlx_available_on_this_host", lambda: False)
+    settings = cliapp.load_settings(profile="balanced")
+
+    warned: list[str] = []
+    monkeypatch.setattr(cliapp.typer, "echo", lambda msg, **kw: warned.append(msg))
+
+    assert cliapp._warn_unusable_backends(settings) == ["asr", "vision", "reasoning", "tts"]
+    assert any("cannot run on" in m for m in warned)
+
+
+def test_no_warning_when_slots_are_remote(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A remote profile is the fix; it must not also emit a warning."""
+    monkeypatch.setattr(cliapp, "_mlx_available_on_this_host", lambda: False)
+    settings = cliapp.load_settings(profile="remote")
+
+    warned: list[str] = []
+    monkeypatch.setattr(cliapp.typer, "echo", lambda msg, **kw: warned.append(msg))
+
+    assert cliapp._warn_unusable_backends(settings) == []
+    assert warned == []
+
+
+def test_no_warning_on_apple_silicon(monkeypatch: pytest.MonkeyPatch) -> None:
+    """MLX runs there, so the same profile is correct and must stay quiet."""
+    monkeypatch.setattr(cliapp, "_mlx_available_on_this_host", lambda: True)
+    warned: list[str] = []
+    monkeypatch.setattr(cliapp.typer, "echo", lambda msg, **kw: warned.append(msg))
+
+    assert cliapp._warn_unusable_backends(cliapp.load_settings(profile="balanced")) == []
+    assert warned == []
+
+
+def test_warning_reaches_the_terminal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Not just a helper that works when called directly."""
+    monkeypatch.setattr(cliapp, "_mlx_available_on_this_host", lambda: False)
+    result = runner.invoke(
+        app,
+        ["process", str(_movie(tmp_path)), "--db-path", _db(tmp_path), "--no-run"],
+    )
+    assert result.exit_code == 0
+    assert "MLX cannot run on" in result.output
 
 
 # ---------------------------------------------------------------------------

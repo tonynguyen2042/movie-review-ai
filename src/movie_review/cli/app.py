@@ -19,7 +19,7 @@ from typing import Annotated
 import typer
 
 from movie_review import __version__
-from movie_review.config.settings import available_profiles, load_settings
+from movie_review.config.settings import AppSettings, available_profiles, load_settings
 from movie_review.domain import Job
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.state_machine import JobNotFoundError
@@ -158,6 +158,59 @@ class _ProgressReporter:
             self._stage_started = None
 
 
+#: Model slots that pick a runtime through ``ModelSpec.backend``.
+MODEL_SLOTS = ("asr", "vision", "reasoning", "tts")
+
+
+def _effective_profile(settings: AppSettings) -> str:
+    """The profile actually in force, after env and flag resolution.
+
+    The accepted-job log used to record the raw flag value, which is ``None``
+    for a normal run. A reader then could not tell that ``config/default.yaml``
+    had silently selected a profile that cannot work on this host -- the exact
+    confusion behind a run dying 15 seconds in at the ASR stage.
+    """
+    return settings.models.profile
+
+
+def _slot_backends(settings: AppSettings) -> dict[str, str]:
+    """Per-slot ``backend:model``, for the acceptance log."""
+    return {
+        slot: f"{getattr(settings.models, slot).backend}:{getattr(settings.models, slot).model}"
+        for slot in MODEL_SLOTS
+    }
+
+
+def _mlx_available_on_this_host() -> bool:
+    """Whether the MLX runtime can run here at all.
+
+    MLX is Apple-silicon-only, so on Windows or Linux a profile pinning any slot
+    to ``backend: mlx`` cannot succeed. Reported as a warning rather than an
+    error: a remote slot may cover the stage that would otherwise fail, and
+    refusing to start would be wrong.
+    """
+    return sys.platform == "darwin"
+
+
+def _warn_unusable_backends(settings: AppSettings) -> list[str]:
+    """Warn about local slots on a host without MLX; return the slot names."""
+    local = [
+        slot
+        for slot in MODEL_SLOTS
+        if getattr(settings.models, slot).backend != "openai_compatible"
+    ]
+    if not local or _mlx_available_on_this_host():
+        return []
+    typer.echo(
+        f"warning: profile {_effective_profile(settings)!r} uses the local 'mlx' backend "
+        f"for {', '.join(local)}, and MLX cannot run on {sys.platform}. "
+        f"That stage will fail with 'not installed'. Select a profile that routes "
+        f"those slots remotely, e.g. --profile remote.",
+        err=True,
+    )
+    return local
+
+
 def _manager(db_path: str | None) -> tuple[JobManager, sqlite3.Connection]:
     settings = load_settings()
     resolved = Path(db_path) if db_path else Path(settings.paths.data_dir) / "jobs.db"
@@ -261,6 +314,10 @@ def process(
     # Resolve the profile before creating the job, so a bad name is a usage
     # error rather than a job that exists but can never run.
     selected_profile = _resolve_profile(profile, quality)
+    # Read settings with the same override the pipeline will use, so the
+    # acceptance log states the profile and backends that actually run.
+    effective = load_settings(profile=selected_profile)
+    _warn_unusable_backends(effective)
     manager, conn = _manager(db_path)
     with conn:
         job = manager.create(movie)
@@ -272,7 +329,9 @@ def process(
             language=language,
             target_minutes=minutes,
             style=style,
-            profile=selected_profile,
+            profile=_effective_profile(effective),
+            profile_flag=selected_profile,
+            backends=_slot_backends(effective),
             spoilers=spoilers,
             output=output,
         )
@@ -340,6 +399,9 @@ def resume(
 ) -> None:
     """Resume an interrupted job from its last checkpoint."""
     selected_profile = _resolve_profile(profile, quality)
+    # Same reasoning as process(): a resume that quietly falls back to an
+    # unusable profile fails at the same stage the user is trying to escape.
+    _warn_unusable_backends(load_settings(profile=selected_profile))
     manager, conn = _manager(db_path)
     with conn:
         _load_job(manager, job_id)
@@ -371,6 +433,7 @@ def retry(
     # Resolved before the retries start, so a bad name fails immediately instead
     # of once per attempt.
     selected_profile = _resolve_profile(profile, quality)
+    _warn_unusable_backends(load_settings(profile=selected_profile))
     manager, conn = _manager(db_path)
     with conn:
         job = _load_job(manager, job_id)
