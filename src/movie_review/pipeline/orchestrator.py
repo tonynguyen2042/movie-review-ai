@@ -69,7 +69,17 @@ class PipelineContext(StageContext):
 
 
 def _stage_logger(stage: str) -> logging.Logger:
-    return logging.getLogger(f"pipeline.{stage}")
+    """Logger for a pipeline stage, under the configured ``movie_review`` namespace.
+
+    Must go through :func:`ulog.get_logger`. ``logging.getLogger(f"pipeline.{stage}")``
+    builds a *different* tree at the root: ``configure_logging`` attaches its
+    handler to the ``movie_review`` logger and sets ``propagate = False`` there,
+    so a sibling at root reaches no handler at all and its INFO records fall to
+    the root logger's default WARNING level. Every ``stage.completed`` and
+    ``stage.failed`` line was silently dropped -- the one signal that tells the
+    user which stage finished, or why one failed.
+    """
+    return ulog.get_logger(f"pipeline.{stage}")
 
 
 def run_stage(
