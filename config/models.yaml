@@ -76,6 +76,15 @@ profiles:
   #   reasoning -> POST {base}/chat/completions
   #   tts       -> POST {base}/audio/speech         (wav or headerless pcm)
   #
+  # Servers that spell the ASR route differently: whisper.cpp's `whisper-server`
+  # serves POST {base}/inference and has no /audio/transcriptions at all, so a
+  # request to the OpenAI path comes back 404 from an otherwise healthy server.
+  # It returns the same verbose_json segment shape, so only the route changes:
+  #
+  #   asr:
+  #     endpoint_path: /inference
+  #
+  #
   # TTS: ask for `wav` so duration can be measured from the bytes. `mp3` is
   # rejected deliberately rather than guessed, since a wrong duration
   # corrupts subtitle timing.
