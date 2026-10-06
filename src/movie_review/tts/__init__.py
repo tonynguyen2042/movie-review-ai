@@ -17,6 +17,8 @@ from movie_review.tts.concat import (
     ConcatResult,
     concatenate,
 )
+from movie_review.tts.factory import build_tts_adapter
+from movie_review.tts.openai_compat import SUPPORTED_FORMATS, OpenAICompatTTSAdapter
 from movie_review.tts.port import TTSError, TTSPort, TTSUnavailableError
 from movie_review.tts.qwen_tts import QwenTTSAdapter
 from movie_review.tts.reconcile import (
@@ -28,11 +30,13 @@ from movie_review.tts.reconcile import (
 )
 
 __all__ = [
+    "SUPPORTED_FORMATS",
     "ChunkResult",
     "ConcatError",
     "ConcatResult",
     "METADATA_FILENAME",
     "NARRATION_FILENAME",
+    "OpenAICompatTTSAdapter",
     "QwenTTSAdapter",
     "ReconcileResult",
     "ReconciliationError",
@@ -40,6 +44,7 @@ __all__ = [
     "TTSError",
     "TTSPort",
     "TTSUnavailableError",
+    "build_tts_adapter",
     "chunk_filename",
     "concatenate",
     "measure_wav",

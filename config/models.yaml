@@ -57,3 +57,58 @@ profiles:
     tts:
       model: Qwen3-TTS-12Hz-1.7B
       precision: 8bit
+
+  # Remote profile: models run on another host (GPU box, home server) behind
+  # OpenAI-compatible endpoints -- vLLM, faster-whisper-server, llama.cpp
+  # server, LM Studio, Ollama, or TGI. Select with either:
+  #   models.profile: remote                 (in config/default.yaml)
+  #   export MOVIE_REVIEW_MODELS__PROFILE=remote
+  #
+  # `backend: openai_compatible` routes that slot over HTTP instead of loading
+  # local MLX weights. `precision` is then ignored -- the remote server decides
+  # how weights are loaded. Slots are independent: leave `backend: mlx` on a
+  # slot to keep that one local while the rest run remotely.
+  #
+  # Paths the remote adapters use (base_url may include /v1 or be a bare host):
+  #   asr       -> POST {base}/audio/transcriptions  (multipart; needs
+  #                response_format=verbose_json for timestamps)
+  #   vision    -> POST {base}/chat/completions     (base64 image_url parts)
+  #   reasoning -> POST {base}/chat/completions
+  #   tts       -> POST {base}/audio/speech         (wav or headerless pcm)
+  #
+  # TTS: ask for `wav` so duration can be measured from the bytes. `mp3` is
+  # rejected deliberately rather than guessed, since a wrong duration
+  # corrupts subtitle timing.
+  #
+  # Credentials: put the NAME of an environment variable in `api_key_env`, never
+  # the secret itself, so tokens stay out of version control. Leave it unset for
+  # servers needing no auth (a LAN vLLM usually needs none).
+  remote:
+    asr:
+      model: whisper-large-v3-turbo
+      backend: openai_compatible
+      base_url: http://gpu-box.local:9000/v1
+      # api_key_env: MOVIE_REVIEW_ASR_TOKEN
+      timeout_seconds: 600
+    vision:
+      model: Qwen3-VL
+      backend: openai_compatible
+      base_url: http://gpu-box.local:8000/v1
+      # api_key_env: MOVIE_REVIEW_LLM_TOKEN
+      timeout_seconds: 300
+    reasoning:
+      model: Qwen3.5-27B
+      backend: openai_compatible
+      base_url: http://gpu-box.local:8000/v1
+      # api_key_env: MOVIE_REVIEW_LLM_TOKEN
+      timeout_seconds: 120
+    critic:
+      model: Qwen3.5-27B
+      backend: openai_compatible
+      base_url: http://gpu-box.local:8000/v1
+      enabled: false
+    tts:
+      model: Qwen3-TTS-12Hz-1.7B
+      backend: openai_compatible
+      base_url: http://gpu-box.local:8000/v1
+      timeout_seconds: 120

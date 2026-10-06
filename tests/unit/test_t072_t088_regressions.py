@@ -1,0 +1,297 @@
+"""Regression tests for defects found reviewing the T072-T088 modules.
+
+Each test pins a specific bug so it cannot come back.
+"""
+
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from movie_review.artifacts.integrity import (
+    ArtifactRecord,
+    IntegrityReport,
+    scan_job_integrity,
+    verify_or_raise,
+)
+from movie_review.artifacts.manager import sha256_file, write_json
+from movie_review.benchmark.memory import benchmark_memory
+from movie_review.domain import JobStatus
+from movie_review.eval.coverage_eval import evaluate_coverage
+from movie_review.eval.hallucination import evaluate_hallucinations
+from movie_review.eval.regression import run_regression
+from movie_review.jobs.recovery import _RESUME_STAGE, RecoveryMappingError
+
+MAJOR = {"type": "PLOT_FACT"}
+
+
+# ---------------------------------------------------------------------------
+# F3: path traversal in the integrity scanner (most serious)
+# ---------------------------------------------------------------------------
+
+
+def test_integrity_scanner_blocks_path_traversal() -> None:
+    """A record naming '../..' must not hash a file outside the job root.
+
+    Regression: raw ``root / stage / filename`` joins let a corrupted manifest
+    point the scanner at arbitrary files. ``artifact_path`` rejects this.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        jobs = root / "jobs"
+        (jobs / "job_ok").mkdir(parents=True)
+
+        secret = root / "secret.txt"
+        secret.write_text("TOP SECRET")
+
+        report = scan_job_integrity(
+            jobs,
+            "job_ok",
+            [
+                ArtifactRecord(
+                    stage="../..", filename="secret.txt", expected_hash=sha256_file(secret)
+                )
+            ],
+        )
+        assert report.ok == 0
+        assert report.unsafe == ["../../secret.txt"]
+        assert report.passed is False
+
+
+def test_integrity_scanner_blocks_traversal_in_filename() -> None:
+    """Traversal via the filename segment is rejected too."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        jobs = root / "jobs"
+        (jobs / "job_ok").mkdir(parents=True)
+        (root / "secret.txt").write_text("x")
+
+        report = scan_job_integrity(
+            jobs,
+            "job_ok",
+            [ArtifactRecord(stage="qc", filename="../secret.txt", expected_hash="0" * 64)],
+        )
+        assert report.unsafe == ["qc/../secret.txt"]
+        assert report.passed is False
+
+
+def test_verify_or_raise_rejects_unsafe_paths() -> None:
+    """The raising variant refuses unsafe records."""
+    with tempfile.TemporaryDirectory() as tmp:
+        jobs = Path(tmp) / "jobs"
+        (jobs / "job_ok").mkdir(parents=True)
+        with pytest.raises(FileNotFoundError, match="Unsafe artifact paths"):
+            verify_or_raise(
+                jobs,
+                "job_ok",
+                [ArtifactRecord(stage="../..", filename="x", expected_hash="0" * 64)],
+            )
+
+
+def test_integrity_scanner_still_accepts_valid_records() -> None:
+    """The guard must not break the happy path."""
+    with tempfile.TemporaryDirectory() as tmp:
+        jobs = Path(tmp) / "jobs"
+        job_dir = jobs / "job_ok"
+        (job_dir / "qc").mkdir(parents=True)
+        # write_json returns the content hash
+        expected = write_json(job_dir / "qc" / "report.json", {"a": 1})
+
+        report = scan_job_integrity(
+            jobs,
+            "job_ok",
+            [ArtifactRecord(stage="qc", filename="report.json", expected_hash=expected)],
+        )
+        assert report.ok == 1
+        assert report.passed is True
+        assert report.unsafe == []
+
+
+def test_integrity_scanner_detects_corruption() -> None:
+    """A mismatched hash is reported as corrupt, not as ok."""
+    with tempfile.TemporaryDirectory() as tmp:
+        jobs = Path(tmp) / "jobs"
+        job_dir = jobs / "job_ok"
+        (job_dir / "qc").mkdir(parents=True)
+        write_json(job_dir / "qc" / "report.json", {"a": 1})
+
+        report = scan_job_integrity(
+            jobs,
+            "job_ok",
+            [ArtifactRecord(stage="qc", filename="report.json", expected_hash="0" * 64)],
+        )
+        assert report.corrupt == ["qc/report.json"]
+        assert report.passed is False
+
+
+def test_integrity_report_passed_requires_all_three_clean() -> None:
+    """passed is false when any of missing/corrupt/unsafe is non-empty."""
+    assert IntegrityReport(job_id="j", ok=1).passed is True
+    assert IntegrityReport(job_id="j", missing=["a"]).passed is False
+    assert IntegrityReport(job_id="j", corrupt=["a"]).passed is False
+    assert IntegrityReport(job_id="j", unsafe=["a"]).passed is False
+
+
+# ---------------------------------------------------------------------------
+# F1/F2: vacuous passes on empty claim sets
+# ---------------------------------------------------------------------------
+
+
+def test_hallucination_gate_reports_zero_rate_when_nothing_measured() -> None:
+    """With no major claims the rate is 0.0 and the gate is not penalised.
+
+    Intent preserved from the original T081 tests: an opinion-only review has
+    nothing to hallucinate about. The measured value stays honest at 0.0.
+    """
+    report = evaluate_hallucinations([])
+    assert report.major_total == 0
+    assert report.rate == 0.0
+    assert report.passed is True
+
+
+def test_hallucination_gate_still_passes_on_real_clean_claims() -> None:
+    report = evaluate_hallucinations([{**MAJOR, "verdict": "SUPPORTED"}])
+    assert report.passed is True
+
+
+def test_coverage_does_not_fabricate_100_percent_on_empty_claims() -> None:
+    """Regression: coverage returned 100.0 when there was nothing to measure.
+
+    The gate verdict is unchanged (still not penalised), but the reported
+    number must not claim a perfect measurement that never happened.
+    """
+    report = evaluate_coverage([], [])
+    assert report.major_total == 0
+    assert report.coverage == 0.0
+    assert report.passed is True
+
+
+def test_coverage_ignores_non_major_claims() -> None:
+    """Only major claims count toward the coverage denominator."""
+    report = evaluate_coverage([{"type": "OPINION", "evidence": []}], ["ev1"])
+    assert report.major_total == 0
+    assert report.coverage == 0.0
+    assert report.passed is True
+
+
+def test_coverage_passes_when_all_major_claims_covered() -> None:
+    report = evaluate_coverage([{**MAJOR, "evidence": ["ev1"]}], ["ev1"])
+    assert report.coverage == 100.0
+    assert report.passed is True
+
+
+def test_regression_gate_passes_on_opinion_only_review() -> None:
+    """Preserved intent: opinion-only reviews are not blocked by the gate."""
+    report = run_regression(["e1"], ["e1"], [{"claim_id": "o", "type": "OPINION"}], [])
+    assert report.passed is True
+    assert report.failures == []
+
+
+def test_regression_gate_passes_on_healthy_golden_set() -> None:
+    """A real, well-supported claim set still passes."""
+    claims = [
+        {"claim_id": "c1", "type": "PLOT_FACT", "evidence": ["ev1"], "verdict": "SUPPORTED"},
+        {"claim_id": "c2", "type": "PLOT_FACT", "evidence": ["ev1"], "verdict": "SUPPORTED"},
+    ]
+    report = run_regression(["e1"], ["e1"], claims, ["ev1"])
+    assert report.passed is True
+    assert report.failures == []
+
+
+def test_eval_gates_still_fail_real_problems() -> None:
+    """The fixes did not weaken genuine detection."""
+    bad = [{"claim_id": "c1", "type": "PLOT_FACT", "evidence": [], "verdict": "CONTRADICTED"}]
+    assert evaluate_hallucinations(bad).passed is False
+    assert evaluate_coverage(bad, ["ev1"]).passed is False
+
+
+def test_measured_coverage_is_never_above_100() -> None:
+    """Sanity: the reported percentage stays a real measurement."""
+    claims = [{**MAJOR, "evidence": ["ev1"]} for _ in range(3)]
+    report = evaluate_coverage(claims, ["ev1"])
+    assert 0.0 <= report.coverage <= 100.0
+    assert report.coverage == 100.0
+
+
+# ---------------------------------------------------------------------------
+# F4: wrong exception type for a missing resume mapping
+# ---------------------------------------------------------------------------
+
+
+class _StubJob:
+    def __init__(self, status: JobStatus) -> None:
+        self.status = status
+        self.failed_stage = None
+        self.error = None
+
+
+class _StubManager:
+    def __init__(self, status: JobStatus) -> None:
+        self._status = status
+
+    def get(self, job_id: str) -> _StubJob:
+        return _StubJob(self._status)
+
+
+def test_recovery_mapping_gap_raises_its_own_error(monkeypatch) -> None:
+    """An unmapped status must raise RecoveryMappingError.
+
+    Regression: it raised JobNotFoundError, so callers reported an internal
+    gap as a missing job. The mapping is currently complete, so a key is
+    removed here to exercise the failure path.
+    """
+    from movie_review.jobs import recovery as recovery_mod
+
+    monkeypatch.delitem(recovery_mod._RESUME_STAGE, JobStatus.RENDERED)
+    with pytest.raises(RecoveryMappingError, match="No resume mapping"):
+        recovery_mod.recovery_plan(_StubManager(JobStatus.RENDERED), "job_x")
+
+
+def test_recovery_covers_every_job_status() -> None:
+    """Every non-FAILED status has a resume mapping, so the gap is unreachable."""
+    for status in JobStatus:
+        if status is JobStatus.FAILED:
+            continue
+        assert status in _RESUME_STAGE, f"{status} has no resume mapping"
+
+
+def test_recovery_mapping_error_is_not_job_not_found() -> None:
+    """Callers must be able to tell the two apart."""
+    from movie_review.jobs.state_machine import JobNotFoundError
+
+    assert not issubclass(RecoveryMappingError, JobNotFoundError)
+
+
+# ---------------------------------------------------------------------------
+# F5: memory benchmark side effects
+# ---------------------------------------------------------------------------
+
+
+def test_benchmark_memory_does_not_stop_caller_tracing() -> None:
+    """Regression: the benchmark always called tracemalloc.stop()."""
+    import tracemalloc
+
+    tracemalloc.start()
+    try:
+        benchmark_memory("op", lambda: [0] * 1000)
+        assert tracemalloc.is_tracing() is True, "caller's tracing was disabled"
+    finally:
+        if tracemalloc.is_tracing():
+            tracemalloc.stop()
+
+
+def test_benchmark_memory_works_without_tracing() -> None:
+    import tracemalloc
+
+    assert tracemalloc.is_tracing() is False
+    result = benchmark_memory("op", lambda: [0] * 1000)
+    assert result.peak_bytes > 0
+    assert result.peak_mb > 0
+    # and it cleaned up after itself
+    assert tracemalloc.is_tracing() is False
+
+
+def test_benchmark_memory_reports_peak_not_current() -> None:
+    """peak must be >= current; guards the swapped/duplicated read."""
+    result = benchmark_memory("op", lambda: [0] * 100_000)
+    assert result.peak_bytes >= result.current_bytes
