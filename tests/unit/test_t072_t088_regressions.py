@@ -214,6 +214,37 @@ def test_measured_coverage_is_never_above_100() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Threshold duplication: one source of truth
+# ---------------------------------------------------------------------------
+
+
+def test_eval_coverage_threshold_matches_runtime_gate() -> None:
+    """The offline evaluator and the runtime gate must agree.
+
+    Regression: both hardcoded 90.0, so tightening one left the other stale
+    and the golden evaluation could pass while the live gate failed.
+    """
+    from movie_review.eval.coverage_eval import MIN_EVIDENCE_COVERAGE
+    from movie_review.quality.gates import GATE_THRESHOLDS
+
+    assert MIN_EVIDENCE_COVERAGE == GATE_THRESHOLDS["evidence_coverage"]
+
+
+def test_regression_gate_uses_the_shared_coverage_threshold() -> None:
+    """The aggregate golden gate follows the same shared threshold."""
+    from movie_review.quality.gates import GATE_THRESHOLDS
+
+    target = GATE_THRESHOLDS["evidence_coverage"]
+
+    # 9 of 10 covered = 90.0% -> passes at 90, fails if the target rises
+    claims = [{**MAJOR, "evidence": ["ev1"]} for _ in range(9)]
+    claims.append({"claim_id": "bare", **MAJOR, "evidence": []})
+    report = run_regression(["e1"], ["e1"], claims, ["ev1"])
+    assert report.coverage == target
+    assert report.passed is True
+
+
+# ---------------------------------------------------------------------------
 # F4: wrong exception type for a missing resume mapping
 # ---------------------------------------------------------------------------
 

@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-MIN_EVIDENCE_COVERAGE = 90.0
+from movie_review.quality.gates import GATE_THRESHOLDS
+
+MIN_EVIDENCE_COVERAGE = GATE_THRESHOLDS["evidence_coverage"]
 
 MAJOR_CLAIM_TYPES = frozenset({"PLOT_FACT", "CHARACTER_FACT", "TIMELINE_FACT"})
 
