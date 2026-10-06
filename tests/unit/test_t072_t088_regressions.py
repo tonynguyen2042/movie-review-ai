@@ -1,6 +1,9 @@
 """Regression tests for defects found reviewing the T072-T088 modules.
 
 Each test pins a specific bug so it cannot come back.
+
+Also pins the CLI stage-name validation added while rewriting
+docs/GETTING-STARTED.md, since that guide documents the exit code.
 """
 
 import tempfile
@@ -228,6 +231,85 @@ def test_cli_reports_unknown_job_without_a_traceback(tmp_path, capsys, command: 
     assert "Traceback (most recent call last)" not in output
     assert "Unknown job" in output
     assert result.exit_code == 2
+
+
+# ---------------------------------------------------------------------------
+# Stage-name validation happens before a job is recorded
+# ---------------------------------------------------------------------------
+
+
+def test_bad_stage_name_is_a_usage_error_not_a_traceback(tmp_path) -> None:
+    """A bad --stage-from must fail as a usage error, exit 2, no traceback.
+
+    Regression: the name was only validated inside run_pipeline, so the job
+    record had already been created by the time it raised, leaving a stray
+    CREATED job and a raw ValueError traceback for a simple typo.
+    """
+    from typer.testing import CliRunner
+
+    from movie_review.cli.app import app
+
+    movie = tmp_path / "m.mp4"
+    movie.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "process",
+            str(movie),
+            "--db-path",
+            str(tmp_path / "jobs.db"),
+            "--stage-from",
+            "nope",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "Traceback" not in result.output
+    assert "nope" in result.output
+    assert "tts-reconcile" in result.output, "should list the valid stage names"
+
+
+def test_bad_stage_name_creates_no_job_record(tmp_path) -> None:
+    """The validation must run before the job is persisted."""
+    from typer.testing import CliRunner
+
+    from movie_review.cli.app import app
+
+    movie = tmp_path / "m.mp4"
+    movie.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    db = tmp_path / "jobs.db"
+
+    result = CliRunner().invoke(
+        app, ["process", str(movie), "--db-path", str(db), "--stage-to", "bogus"]
+    )
+    assert result.exit_code == 2
+    assert not db.exists(), "a rejected run must not leave a jobs database behind"
+
+
+@pytest.mark.parametrize("flag", ["--stage-from", "--stage-to"])
+def test_valid_stage_names_are_accepted(tmp_path, flag: str) -> None:
+    """The real stage names must not be rejected by the new validation."""
+    from typer.testing import CliRunner
+
+    from movie_review.cli.app import app
+
+    movie = tmp_path / "m.mp4"
+    movie.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "process",
+            str(movie),
+            "--db-path",
+            str(tmp_path / "jobs.db"),
+            flag,
+            "quality",
+            "--no-run",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Pipeline execution skipped" in result.output
 
 
 def test_measured_coverage_is_never_above_100() -> None:

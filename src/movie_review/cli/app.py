@@ -97,6 +97,12 @@ def process(
     """Accept a movie, create a job, and optionally run the full pipeline."""
     if not Path(movie).is_file():
         raise typer.BadParameter(f"Input file not found: {movie}")
+    # Validate stage names before creating the job, so a typo is reported as a
+    # usage error instead of raising mid-pipeline and leaving a stray record.
+    order = [name for name, _ in STAGE_SEQUENCE]
+    for flag, value in (("--stage-from", stage_from), ("--stage-to", stage_to)):
+        if value is not None and value not in order:
+            raise typer.BadParameter(f"Invalid value for '{flag}': {value!r} is not one of {order}")
     minutes = _parse_duration(duration)
     manager, conn = _manager(db_path)
     with conn:

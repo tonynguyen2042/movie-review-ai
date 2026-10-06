@@ -1,6 +1,6 @@
 # Model catalog — movie-review-ai (T002).
 # Profiles per README section 56. The active profile is selected via
-# `models.profile` in default.yaml (or MOVIE_REVIEW__MODELS__PROFILE).
+# `models.profile` in default.yaml (or MOVIE_REVIEW_MODELS__PROFILE).
 # Exact checkpoints are benchmark-driven (T074-T077); edit here, not in code.
 
 profiles:
