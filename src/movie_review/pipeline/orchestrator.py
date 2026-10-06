@@ -127,17 +127,25 @@ def run_stage(
     return result
 
 
-def _build_context(job_id: str, movie_path: str | Path, db_path: str | None) -> PipelineContext:
+def _build_context(
+    job_id: str,
+    movie_path: str | Path,
+    db_path: str | None,
+    profile: str | None = None,
+) -> PipelineContext:
     """Build runtime context from settings and job database.
 
     ``jobs_dir`` is the per-job root (``<data_dir>/jobs``), matching
     :meth:`StageContext.from_settings`, so artifacts land under
     ``<data_dir>/jobs/<job_id>/`` as the artifact layout requires.
+
+    ``profile`` selects a ``models.yaml`` profile for this run only, overriding
+    the environment and ``default.yaml``.
     """
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
 
-    settings = load_settings()
+    settings = load_settings(profile=profile)
     data_dir = Path(settings.paths.data_dir)
     resolved_db = Path(db_path) if db_path else data_dir / "jobs.db"
     conn = sqlite3.connect(str(bootstrap(resolved_db)))
@@ -165,6 +173,7 @@ def run_pipeline(
     start_stage: str | None = None,
     end_stage: str | None = None,
     on_progress: Callable[[str, StageResult | None], None] | None = None,
+    profile: str | None = None,
 ) -> list[StageResult]:
     """Execute pipeline stages in sequence with optional start/end bounds.
 
@@ -173,8 +182,12 @@ def run_pipeline(
     stage so later stages never observe broken state.
 
     ``on_progress`` is forwarded to :func:`run_stage`; see there.
+
+    ``profile`` selects a ``models.yaml`` profile for this run only.
     """
-    ctx = _build_context(job_id, movie_path, db_path)
+    # Pass profile by keyword: it is a trailing option, and call sites that
+    # patch this helper should not have to track its position.
+    ctx = _build_context(job_id, movie_path, db_path, profile=profile)
     results: list[StageResult] = []
     order = [name for name, _ in STAGE_SEQUENCE]
 
@@ -478,7 +491,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
     def tts_chunks_fn(ctx: PipelineContext) -> Any:
         from movie_review.domain import ReviewScript
         from movie_review.tts.chunks import plan_chunks, synthesize_chunks
-        from movie_review.tts.qwen_tts import QwenTTSAdapter
+        from movie_review.tts.factory import build_tts_adapter
 
         script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
         import json
@@ -488,7 +501,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
         script = ReviewScript.model_validate(script_data["script"])
 
-        port = QwenTTSAdapter(ctx.settings.models.tts.model)
+        # build_tts_adapter honours ModelSpec.backend; constructing QwenTTSAdapter
+        # directly ignored it and required MLX on every host.
+        port = build_tts_adapter(ctx.settings.models.tts)
         chunks = plan_chunks(script, voice="default")
         return synthesize_chunks(chunks, port, ctx.jobs_dir, ctx.job_id)
 
@@ -660,10 +675,12 @@ def resume_job(
     job_id: str,
     db_path: str | None = None,
     on_progress: Callable[[str, StageResult | None], None] | None = None,
+    profile: str | None = None,
 ) -> list[StageResult]:
     """Resume a job from its recovery point.
 
     ``on_progress`` is forwarded to :func:`run_pipeline`; see there.
+    ``profile`` selects a ``models.yaml`` profile for this resume only.
     """
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
@@ -689,6 +706,7 @@ def resume_job(
         db_path,
         start_stage=plan.resume_stage,
         on_progress=on_progress,
+        profile=profile,
     )
 
 

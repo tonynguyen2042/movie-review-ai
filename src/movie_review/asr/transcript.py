@@ -2,7 +2,8 @@
 
 Follows the pipeline stage contract with the T011 lifecycle pattern, moving
 ``SCENES_READY`` → ``TRANSCRIPT_READY``. The ASR backend is any
-:class:`ASRPort`; production uses Whisper MLX with the configured model.
+:class:`ASRPort`, chosen by :func:`build_asr_adapter` from the configured
+``ModelSpec`` -- local MLX weights, or a remote OpenAI-compatible endpoint.
 """
 
 from __future__ import annotations
@@ -14,8 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from movie_review.artifacts import manager as artifacts
+from movie_review.asr.factory import build_asr_adapter
 from movie_review.asr.port import ASRPort
-from movie_review.asr.whisper_mlx import WhisperMLXAdapter
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.domain import Artifact, JobStatus, TranscriptSegment
 from movie_review.jobs.state_machine import JobNotFoundError
@@ -68,8 +69,14 @@ def run_transcript(
     src = Path(source)
     if not src.is_file():
         raise TranscriptError(f"Input file not found: {src}")
-    active = port or WhisperMLXAdapter(ctx.settings.models.asr.model)
-    model = active.model if isinstance(active, WhisperMLXAdapter) else type(active).__name__
+    # The factory honours ModelSpec.backend, so `backend: openai_compatible`
+    # routes to the remote endpoint and `backend: mlx` loads local weights.
+    # Hardcoding WhisperMLXAdapter here ignored the configured backend and made
+    # every non-Apple host fail with "mlx-whisper is not installed".
+    active = port or build_asr_adapter(ctx.settings.models.asr)
+    # Read from the port rather than inspecting adapter types: for a remote
+    # adapter the model id is what belongs in the cache key.
+    model = active.model
 
     audio_path = artifacts.artifact_path(ctx.jobs_dir, ctx.job_id, "audio", AUDIO_FILENAME)
     file_hash = artifacts.sha256_file(src)

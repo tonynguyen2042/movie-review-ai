@@ -3,7 +3,9 @@
 Follows the pipeline stage contract with the T011 lifecycle pattern, moving
 ``TRANSCRIPT_READY`` → ``VISUAL_ANALYSIS_READY``. Each scene is analyzed
 independently with a small context window (its frames, overlapping dialogue,
-previous scene summary) per P3. Per-scene caching makes reruns cheap.
+previous scene summary) per P3. Per-scene caching makes reruns cheap. The VLM
+is chosen by :func:`build_vlm_adapter` from the configured ``ModelSpec`` --
+local MLX weights, or a remote OpenAI-compatible endpoint.
 """
 
 from __future__ import annotations
@@ -21,8 +23,8 @@ from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
+from movie_review.vision.factory import build_vlm_adapter
 from movie_review.vision.port import AnalysisInput, VLMPort
-from movie_review.vision.qwen_vl import QwenVLAdapter
 
 _logger = logging.getLogger(__name__)
 
@@ -82,8 +84,12 @@ def run_visual_analysis(
     owns_completion = job.status is JobStatus.TRANSCRIPT_READY
 
     prompt = load_prompt("scene_analysis", prompt_version)
-    active = port or QwenVLAdapter(ctx.settings.models.vision.model)
-    model = active.model if isinstance(active, QwenVLAdapter) else type(active).__name__
+    # build_vlm_adapter honours ModelSpec.backend, so a remote VLM is reachable
+    # without MLX installed. Hardcoding QwenVLAdapter ignored the configuration.
+    active = port or build_vlm_adapter(ctx.settings.models.vision)
+    # From the port, not the adapter type: a remote adapter's real model id must
+    # reach the cache key, otherwise every remote run keys on the class name.
+    model = active.model
 
     analyses: list[SceneAnalysis] = []
     cache_hits = 0

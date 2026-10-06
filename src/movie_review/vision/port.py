@@ -41,6 +41,16 @@ class AnalysisInput:
 class VLMPort(ABC):
     """Keyframe-to-structure visual understanding (spec section 15)."""
 
+    @property
+    def model(self) -> str:
+        """Model identity used in cache keys.
+
+        See :attr:`movie_review.asr.port.ASRPort.model` -- stages read this
+        rather than checking adapter types, so a remote VLM contributes its
+        real model id to cache identity instead of its class name.
+        """
+        return type(self).__name__
+
     @abstractmethod
     def analyze(self, analysis_input: AnalysisInput, prompt: str) -> SceneAnalysis:
         """Analyze frames with a caller-rendered prompt; never invents schema."""
