@@ -261,11 +261,40 @@ def _profile_from_env() -> str | None:
     return None
 
 
+class _ProfileOverrideSource(PydanticBaseSettingsSource):
+    """Highest-priority source carrying an explicit ``models.profile``.
+
+    Settings sources are merged from lowest to highest priority, so this has to
+    sit above ``env_settings``: an explicit ``--profile`` must beat
+    ``MOVIE_REVIEW_MODELS__PROFILE``. Returning only the one nested key is safe
+    because the merge is deep, so the catalog expansion from
+    :class:`_ProfileYamlSource` still supplies asr/vision/tts/etc.
+
+    Without this, ``--profile remote`` silently did nothing on any machine that
+    had the env var set -- the most likely way for a user to have it set.
+    """
+
+    def __init__(self, settings_cls: type[BaseSettings], profile: str) -> None:
+        super().__init__(settings_cls)
+        self._profile = profile
+
+    def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
+        raise NotImplementedError  # not a per-field source
+
+    def __call__(self) -> dict[str, Any]:
+        return {"models": {"profile": self._profile}}
+
+
 class _ProfileYamlSource(YamlConfigSettingsSource):
     """YAML source merging ``default.yaml`` with the active ``models.yaml`` profile.
 
     ``default.yaml`` carries the ``models.profile`` name (plus optional pins);
     full model identities come from the ``profiles`` catalog in ``models.yaml``.
+
+    Precedence is ``profile_override`` (a CLI flag), then
+    ``MOVIE_REVIEW_MODELS__PROFILE``, then ``default.yaml``, then ``balanced``.
+    An explicit flag has to beat the environment: a user who exported the
+    variable once should still be able to override it per run.
     """
 
     def __init__(
@@ -273,9 +302,11 @@ class _ProfileYamlSource(YamlConfigSettingsSource):
         settings_cls: type[BaseSettings],
         config_path: Path,
         models_path: Path,
+        profile_override: str | None = None,
     ) -> None:
         self._config_path = config_path
         self._models_path = models_path
+        self._profile_override = profile_override
         super().__init__(settings_cls, yaml_file=config_path)
 
     def __call__(self) -> dict[str, Any]:
@@ -283,7 +314,9 @@ class _ProfileYamlSource(YamlConfigSettingsSource):
         models_block = data.get("models", {})
         if not isinstance(models_block, dict):
             raise ValueError(f"'models' must be a mapping: {self._config_path}")
-        profile_name = _profile_from_env() or models_block.get("profile", "balanced")
+        profile_name = (
+            self._profile_override or _profile_from_env() or models_block.get("profile", "balanced")
+        )
         catalog = read_yaml(self._models_path).get("profiles", {})
         if not isinstance(catalog, dict) or profile_name not in catalog:
             raise ValueError(f"Unknown model profile {profile_name!r} in {self._models_path}")
@@ -331,9 +364,37 @@ class AppSettings(BaseSettings):
         )
 
 
+def _override_sources(
+    settings_cls: type[BaseSettings], profile: str | None
+) -> tuple[PydanticBaseSettingsSource, ...]:
+    """Highest-priority sources for explicit caller overrides."""
+    if profile is None:
+        return ()
+    return (_ProfileOverrideSource(settings_cls, profile),)
+
+
+def available_profiles(
+    config_path: str | Path | None = None,
+    models_path: str | Path | None = None,
+) -> list[str]:
+    """Names present in the ``models.yaml`` profile catalog.
+
+    Lets the CLI validate ``--profile`` and list the real choices in ``--help``
+    instead of hardcoding a list that silently omits ``remote``.
+    """
+    resolved_config = Path(config_path) if config_path else default_config_path()
+    resolved_models = Path(models_path) if models_path else default_models_path(resolved_config)
+    catalog = read_yaml(resolved_models).get("profiles", {})
+    if not isinstance(catalog, dict):
+        raise ValueError(f"'profiles' must be a mapping: {resolved_models}")
+    return list(catalog)
+
+
 def load_settings(
     config_path: str | Path | None = None,
     models_path: str | Path | None = None,
+    *,
+    profile: str | None = None,
 ) -> AppSettings:
     """Load settings from explicit YAML files with env overrides applied.
 
@@ -341,9 +402,17 @@ def load_settings(
         config_path: ``default.yaml`` location (default: ``MOVIE_REVIEW_CONFIG``
             env var or ``<repo>/config/default.yaml``).
         models_path: ``models.yaml`` location (default: next to ``config_path``).
+        profile: explicit profile name, overriding the environment and
+            ``default.yaml``. Raises :class:`ValueError` if the name is not in
+            the ``models.yaml`` catalog.
     """
     resolved_config = Path(config_path) if config_path else default_config_path()
     resolved_models = Path(models_path) if models_path else default_models_path(resolved_config)
+    if profile is not None and profile not in available_profiles(resolved_config, resolved_models):
+        raise ValueError(
+            f"Unknown model profile {profile!r}; available: "
+            f"{', '.join(available_profiles(resolved_config, resolved_models))}"
+        )
 
     class _Configured(AppSettings):
         @classmethod
@@ -356,10 +425,13 @@ def load_settings(
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (
+                *_override_sources(settings_cls, profile),
                 init_settings,
                 env_settings,
                 dotenv_settings,
-                _ProfileYamlSource(settings_cls, resolved_config, resolved_models),
+                _ProfileYamlSource(
+                    settings_cls, resolved_config, resolved_models, profile_override=profile
+                ),
             )
 
     return _Configured()  # type: ignore[call-arg]  # sources supply models/prompts

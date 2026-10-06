@@ -19,7 +19,7 @@ from typing import Annotated
 import typer
 
 from movie_review import __version__
-from movie_review.config.settings import load_settings
+from movie_review.config.settings import available_profiles, load_settings
 from movie_review.domain import Job
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.state_machine import JobNotFoundError
@@ -179,6 +179,45 @@ DbOption = Annotated[
     typer.Option("--db-path", help="Jobs database file (default: <data_dir>/jobs.db)."),
 ]
 
+ProfileOption = Annotated[
+    str | None,
+    typer.Option(
+        "--profile",
+        help="Model profile from config/models.yaml: fast, balanced, quality, remote.",
+    ),
+]
+
+# The flag used to be called --quality and did nothing: it was read into the
+# acceptance log event and never reached settings, so the only way to select a
+# profile was editing config/default.yaml or exporting an env var. It is kept as
+# a hidden alias because it shipped, but --profile is the real name -- a
+# "quality" flag that means "which models" is the same concept as profile, and
+# having both invites the belief that they differ.
+QualityAliasOption = Annotated[
+    str | None,
+    typer.Option("--quality", hidden=True),
+]
+
+
+def _resolve_profile(profile: str | None, quality: str | None) -> str | None:
+    """Reconcile ``--profile`` with the deprecated ``--quality`` alias.
+
+    Returns the profile name to apply, or ``None`` to leave configuration alone.
+
+    An unknown name is rejected here, as a usage error, rather than surfacing
+    later as a ``ValueError`` from the settings loader once the job is already
+    created and running.
+    """
+    if profile and quality and profile != quality:
+        raise typer.BadParameter("--quality is deprecated, use --profile; conflicting values given")
+    chosen = profile or quality
+    if chosen is None:
+        return None
+    available = available_profiles()
+    if chosen not in available:
+        raise typer.BadParameter(f"Unknown profile {chosen!r}; available: {', '.join(available)}")
+    return chosen
+
 
 @app.callback()
 def _startup(
@@ -194,9 +233,8 @@ def process(
     language: Annotated[str, typer.Option(help="Review language.")] = "en",
     duration: Annotated[str, typer.Option(help="Target review length, e.g. '20m'.")] = "20m",
     style: Annotated[str, typer.Option(help="Review style profile.")] = "youtube",
-    quality: Annotated[
-        str, typer.Option(help="Model profile: fast, balanced, quality.")
-    ] = "balanced",
+    profile: ProfileOption = None,
+    quality: QualityAliasOption = None,
     spoilers: Annotated[str, typer.Option(help="Spoiler level.")] = "full",
     output: Annotated[str, typer.Option(help="Output directory.")] = "./output",
     db_path: DbOption = None,
@@ -220,6 +258,9 @@ def process(
         if value is not None and value not in order:
             raise typer.BadParameter(f"Invalid value for '{flag}': {value!r} is not one of {order}")
     minutes = _parse_duration(duration)
+    # Resolve the profile before creating the job, so a bad name is a usage
+    # error rather than a job that exists but can never run.
+    selected_profile = _resolve_profile(profile, quality)
     manager, conn = _manager(db_path)
     with conn:
         job = manager.create(movie)
@@ -231,7 +272,7 @@ def process(
             language=language,
             target_minutes=minutes,
             style=style,
-            quality=quality,
+            profile=selected_profile,
             spoilers=spoilers,
             output=output,
         )
@@ -252,6 +293,7 @@ def process(
             start_stage=stage_from,
             end_stage=stage_to,
             on_progress=reporter,
+            profile=selected_profile,
         )
     except KeyboardInterrupt:
         reporter.close()
@@ -293,14 +335,17 @@ def validate(
 def resume(
     job_id: Annotated[str, typer.Argument(help="Job ID.")],
     db_path: DbOption = None,
+    profile: ProfileOption = None,
+    quality: QualityAliasOption = None,
 ) -> None:
     """Resume an interrupted job from its last checkpoint."""
+    selected_profile = _resolve_profile(profile, quality)
     manager, conn = _manager(db_path)
     with conn:
         _load_job(manager, job_id)
     reporter = _ProgressReporter(enabled=_progress_enabled())
     try:
-        results = resume_job(job_id, db_path, on_progress=reporter)
+        results = resume_job(job_id, db_path, on_progress=reporter, profile=selected_profile)
     except KeyboardInterrupt:
         reporter.close()
         typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)
@@ -316,11 +361,16 @@ def retry(
     stage: Annotated[
         str | None, typer.Option("--stage", help="Specific stage to retry (T070).")
     ] = None,
+    profile: ProfileOption = None,
+    quality: QualityAliasOption = None,
 ) -> None:
     """Retry a failed job or specific stage."""
     from movie_review.jobs.recovery import recovery_plan
     from movie_review.pipeline.retry import RetryPolicy, run_with_retry
 
+    # Resolved before the retries start, so a bad name fails immediately instead
+    # of once per attempt.
+    selected_profile = _resolve_profile(profile, quality)
     manager, conn = _manager(db_path)
     with conn:
         job = _load_job(manager, job_id)
@@ -348,6 +398,7 @@ def retry(
             start_stage=target_stage,
             end_stage=target_stage,
             on_progress=reporter,
+            profile=selected_profile,
         )
         if not results or not results[0].success:
             raise RuntimeError(

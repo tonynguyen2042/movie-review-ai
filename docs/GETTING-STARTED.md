@@ -193,7 +193,7 @@ uv run movie-review process ./my-movie.mp4 \
   --language en \
   --duration 20m \
   --style youtube \
-  --quality balanced
+  --profile balanced
 ```
 
 ### Options
@@ -204,7 +204,7 @@ uv run movie-review process ./my-movie.mp4 \
 | `--language` | `en` | Language of the review narration. |
 | `--duration` | `20m` | Target length, e.g. `20m` or `15`. |
 | `--style` | `youtube` | Review style profile. |
-| `--quality` | `balanced` | Model profile: `fast`, `balanced`, or `quality`. |
+| `--profile` | from config | Model profile: `fast`, `balanced`, `quality`, or `remote`. Overrides `config/default.yaml` and `MOVIE_REVIEW_MODELS__PROFILE` for this run. |
 | `--spoilers` | `full` | Spoiler level. |
 | `--output` | `./output` | Output directory. |
 | `--db-path` | `<data_dir>/jobs.db` | Use a specific jobs database. |

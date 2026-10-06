@@ -89,7 +89,7 @@ def test_documented_flags_exist() -> None:
         "--language",
         "--duration",
         "--style",
-        "--quality",
+        "--profile",
         "--spoilers",
         "--output",
         "--db-path",

@@ -189,7 +189,7 @@ def test_run_pipeline_stops_at_first_failure(monkeypatch, tmp_path) -> None:
 
     monkeypatch.setattr(
         "movie_review.pipeline.orchestrator._build_context",
-        lambda job_id, movie_path, db_path: _ctx(tmp_path),
+        lambda job_id, movie_path, db_path, profile=None: _ctx(tmp_path),
     )
 
     def fake_registry(stage_name: str) -> Any:
@@ -215,7 +215,7 @@ def test_run_pipeline_runs_all_stages(monkeypatch, tmp_path) -> None:
     calls: list[str] = []
     monkeypatch.setattr(
         "movie_review.pipeline.orchestrator._build_context",
-        lambda job_id, movie_path, db_path: _ctx(tmp_path),
+        lambda job_id, movie_path, db_path, profile=None: _ctx(tmp_path),
     )
 
     def registry(stage_name: str) -> Any:
@@ -236,7 +236,7 @@ def test_run_pipeline_respects_start_and_end(monkeypatch, tmp_path) -> None:
     """Stage-range execution runs only the requested window."""
     monkeypatch.setattr(
         "movie_review.pipeline.orchestrator._build_context",
-        lambda job_id, movie_path, db_path: _ctx(tmp_path),
+        lambda job_id, movie_path, db_path, profile=None: _ctx(tmp_path),
     )
     monkeypatch.setattr(
         "movie_review.pipeline.orchestrator._get_stage_function",
@@ -253,7 +253,7 @@ def test_run_pipeline_empty_when_start_after_end(monkeypatch, tmp_path) -> None:
     """An impossible range runs nothing rather than everything."""
     monkeypatch.setattr(
         "movie_review.pipeline.orchestrator._build_context",
-        lambda job_id, movie_path, db_path: _ctx(tmp_path),
+        lambda job_id, movie_path, db_path, profile=None: _ctx(tmp_path),
     )
     monkeypatch.setattr(
         "movie_review.pipeline.orchestrator._get_stage_function",
@@ -269,7 +269,7 @@ def test_run_pipeline_end_stage_is_inclusive(monkeypatch, tmp_path) -> None:
     """Regression: the end stage used to be skipped entirely."""
     monkeypatch.setattr(
         "movie_review.pipeline.orchestrator._build_context",
-        lambda job_id, movie_path, db_path: _ctx(tmp_path),
+        lambda job_id, movie_path, db_path, profile=None: _ctx(tmp_path),
     )
     monkeypatch.setattr(
         "movie_review.pipeline.orchestrator._get_stage_function",
@@ -285,7 +285,7 @@ def test_run_pipeline_rejects_unknown_stage(monkeypatch, tmp_path) -> None:
     """A typo in a stage name fails loudly instead of running nothing."""
     monkeypatch.setattr(
         "movie_review.pipeline.orchestrator._build_context",
-        lambda job_id, movie_path, db_path: _ctx(tmp_path),
+        lambda job_id, movie_path, db_path, profile=None: _ctx(tmp_path),
     )
     with pytest.raises(ValueError, match="Unknown start stage"):
         run_pipeline("job_test", tmp_path / "movie.mp4", start_stage="scnes")
