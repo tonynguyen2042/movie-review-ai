@@ -57,3 +57,38 @@ profiles:
     tts:
       model: Qwen3-TTS-12Hz-1.7B
       precision: 8bit
+
+  # Remote profile: the model runs on another host (GPU box, home server)
+  # behind any OpenAI-compatible endpoint -- vLLM, llama.cpp server, LM
+  # Studio, Ollama, or TGI. Select with either:
+  #   models.profile: remote                 (in config/default.yaml)
+  #   export MOVIE_REVIEW_MODELS__PROFILE=remote
+  #
+  # `backend: openai_compatible` routes that slot over HTTP instead of
+  # loading local MLX weights. `precision` is then ignored -- the remote
+  # server decides how the weights are loaded.
+  #
+  # Credentials: put the NAME of an environment variable in `api_key_env`,
+  # never the secret itself, so tokens stay out of version control. Leave it
+  # unset for servers needing no auth (a LAN vLLM usually needs none).
+  remote:
+    asr:
+      model: whisper-large-v3-turbo
+      precision: fp16
+    vision:
+      model: Qwen3-VL
+      precision: 4bit
+    reasoning:
+      model: Qwen3.5-27B
+      backend: openai_compatible
+      base_url: http://gpu-box.local:8000/v1
+      # api_key_env: MOVIE_REVIEW_LLM_TOKEN
+      timeout_seconds: 120
+    critic:
+      model: Qwen3.5-27B
+      backend: openai_compatible
+      base_url: http://gpu-box.local:8000/v1
+      enabled: false
+    tts:
+      model: Qwen3-TTS-12Hz-1.7B
+      precision: 8bit

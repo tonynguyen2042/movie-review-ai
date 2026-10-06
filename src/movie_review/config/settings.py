@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import yaml
-from pydantic import BaseModel, Field, PositiveFloat, PositiveInt
+from pydantic import BaseModel, Field, PositiveFloat, PositiveInt, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -69,11 +69,66 @@ class RuntimeSettings(BaseModel):
 
 
 class ModelSpec(BaseModel):
-    """A single model entry; identities come from ``models.yaml``."""
+    """A single model entry; identities come from ``models.yaml``.
+
+    ``backend`` selects the runtime that serves the model. ``mlx`` loads
+    local weights on Apple Silicon (the historical default). Setting it to
+    ``openai_compatible`` targets a remote HTTP server instead, in which case
+    ``base_url`` is required.
+
+    Secrets are never stored inline: ``api_key_env`` names the environment
+    variable that holds the key, so credentials stay out of ``models.yaml``.
+    """
 
     model: str
     precision: str = "4bit"
     enabled: bool = True
+    backend: str = "mlx"
+    base_url: str | None = None
+    api_key_env: str | None = None
+    timeout_seconds: float = Field(default=120.0, gt=0.0)
+
+    @property
+    def is_remote(self) -> bool:
+        """True when this model is served over HTTP by a remote host."""
+        return self.backend == "openai_compatible"
+
+    def resolved_api_key(self) -> str | None:
+        """Read the API key from the environment variable named by ``api_key_env``.
+
+        Returns ``None`` when no variable is configured. Raises when the
+        variable is named but unset, so a misconfigured deployment fails at
+        startup instead of sending unauthenticated requests.
+        """
+        if not self.api_key_env:
+            return None
+        value = os.environ.get(self.api_key_env)
+        if not value:
+            raise ValueError(
+                f"api_key_env={self.api_key_env!r} is set but that environment "
+                f"variable is empty or missing"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate_endpoint(self) -> ModelSpec:
+        """Reject endpoint settings that cannot work, before any request."""
+        known = {"mlx", "openai_compatible"}
+        if self.backend not in known:
+            raise ValueError(
+                f"Unknown backend {self.backend!r} for model {self.model!r}; "
+                f"expected one of {sorted(known)}"
+            )
+        if self.is_remote:
+            if not self.base_url:
+                raise ValueError(
+                    f"backend='openai_compatible' requires base_url for model {self.model!r}"
+                )
+            if not self.base_url.startswith(("http://", "https://")):
+                raise ValueError(
+                    f"base_url must start with http:// or https://, got {self.base_url!r}"
+                )
+        return self
 
 
 class ModelsSettings(BaseModel):
