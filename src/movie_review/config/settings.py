@@ -76,6 +76,12 @@ class ModelSpec(BaseModel):
     ``openai_compatible`` targets a remote HTTP server instead, in which case
     ``base_url`` is required.
 
+    ``endpoint_path`` overrides the route for servers whose speech-to-text path
+    is not the OpenAI one. whisper.cpp's ``whisper-server``, for example, serves
+    ``POST /inference`` and has no ``/audio/transcriptions`` at all, so without
+    this the request 404s while the server is healthy. Left unset, each adapter
+    keeps its OpenAI-compatible default.
+
     Secrets are never stored inline: ``api_key_env`` names the environment
     variable that holds the key, so credentials stay out of ``models.yaml``.
     """
@@ -85,6 +91,7 @@ class ModelSpec(BaseModel):
     enabled: bool = True
     backend: str = "mlx"
     base_url: str | None = None
+    endpoint_path: str | None = None
     api_key_env: str | None = None
     timeout_seconds: float = Field(default=120.0, gt=0.0)
 
@@ -127,6 +134,17 @@ class ModelSpec(BaseModel):
             if not self.base_url.startswith(("http://", "https://")):
                 raise ValueError(
                     f"base_url must start with http:// or https://, got {self.base_url!r}"
+                )
+        if self.endpoint_path is not None:
+            if not self.endpoint_path.startswith("/"):
+                raise ValueError(
+                    f"endpoint_path must start with '/', got {self.endpoint_path!r} "
+                    f"for model {self.model!r}"
+                )
+            if not self.is_remote:
+                raise ValueError(
+                    f"endpoint_path only applies to backend='openai_compatible', "
+                    f"but model {self.model!r} uses {self.backend!r}"
                 )
         return self
 

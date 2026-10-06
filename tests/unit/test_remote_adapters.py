@@ -187,6 +187,134 @@ def test_asr_http_error_classified_without_token(tmp_path: Path) -> None:
     assert "s3cret" not in str(exc.value)
 
 
+# ---------------------------------------------------------------------------
+# Servers whose ASR route is not the OpenAI one
+# ---------------------------------------------------------------------------
+
+
+def test_asr_route_can_be_overridden(tmp_path: Path) -> None:
+    """whisper.cpp serves POST /inference and has no /audio/transcriptions.
+
+    Sending the request to the OpenAI path against a healthy whisper-server
+    produces a 404, which reads like the server is down when it is not.
+    """
+    seen: dict[str, Any] = {}
+
+    def transport(request: Any, timeout: float) -> FakeResponse:
+        seen["url"] = request.full_url
+        return FakeResponse(_transcription_body([{"start": 0.0, "end": 1.0, "text": "Hi."}]))
+
+    adapter = OpenAICompatASRAdapter(
+        "ggml-large-v3-turbo-q5_0",
+        "http://gpu:9000",
+        transport=transport,
+        endpoint_path="/inference",
+    )
+    segments = adapter.transcribe(_audio(tmp_path), language="en")
+
+    assert seen["url"] == "http://gpu:9000/inference"
+    assert [s.text for s in segments] == ["Hi."]
+
+
+def test_asr_route_defaults_to_the_openai_path(tmp_path: Path) -> None:
+    """Unset must not change behaviour for faster-whisper-server and friends."""
+    seen: dict[str, Any] = {}
+
+    def transport(request: Any, timeout: float) -> FakeResponse:
+        seen["url"] = request.full_url
+        return FakeResponse(_transcription_body([{"start": 0.0, "end": 1.0, "text": "Hi."}]))
+
+    OpenAICompatASRAdapter("m", "http://gpu:9000/v1", transport=transport).transcribe(
+        _audio(tmp_path)
+    )
+
+    assert seen["url"] == "http://gpu:9000/v1/audio/transcriptions"
+
+
+def test_adapter_exposes_its_route() -> None:
+    assert (
+        OpenAICompatASRAdapter("m", "http://gpu:9000", endpoint_path="/inference").endpoint_path
+        == "/inference"
+    )
+    assert OpenAICompatASRAdapter("m", "http://gpu:9000").endpoint_path == "/audio/transcriptions"
+
+
+def test_whisper_cpp_segments_map_without_translation() -> None:
+    """whisper.cpp returns avg_logprob, which map_segments reads for confidence."""
+    # Shape captured from a live whisper-server verbose_json response.
+    document = {
+        "text": " .",
+        "segments": [
+            {
+                "id": 0,
+                "text": " .",
+                "start": 0.0,
+                "end": 1.0,
+                "tokens": [2411],
+                "temperature": 0.0,
+                "avg_logprob": -0.5,
+            }
+        ],
+    }
+    adapter = OpenAICompatASRAdapter("m", "http://gpu:9000")
+    segments = adapter._segments_from(document, "http://gpu:9000/inference", "en")
+
+    assert len(segments) == 1
+    assert segments[0].start == 0.0
+    assert segments[0].end == 1.0
+    assert 0.0 < segments[0].confidence <= 1.0
+
+
+def test_endpoint_path_is_appended_to_base_url(tmp_path: Path) -> None:
+    """Documented trap: a /v1 base yields /v1/inference, which 404s on whisper.cpp.
+
+    whisper-server serves /inference at the root, so combining it with a base_url
+    that ends in /v1 -- the shape every OpenAI-compatible host uses -- produces a
+    404 from a healthy server. Pinning the join makes the requirement for a bare
+    host visible instead of something to rediscover against the network.
+    """
+    seen: dict[str, Any] = {}
+
+    def transport(request: Any, timeout: float) -> FakeResponse:
+        seen["url"] = request.full_url
+        return FakeResponse(_transcription_body([{"start": 0.0, "end": 1.0, "text": "Hi."}]))
+
+    OpenAICompatASRAdapter(
+        "m", "http://gpu:9000/v1", transport=transport, endpoint_path="/inference"
+    ).transcribe(_audio(tmp_path))
+
+    assert seen["url"] == "http://gpu:9000/v1/inference"
+
+
+def test_endpoint_path_reaches_the_adapter_from_config() -> None:
+    """The value has to travel models.yaml -> ModelSpec -> adapter."""
+    spec = ModelSpec(
+        model="ggml-large-v3-turbo-q5_0",
+        backend="openai_compatible",
+        base_url="http://gpu:9000",
+        endpoint_path="/inference",
+    )
+    adapter = build_asr_adapter(spec)
+    assert isinstance(adapter, OpenAICompatASRAdapter)
+    assert adapter.endpoint_path == "/inference"
+
+
+def test_endpoint_path_must_be_absolute() -> None:
+    with pytest.raises(ValueError, match="must start with"):
+        ModelSpec(
+            model="m",
+            backend="openai_compatible",
+            base_url="http://gpu:9000",
+            endpoint_path="inference",
+        )
+
+
+def test_endpoint_path_rejected_for_local_backend() -> None:
+    """A route on a backend that never makes HTTP requests is a config error."""
+    with pytest.raises(ValueError, match="only applies to backend"):
+        ModelSpec(model="m", backend="mlx", endpoint_path="/inference")
+
+
 def test_asr_requires_base_url() -> None:
     with pytest.raises(ASRError, match="base_url is required"):
         OpenAICompatASRAdapter("m", "")
