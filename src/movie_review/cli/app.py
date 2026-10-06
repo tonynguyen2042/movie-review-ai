@@ -9,6 +9,10 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import sys
+import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
@@ -33,6 +37,9 @@ app = typer.Typer(help="Local-first movie-to-review pipeline.", no_args_is_help=
 
 _DURATION_RE = re.compile(r"(?P<minutes>\d+)\s*m?$", re.IGNORECASE)
 
+#: How often to report elapsed time while a stage is running, in seconds.
+_HEARTBEAT_SECONDS = 10.0
+
 
 def _parse_duration(value: str) -> int:
     """Parse ``20m``/``20`` into minutes or raise :class:`typer.BadParameter`."""
@@ -40,6 +47,115 @@ def _parse_duration(value: str) -> int:
     if not match or int(match.group("minutes")) <= 0:
         raise typer.BadParameter(f"Invalid duration {value!r}: expected like '20m'")
     return int(match.group("minutes"))
+
+
+def _format_elapsed(seconds: float) -> str:
+    """Render elapsed seconds as ``12s`` or ``3m05s`` for progress lines."""
+    total = int(seconds)
+    if total < 60:
+        return f"{total}s"
+    return f"{total // 60}m{total % 60:02d}s"
+
+
+def _progress_enabled() -> bool:
+    """Silence progress lines when stderr is not a terminal.
+
+    A heartbeat every 10s is helpful interactively and noise in a log file.
+    stderr is the right stream to test because that is where progress goes.
+    """
+    return sys.stderr.isatty()
+
+
+class _ProgressReporter:
+    """Print each stage as it starts and finishes, with a liveness heartbeat.
+
+    Without this the CLI printed results only after every stage had run, so a
+    multi-hour pipeline looked identical to a hung one. The heartbeat thread
+    exists because a single stage (transcription, TTS, rendering) can run for
+    many minutes with no output of its own; it proves the process is alive and
+    how long the current stage has been going.
+
+    Progress goes to stderr, leaving stdout free for machine-readable output.
+    """
+
+    def __init__(
+        self,
+        echo: Callable[..., None] | None = None,
+        enabled: bool = True,
+    ) -> None:
+        self._echo_fn: Callable[..., None] = echo if echo is not None else typer.echo
+        self._enabled = enabled
+        self._lock = threading.Lock()
+        self._stage_started: float | None = None
+        self._stage_name: str | None = None
+        self._timer: threading.Timer | None = None
+
+    def _echo(self, message: str) -> None:
+        if not self._enabled:
+            return
+        with self._lock:
+            self._echo_fn(message, err=True)
+
+    def _cancel_timer(self) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+
+    def _heartbeat(self) -> None:
+        """Emit an elapsed-time line and reschedule until the stage ends."""
+        with self._lock:
+            if self._stage_started is None or self._stage_name is None:
+                return
+            elapsed = time.perf_counter() - self._stage_started
+            name = self._stage_name
+        self._echo(f"    ... {name} still running ({_format_elapsed(elapsed)})")
+        # Re-check under the lock before rescheduling: the stage may have
+        # finished between the read above and here, and a timer armed after
+        # _cancel_timer would print one bogus line for a finished stage.
+        with self._lock:
+            if self._stage_started is None:
+                return
+            timer = threading.Timer(_HEARTBEAT_SECONDS, self._heartbeat)
+            timer.daemon = True
+            self._timer = timer
+            timer.start()
+
+    def _schedule_heartbeat(self) -> None:
+        if not self._enabled:
+            return
+        with self._lock:
+            if self._stage_started is None:
+                return
+            timer = threading.Timer(_HEARTBEAT_SECONDS, self._heartbeat)
+            timer.daemon = True
+            self._timer = timer
+            timer.start()
+
+    def __call__(self, stage: str, result: StageResult | None) -> None:
+        if result is None:
+            with self._lock:
+                self._stage_name = stage
+                self._stage_started = time.perf_counter()
+            self._echo(f"  -> {stage} ...")
+            self._schedule_heartbeat()
+            return
+
+        with self._lock:
+            self._cancel_timer()
+            elapsed = time.perf_counter() - (self._stage_started or time.perf_counter())
+            self._stage_name = None
+            self._stage_started = None
+        verdict = "OK" if result.success else "FAILED"
+        self._echo(f"  {stage}: {verdict} ({_format_elapsed(elapsed)})")
+        if result.error:
+            self._echo(f"    error: {result.error}")
+
+    def close(self) -> None:
+        """Stop any pending heartbeat, e.g. after a keyboard interrupt."""
+        with self._lock:
+            self._cancel_timer()
+            self._stage_name = None
+            self._stage_started = None
 
 
 def _manager(db_path: str | None) -> tuple[JobManager, sqlite3.Connection]:
@@ -125,15 +241,22 @@ def process(
         typer.echo("Pipeline execution skipped (--no-run). Use 'resume' to start.")
         return
 
-    # Run the pipeline
-    results = run_pipeline(job.job_id, movie, db_path, start_stage=stage_from, end_stage=stage_to)
-
-    # Report results
-    for result in results:
-        status = "OK" if result.success else "FAILED"
-        typer.echo(f"  {result.stage}: {status} ({result.duration_ms}ms)")
-        if result.error:
-            typer.echo(f"    error: {result.error}", err=True)
+    # Run the pipeline, reporting each stage as it starts and finishes so a
+    # long run is visibly progressing rather than silent.
+    reporter = _ProgressReporter(enabled=_progress_enabled())
+    try:
+        results = run_pipeline(
+            job.job_id,
+            movie,
+            db_path,
+            start_stage=stage_from,
+            end_stage=stage_to,
+            on_progress=reporter,
+        )
+    except KeyboardInterrupt:
+        reporter.close()
+        typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)
+        raise typer.Exit(code=130) from None
 
     if any(not r.success for r in results):
         raise typer.Exit(code=1)
@@ -175,12 +298,13 @@ def resume(
     manager, conn = _manager(db_path)
     with conn:
         _load_job(manager, job_id)
-    results = resume_job(job_id, db_path)
-    for result in results:
-        status = "OK" if result.success else "FAILED"
-        typer.echo(f"  {result.stage}: {status} ({result.duration_ms}ms)")
-        if result.error:
-            typer.echo(f"    error: {result.error}", err=True)
+    reporter = _ProgressReporter(enabled=_progress_enabled())
+    try:
+        results = resume_job(job_id, db_path, on_progress=reporter)
+    except KeyboardInterrupt:
+        reporter.close()
+        typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)
+        raise typer.Exit(code=130) from None
     if any(not r.success for r in results):
         raise typer.Exit(code=1)
 
@@ -214,9 +338,16 @@ def retry(
     # Run with retry policy
     policy = RetryPolicy(max_attempts=3, backoff_seconds=2.0)
 
+    reporter = _ProgressReporter(enabled=_progress_enabled())
+
     def _run_stage() -> StageResult:
         results = run_pipeline(
-            job_id, job.input_file, db_path, start_stage=target_stage, end_stage=target_stage
+            job_id,
+            job.input_file,
+            db_path,
+            start_stage=target_stage,
+            end_stage=target_stage,
+            on_progress=reporter,
         )
         if not results or not results[0].success:
             raise RuntimeError(
@@ -227,9 +358,15 @@ def retry(
     try:
         run_with_retry(_run_stage, policy, stage=target_stage)
         typer.echo(f"Stage {target_stage} succeeded on retry")
+    except KeyboardInterrupt:
+        reporter.close()
+        typer.echo("Interrupted.", err=True)
+        raise typer.Exit(code=130) from None
     except Exception as exc:
         typer.echo(f"Retry exhausted for {target_stage}: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    finally:
+        reporter.close()
 
 
 @app.command()

@@ -106,6 +106,18 @@ def test_documented_flags_exist() -> None:
     assert "--stage" in cli("retry", "--help").stdout
 
 
+def test_guide_explains_liveness_reporting(guide: str) -> None:
+    """A run that looks hung is the complaint that motivated progress output.
+
+    The guide has to say what the `->` and heartbeat lines mean, otherwise
+    they are just more noise to decode.
+    """
+    assert "-> ingest" in guide, "guide shows no live stage-start line"
+    assert "still running" in guide, "guide does not explain the heartbeat"
+    assert "hung" in guide.lower(), "guide never addresses the 'is it stuck?' question"
+    assert "stderr" in guide, "guide does not say where progress goes"
+
+
 def test_stage_list_matches_the_guide(guide: str) -> None:
     """The stage list must match the real pipeline exactly, in order."""
     result = cli("stages")
@@ -139,11 +151,66 @@ def test_version_matches_the_guide() -> None:
 
 
 def test_process_reports_the_job_id_and_fails_loudly(fake_movie: Path, tmp_path: Path) -> None:
-    """The guide shows `job_id=... status=CREATED` then a failed stage."""
+    """The guide shows `job_id=... status=CREATED` and a non-zero exit.
+
+    The job ID goes to stdout because it is the machine-readable handle you
+    pass to every other command. Progress and logs go to stderr, and progress
+    is suppressed when stderr is not a terminal -- which is the case here, so
+    this subprocess sees JSON logs but no `->` lines.
+    """
     result = cli("process", str(fake_movie), "--db-path", str(tmp_path / "jobs.db"))
     assert re.search(r"job_id=\S+ status=CREATED", result.stdout), result.stdout
-    assert ": FAILED" in result.stdout, result.stdout
     assert result.returncode != 0
+    # the failure is recorded even when progress lines are suppressed
+    assert '"to_status": "FAILED"' in result.stderr, result.stderr[-300:]
+
+
+def test_process_keeps_stdout_machine_readable(fake_movie: Path, tmp_path: Path) -> None:
+    """stdout must stay parseable: only the job ID, no progress noise.
+
+    Progress on stdout would break `JOB=$(movie-review process m.mp4 | ...)`.
+    """
+    result = cli("process", str(fake_movie), "--db-path", str(tmp_path / "jobs.db"))
+    for line in result.stdout.splitlines():
+        assert not line.strip().startswith("->"), f"progress leaked to stdout: {line!r}"
+        assert "still running" not in line, f"heartbeat leaked to stdout: {line!r}"
+
+
+def test_progress_is_suppressed_when_not_a_terminal(fake_movie: Path, tmp_path: Path) -> None:
+    """A redirected log should not gain a heartbeat every 10 seconds."""
+    result = cli("process", str(fake_movie), "--db-path", str(tmp_path / "jobs.db"))
+    assert "still running" not in result.stderr, "heartbeat emitted into a pipe"
+
+
+def test_progress_appears_when_a_terminal_is_present(fake_movie: Path, tmp_path: Path) -> None:
+    """Force the interactive path the guide documents."""
+    script = (
+        "import importlib, sqlite3, sys\n"
+        "from pathlib import Path\n"
+        "sys.path.insert(0, 'src')\n"
+        "cliapp = importlib.import_module('movie_review.cli.app')\n"
+        "cliapp._progress_enabled = lambda: True\n"
+        "from movie_review.pipeline.orchestrator import (\n"
+        "    PipelineContext, run_stage, StageResult)\n"
+        "from movie_review.cache.manager import CacheManager\n"
+        "from movie_review.config.settings import load_settings\n"
+        "from movie_review.jobs.manager import JobManager\n"
+        "conn = sqlite3.connect(':memory:')\n"
+        "conn.row_factory = sqlite3.Row\n"
+        "ctx = PipelineContext(\n"
+        "    job_id='j', movie_path=Path('m.mp4'), jobs_dir=Path('.'),\n"
+        "    cache=CacheManager(Path('.')), manager=JobManager(conn),\n"
+        "    settings=load_settings(), conn=conn)\n"
+        "rep = cliapp._ProgressReporter(enabled=True)\n"
+        "run_stage('transcript', lambda c: None, ctx, on_progress=rep)\n"
+        "rep.close()\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, cwd=ROOT
+    )
+    combined = result.stdout + result.stderr
+    assert "-> transcript" in combined, combined[-200:]
+    assert "transcript: OK" in combined, combined[-200:]
 
 
 def test_no_run_skips_the_pipeline(fake_movie: Path, tmp_path: Path) -> None:

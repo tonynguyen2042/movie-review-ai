@@ -220,15 +220,36 @@ uv run movie-review process ./my-movie.mp4 \
 
 ```text
 job_id=job_20261006_001 status=CREATED
-  ingest: FAILED (190ms)
 ```
 
-On a real movie each stage prints as it completes. When a stage fails, the run stops there and exits non-zero:
+The pipeline then reports each stage as it starts, so you can see it working:
 
 ```text
-job_id=job_20261006_001 status=CREATED
-  ingest: FAILED (190ms)
+  -> ingest ...
+  ingest: OK (14s)
+  -> scenes ...
+  ... scenes still running (10s)
+  scenes: OK (1m02s)
+  -> transcript ...
 ```
+
+Every line starting with `->` means that stage has just started. A `... still running` line repeats every 10 seconds while a stage is still working — a single stage such as transcription or rendering can run for many minutes with no output of its own, and that heartbeat is what tells you it is alive rather than hung.
+
+When a stage fails, the run stops there and exits non-zero:
+
+```text
+  -> ingest ...
+  ingest: FAILED (0s)
+    error: ffprobe failed: ... moov atom not found
+```
+
+**The job ID goes to stdout; progress goes to stderr.** That keeps stdout parseable, so you can capture just the ID:
+
+```bash
+JOB=$(uv run movie-review process ./my-movie.mp4 2>/dev/null | cut -d= -f2 | cut -d' ' -f1)
+```
+
+Progress lines are also suppressed automatically when stderr is not a terminal, so redirected logs stay clean.
 
 `inspect` shows why:
 
@@ -245,7 +266,7 @@ job_id=job_20261006_001 status=CREATED
 }
 ```
 
-Structured JSON logs go to stderr while the human-readable summary goes to stdout, so you can pipe one without the other.
+Everything except the `job_id=` line goes to stderr: structured JSON logs, stage progress, and errors. That leaves stdout holding only the job ID, so you can pipe it into another command.
 
 **Save the `job_...` value.** Every other command needs it.
 
@@ -343,11 +364,13 @@ job_id=job_20261006_001 status=FAILED valid=True
 uv run movie-review resume job_20261006_001
 ```
 
-Restarts a job from its recorded checkpoint, skipping stages already recorded as complete:
+Restarts a job from its recorded checkpoint, skipping stages already recorded as complete. It reports progress the same way `process` does:
 
 ```text
+  -> scenes ...
   scenes: OK (412ms)
-  transcript: OK (1873ms)
+  -> transcript ...
+  transcript: OK (1m52s)
 ```
 
 Resume works from any non-terminal status. See [What does not work yet](#10-what-does-not-work-yet) for the `FAILED` case.
@@ -359,7 +382,7 @@ uv run movie-review retry job_20261006_001
 uv run movie-review retry job_20261006_001 --stage quality
 ```
 
-Retries a bounded number of times with backoff, then surfaces the last error instead of looping forever. `--stage` targets one stage rather than the recorded failure point.
+Retries a bounded number of times with backoff, then surfaces the last error instead of looping forever. `--stage` targets one stage rather than the recorded failure point. Each attempt reports its own progress line, so a retry loop is visible rather than a long silence.
 
 ### Debug logging
 

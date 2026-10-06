@@ -76,10 +76,19 @@ def run_stage(
     name: str,
     fn: Callable[[PipelineContext], Any],
     ctx: PipelineContext,
+    on_progress: Callable[[str, StageResult | None], None] | None = None,
 ) -> StageResult:
-    """Run a single stage with logging and error capture."""
+    """Run a single stage with logging and error capture.
+
+    ``on_progress`` is called with ``(name, None)`` immediately before the
+    stage body runs and ``(name, result)`` once it finishes, so a caller can
+    report progress while a long stage is still in flight rather than only
+    after every stage has completed.
+    """
     started = time.perf_counter()
     stage_logger = _stage_logger(name)
+    if on_progress is not None:
+        on_progress(name, None)
     with ulog.logging_context(job_id=ctx.job_id, stage=name):
         try:
             # The stage's return value is intentionally unused: stages persist
@@ -92,7 +101,7 @@ def run_stage(
                 status="ok",
                 duration_ms=duration_ms,
             )
-            return StageResult(stage=name, success=True, duration_ms=duration_ms)
+            result = StageResult(stage=name, success=True, duration_ms=duration_ms)
         except Exception as exc:
             duration_ms = int((time.perf_counter() - started) * 1000)
             ulog.log_event(
@@ -102,7 +111,10 @@ def run_stage(
                 duration_ms=duration_ms,
                 error=str(exc),
             )
-            return StageResult(stage=name, success=False, duration_ms=duration_ms, error=str(exc))
+            result = StageResult(stage=name, success=False, duration_ms=duration_ms, error=str(exc))
+    if on_progress is not None:
+        on_progress(name, result)
+    return result
 
 
 def _build_context(job_id: str, movie_path: str | Path, db_path: str | None) -> PipelineContext:
@@ -142,12 +154,15 @@ def run_pipeline(
     db_path: str | None = None,
     start_stage: str | None = None,
     end_stage: str | None = None,
+    on_progress: Callable[[str, StageResult | None], None] | None = None,
 ) -> list[StageResult]:
     """Execute pipeline stages in sequence with optional start/end bounds.
 
     Both bounds are **inclusive**: ``start_stage="scenes", end_stage="vision"``
     runs scenes, transcript, and vision. Execution stops at the first failing
     stage so later stages never observe broken state.
+
+    ``on_progress`` is forwarded to :func:`run_stage`; see there.
     """
     ctx = _build_context(job_id, movie_path, db_path)
     results: list[StageResult] = []
@@ -168,7 +183,7 @@ def run_pipeline(
         stage_fn = _get_stage_function(stage_name)
         if stage_fn is None:
             continue
-        result = run_stage(stage_name, stage_fn, ctx)
+        result = run_stage(stage_name, stage_fn, ctx, on_progress=on_progress)
         results.append(result)
         if not result.success:
             break
@@ -634,8 +649,12 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 def resume_job(
     job_id: str,
     db_path: str | None = None,
+    on_progress: Callable[[str, StageResult | None], None] | None = None,
 ) -> list[StageResult]:
-    """Resume a job from its recovery point."""
+    """Resume a job from its recovery point.
+
+    ``on_progress`` is forwarded to :func:`run_pipeline`; see there.
+    """
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
 
@@ -654,7 +673,13 @@ def resume_job(
 
     # Get the movie path from the job
     job = manager.get(job_id)
-    return run_pipeline(job_id, job.input_file, db_path, start_stage=plan.resume_stage)
+    return run_pipeline(
+        job_id,
+        job.input_file,
+        db_path,
+        start_stage=plan.resume_stage,
+        on_progress=on_progress,
+    )
 
 
 def validate_job(job_id: str, db_path: str | None = None) -> bool:
