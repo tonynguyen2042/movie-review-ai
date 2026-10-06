@@ -205,6 +205,31 @@ def test_eval_gates_still_fail_real_problems() -> None:
     assert evaluate_coverage(bad, ["ev1"]).passed is False
 
 
+# ---------------------------------------------------------------------------
+# CLI error surface consistency
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("command", ["inspect", "validate", "resume", "retry"])
+def test_cli_reports_unknown_job_without_a_traceback(tmp_path, capsys, command: str) -> None:
+    """Every job command must report an unknown ID as a usage error.
+
+    Regression: validate and resume called the job loader directly, so a bad
+    job ID produced a raw JobNotFoundError traceback and exit code 1, while
+    inspect and retry exited 2 with a clean message.
+    """
+    from typer.testing import CliRunner
+
+    from movie_review.cli.app import app
+
+    db = tmp_path / "jobs.db"
+    result = CliRunner().invoke(app, [command, "job_does_not_exist", "--db-path", str(db)])
+    output = result.output
+    assert "Traceback (most recent call last)" not in output
+    assert "Unknown job" in output
+    assert result.exit_code == 2
+
+
 def test_measured_coverage_is_never_above_100() -> None:
     """Sanity: the reported percentage stays a real measurement."""
     claims = [{**MAJOR, "evidence": ["ev1"]} for _ in range(3)]

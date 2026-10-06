@@ -149,10 +149,12 @@ def validate(
     job_id: Annotated[str, typer.Argument(help="Job ID.")], db_path: DbOption = None
 ) -> None:
     """Check a job record is well-formed and validate its artifacts."""
-    is_valid = validate_job(job_id, db_path)
+    # validate_job loads the job itself, so resolve it here first to report an
+    # unknown ID as a usage error instead of a traceback.
     manager, conn = _manager(db_path)
     with conn:
         job = _load_job(manager, job_id)
+    is_valid = validate_job(job_id, db_path)
     typer.echo(f"job_id={job.job_id} status={job.status.value} valid={is_valid}")
     if not is_valid:
         raise typer.Exit(code=1)
@@ -164,6 +166,9 @@ def resume(
     db_path: DbOption = None,
 ) -> None:
     """Resume an interrupted job from its last checkpoint."""
+    manager, conn = _manager(db_path)
+    with conn:
+        _load_job(manager, job_id)
     results = resume_job(job_id, db_path)
     for result in results:
         status = "OK" if result.success else "FAILED"
