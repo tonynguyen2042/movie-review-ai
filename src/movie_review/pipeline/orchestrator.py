@@ -19,6 +19,7 @@ from movie_review.cache.manager import CacheManager
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.recovery import recovery_plan
 from movie_review.pipeline.context import StageContext
+from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.utils import logging as ulog
 
 _logger = logging.getLogger(__name__)
@@ -63,9 +64,25 @@ class PipelineContext(StageContext):
     Extends :class:`StageContext` so it can be handed to any stage without
     conversion -- the stage contract only needs the context fields, plus the
     source movie for the stages that open it.
+
+    ``stage_progress`` is set by :func:`run_stage` for the duration of a stage,
+    already bound to that stage's name, so a stage publishes steps without
+    knowing what it is called. It is None when nobody is listening.
     """
 
     movie_path: Path
+    stage_progress: ProgressReporter | None = None
+
+
+def _sub_step(ctx: PipelineContext) -> ProgressReporter | None:
+    """The progress callback for sub-steps of the running stage.
+
+    ``run_stage`` already bound the stage name, so this only narrows the
+    context field to the single-argument shape the sub-steps take, and returns
+    None when nobody is listening rather than wrapping a call in a no-op that
+    would still be invoked once per frame.
+    """
+    return ctx.stage_progress
 
 
 def _stage_logger(stage: str) -> logging.Logger:
@@ -87,6 +104,7 @@ def run_stage(
     fn: Callable[[PipelineContext], Any],
     ctx: PipelineContext,
     on_progress: Callable[[str, StageResult | None], None] | None = None,
+    on_work: Callable[[str, WorkProgress], None] | None = None,
 ) -> StageResult:
     """Run a single stage with logging and error capture.
 
@@ -94,11 +112,22 @@ def run_stage(
     stage body runs and ``(name, result)`` once it finishes, so a caller can
     report progress while a long stage is still in flight rather than only
     after every stage has completed.
+
+    ``on_work`` receives ``(name, WorkProgress)`` from stages that can divide
+    their work. It is a separate channel from ``on_progress`` on purpose: one
+    means "the stage started or ended", the other means "this is how far along
+    it is", and collapsing them would leave every consumer re-deriving which is
+    which.
     """
     started = time.perf_counter()
     stage_logger = _stage_logger(name)
     if on_progress is not None:
         on_progress(name, None)
+    # Bind the stage name here, where it is known, so a stage can publish steps
+    # without knowing what it is called. Restored afterwards because one context
+    # is reused across every stage in the run.
+    previous_progress = ctx.stage_progress
+    ctx.stage_progress = (lambda progress: on_work(name, progress)) if on_work else None
     with ulog.logging_context(job_id=ctx.job_id, stage=name):
         try:
             # The stage's return value is intentionally unused: stages persist
@@ -122,6 +151,8 @@ def run_stage(
                 error=str(exc),
             )
             result = StageResult(stage=name, success=False, duration_ms=duration_ms, error=str(exc))
+        finally:
+            ctx.stage_progress = previous_progress
     if on_progress is not None:
         on_progress(name, result)
     return result
@@ -174,6 +205,7 @@ def run_pipeline(
     end_stage: str | None = None,
     on_progress: Callable[[str, StageResult | None], None] | None = None,
     profile: str | None = None,
+    on_work: Callable[[str, WorkProgress], None] | None = None,
 ) -> list[StageResult]:
     """Execute pipeline stages in sequence with optional start/end bounds.
 
@@ -182,6 +214,7 @@ def run_pipeline(
     stage so later stages never observe broken state.
 
     ``on_progress`` is forwarded to :func:`run_stage`; see there.
+    ``on_work`` likewise receives in-stage steps.
 
     ``profile`` selects a ``models.yaml`` profile for this run only.
     """
@@ -206,7 +239,7 @@ def run_pipeline(
         stage_fn = _get_stage_function(stage_name)
         if stage_fn is None:
             continue
-        result = run_stage(stage_name, stage_fn, ctx, on_progress=on_progress)
+        result = run_stage(stage_name, stage_fn, ctx, on_progress=on_progress, on_work=on_work)
         results.append(result)
         if not result.success:
             break
@@ -292,6 +325,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             cache=ctx.cache,
             config=sampling_config_from(ctx.settings.pipeline.visual_sampling),
             ffmpeg=ctx.settings.media.ffmpeg,
+            # run_stage left the caller's callback here, already bound to
+            # "vision"; both sub-steps report through the same channel.
+            on_progress=_sub_step(ctx),
         )
         # Grouped by scene, in timestamp order: sample_movie emits each scene's
         # frames consecutively and ascending, and the VLM reads them in order.
@@ -311,6 +347,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
                 cache=ctx.cache,
                 settings=ctx.settings,
             ),
+            on_progress=_sub_step(ctx),
         )
 
     def characters_fn(ctx: PipelineContext) -> Any:
@@ -701,10 +738,12 @@ def resume_job(
     db_path: str | None = None,
     on_progress: Callable[[str, StageResult | None], None] | None = None,
     profile: str | None = None,
+    on_work: Callable[[str, WorkProgress], None] | None = None,
 ) -> list[StageResult]:
     """Resume a job from its recovery point.
 
     ``on_progress`` is forwarded to :func:`run_pipeline`; see there.
+    ``on_work`` likewise receives in-stage steps.
     ``profile`` selects a ``models.yaml`` profile for this resume only.
     """
     from movie_review.config.settings import load_settings
@@ -732,6 +771,7 @@ def resume_job(
         start_stage=plan.resume_stage,
         on_progress=on_progress,
         profile=profile,
+        on_work=on_work,
     )
 
 

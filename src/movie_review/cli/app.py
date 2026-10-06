@@ -7,6 +7,7 @@ pipeline. Stages run sequentially with checkpointing and resume support.
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 import sys
@@ -30,6 +31,7 @@ from movie_review.pipeline.orchestrator import (
     run_pipeline,
     validate_job,
 )
+from movie_review.pipeline.progress import WorkProgress
 from movie_review.storage.database import bootstrap
 from movie_review.utils import logging as ulog
 
@@ -39,6 +41,14 @@ _DURATION_RE = re.compile(r"(?P<minutes>\d+)\s*m?$", re.IGNORECASE)
 
 #: How often to report elapsed time while a stage is running, in seconds.
 _HEARTBEAT_SECONDS = 10.0
+
+#: Minimum gap between in-stage progress lines, in seconds. A vision run over a
+#: feature film reports once per scene; at ~1s per scene that is hundreds of
+#: lines a minute, which scrolls the useful output off the screen.
+_PROGRESS_MIN_INTERVAL = 2.0
+
+#: Width of the rendered bar in characters.
+_PROGRESS_BAR_WIDTH = 24
 
 
 def _parse_duration(value: str) -> int:
@@ -66,6 +76,22 @@ def _progress_enabled() -> bool:
     return sys.stderr.isatty()
 
 
+def _format_bar(fraction: float, width: int = _PROGRESS_BAR_WIDTH) -> str:
+    """Render a fraction as a fixed-width bar of ``#`` and ``-``.
+
+    The width is constant rather than proportional so the line does not jitter as
+    the percentage ticks over, and it is clamped so a fraction outside [0, 1]
+    from a miscounting stage cannot produce a bar of the wrong length. NaN is
+    handled explicitly: comparisons against it are all False, so it would
+    otherwise fall through to round() and raise.
+    """
+    if math.isnan(fraction):
+        fraction = 0.0
+    bounded = max(0.0, min(1.0, fraction))
+    filled = int(round(bounded * width))
+    return "[" + "#" * filled + "-" * (width - filled) + "]"
+
+
 class _ProgressReporter:
     """Print each stage as it starts and finishes, with a liveness heartbeat.
 
@@ -89,6 +115,10 @@ class _ProgressReporter:
         self._stage_started: float | None = None
         self._stage_name: str | None = None
         self._timer: threading.Timer | None = None
+        # Throttle state for in-stage bars: a vision run over a feature film
+        # reports once per scene, which at ~1s each would bury the output.
+        self._last_progress_at: float = 0.0
+        self._completed_stages = 0
 
     def _echo(self, message: str) -> None:
         if not self._enabled:
@@ -136,7 +166,13 @@ class _ProgressReporter:
             with self._lock:
                 self._stage_name = stage
                 self._stage_started = time.perf_counter()
-            self._echo(f"  -> {stage} ...")
+                # Force the first bar of a new stage to print immediately: the
+                # stage-start line is the only thing on screen, and an empty bar
+                # right after it is what makes progress legible.
+                self._last_progress_at = 0.0
+            self._echo(
+                f"  -> {stage} (stage {self._completed_stages + 1}/{len(STAGE_SEQUENCE)}) ..."
+            )
             self._schedule_heartbeat()
             return
 
@@ -145,10 +181,41 @@ class _ProgressReporter:
             elapsed = time.perf_counter() - (self._stage_started or time.perf_counter())
             self._stage_name = None
             self._stage_started = None
+            self._completed_stages += 1
         verdict = "OK" if result.success else "FAILED"
-        self._echo(f"  {stage}: {verdict} ({_format_elapsed(elapsed)})")
+        self._echo(
+            f"  {stage}: {verdict} ({_format_elapsed(elapsed)}, "
+            f"stage {self._completed_stages}/{len(STAGE_SEQUENCE)})"
+        )
         if result.error:
             self._echo(f"    error: {result.error}")
+
+    def work(self, stage: str, progress: WorkProgress) -> None:
+        """Render an in-stage bar for stages that can divide their work.
+
+        Throttled by time rather than printed per event. A stage that reports
+        hundreds of times a minute would otherwise scroll the start line, the
+        heartbeat and the result off the screen -- the very output that answers
+        "is it hung?".
+
+        The final update always prints: a bar that stops at 97% because the
+        throttle swallowed the last event would be worse than no bar at all.
+        """
+        if not self._enabled:
+            return
+        now = time.perf_counter()
+        with self._lock:
+            finished = progress.total > 0 and progress.done >= progress.total
+            if not finished and now - self._last_progress_at < _PROGRESS_MIN_INTERVAL:
+                return
+            self._last_progress_at = now
+            elapsed = time.perf_counter() - self._stage_started if self._stage_started else 0.0
+
+        parts = [f"  {stage} {_format_bar(progress.fraction)} {progress.percent:3d}%"]
+        if progress.label:
+            parts.append(f"  {progress.label}")
+        parts.append(f"({_format_elapsed(elapsed)})")
+        self._echo(" ".join(parts))
 
     def close(self) -> None:
         """Stop any pending heartbeat, e.g. after a keyboard interrupt."""
@@ -352,6 +419,7 @@ def process(
             start_stage=stage_from,
             end_stage=stage_to,
             on_progress=reporter,
+            on_work=reporter.work,
             profile=selected_profile,
         )
     except KeyboardInterrupt:
@@ -407,7 +475,13 @@ def resume(
         _load_job(manager, job_id)
     reporter = _ProgressReporter(enabled=_progress_enabled())
     try:
-        results = resume_job(job_id, db_path, on_progress=reporter, profile=selected_profile)
+        results = resume_job(
+            job_id,
+            db_path,
+            on_progress=reporter,
+            on_work=reporter.work,
+            profile=selected_profile,
+        )
     except KeyboardInterrupt:
         reporter.close()
         typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)
@@ -461,6 +535,7 @@ def retry(
             start_stage=target_stage,
             end_stage=target_stage,
             on_progress=reporter,
+            on_work=reporter.work,
             profile=selected_profile,
         )
         if not results or not results[0].success:

@@ -19,6 +19,7 @@ from movie_review.cache.manager import CacheManager
 from movie_review.config.settings import VisualSamplingSettings
 from movie_review.domain import Artifact
 from movie_review.media import ffmpeg as ff
+from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
 
@@ -177,8 +178,14 @@ def sample_movie(
     config: SamplingConfig | None = None,
     ffmpeg: str = "ffmpeg",
     run_fn: Callable[..., str] = ff.check,
+    on_progress: ProgressReporter | None = None,
 ) -> SamplingResult:
-    """Sample frames for ``(scene_id, start, end)`` spans; skips work on cache hit."""
+    """Sample frames for ``(scene_id, start, end)`` spans; skips work on cache hit.
+
+    Reports one step per frame when ``on_progress`` is given. The total is known
+    before any extraction starts -- the sum of the per-scene bucket counts -- so
+    the fraction is real rather than an estimate.
+    """
     cfg = config or SamplingConfig()
     src = Path(source)
     if not src.is_file():
@@ -205,12 +212,28 @@ def sample_movie(
             )
 
     frames = []
-    for scene_id, start, end in scenes:
-        count = plan_count(end - start, cfg)
+    # Counted up front so the reported fraction is exact, not a guess that
+    # drifts when a scene lands in a different bucket than the last one.
+    planned = [
+        (scene_id, start, end, plan_count(end - start, cfg)) for scene_id, start, end in scenes
+    ]
+    total_frames = sum(count for _, _, _, count in planned)
+    extracted = 0
+
+    for scene_id, start, end, count in planned:
         for timestamp in sample_timestamps(start, end, count):
             dest = frames_dir / scene_id / frame_filename(scene_id, timestamp)
             extract_frame(src, timestamp, dest, ffmpeg, run_fn)
             frames.append(Frame(scene_id=scene_id, timestamp=timestamp, path=dest))
+            extracted += 1
+            if on_progress is not None:
+                on_progress(
+                    WorkProgress(
+                        done=extracted,
+                        total=total_frames,
+                        label=f"frame {extracted}/{total_frames}",
+                    )
+                )
 
     manifest = {
         "job_id": job_id,

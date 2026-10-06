@@ -21,6 +21,7 @@ from movie_review.config.prompts import load_prompt, render
 from movie_review.domain import Artifact, JobStatus, Scene, SceneAnalysis, TranscriptSegment
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
+from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
 from movie_review.vision.factory import build_vlm_adapter
@@ -72,8 +73,14 @@ def run_visual_analysis(
     ctx: StageContext,
     port: VLMPort | None = None,
     prompt_version: str | None = None,
+    on_progress: ProgressReporter | None = None,
 ) -> VisualAnalysisResult:
-    """Analyze scenes for ``ctx.job_id`` through to ``VISUAL_ANALYSIS_READY``."""
+    """Analyze scenes for ``ctx.job_id`` through to ``VISUAL_ANALYSIS_READY``.
+
+    Reports one step per scene when ``on_progress`` is given. This is the longest
+    stage in the pipeline -- one VLM call per scene, each with its own network
+    round trip -- so a per-scene fraction is what tells the user it is moving.
+    """
     started = time.perf_counter()
     try:
         job = ctx.manager.get(ctx.job_id)
@@ -148,6 +155,16 @@ def run_visual_analysis(
                 raise VisualAnalysisError(f"Scene ID drift in analysis for {scene.scene_id}")
             analyses.append(analysis)
             previous = analysis
+            if on_progress is not None:
+                # Reported after a scene is fully done, cache hit or not, so the
+                # count only advances on work that actually completed.
+                on_progress(
+                    WorkProgress(
+                        done=len(analyses),
+                        total=len(scenes),
+                        label=f"scene {len(analyses)}/{len(scenes)}",
+                    )
+                )
     finally:
         active.unload()
 

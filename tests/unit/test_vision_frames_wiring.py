@@ -117,9 +117,16 @@ def _vision_stage() -> Callable[[PipelineContext], Any]:
 
 
 @pytest.fixture
+def stub_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace extract_frame's ffmpeg call so no test shells out to the binary."""
+    monkeypatch.setattr(frames_module, "extract_frame", _extract_with(_fake_run))
+
+
+@pytest.fixture
 def captured_frames(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, list[Path]]]:
     """Capture what the stage hands to the analysis, and answer with a stub."""
     seen: list[dict[str, list[Path]]] = []
+    work: list[Any] = []
 
     monkeypatch.setattr(frames_module, "extract_frame", _extract_with(_fake_run))
 
@@ -130,8 +137,10 @@ def captured_frames(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, list[Path
         stage_ctx: Any,
         port: Any = None,
         prompt_version: Any = None,
+        on_progress: Any = None,
     ) -> object:
         seen.append(frames)
+        work.append(on_progress)
         return object()
 
     import movie_review.vision.analysis as vision_analysis
@@ -199,6 +208,86 @@ def test_no_scenes_yields_no_frames(ctx: PipelineContext, captured_frames: list[
     _vision_stage()(ctx)
 
     assert captured_frames == [{}]
+
+
+# ---------------------------------------------------------------------------
+# The vision stage publishes progress, because it is the longest stage
+# ---------------------------------------------------------------------------
+
+
+def test_vision_stage_reports_frame_progress(
+    ctx: PipelineContext, monkeypatch: pytest.MonkeyPatch, stub_ffmpeg: None
+) -> None:
+    """Sampling knows its frame total up front, so it must report it."""
+    _scenes(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 10.0, 40.0)])
+
+    from movie_review.pipeline.orchestrator import run_stage
+    from movie_review.pipeline.progress import WorkProgress
+
+    seen: list[WorkProgress] = []
+    monkeypatch.setattr(
+        "movie_review.vision.analysis.run_visual_analysis", lambda *a, **kw: object()
+    )
+
+    def _on_work(stage: str, progress: WorkProgress) -> None:
+        seen.append(progress)
+
+    result = run_stage("vision", _vision_stage(), ctx, on_work=_on_work)
+
+    assert result.success is True, result.error
+    # 3 frames for the 5s scene, 6 for the 30s scene.
+    assert seen[-1].done == 9
+    assert seen[-1].total == 9
+    assert {p.total for p in seen} == {9}, "total must be exact, known before extraction"
+    assert _is_monotonic(seen), "progress went backwards"
+
+
+def _is_monotonic(seen: list[Any]) -> bool:
+    counts = [p.done for p in seen]
+    return counts == sorted(counts)
+
+
+def test_vision_stage_reports_scene_progress(
+    ctx: PipelineContext, monkeypatch: pytest.MonkeyPatch, stub_ffmpeg: None
+) -> None:
+    """One VLM call per scene is the long pole; the bar must move per scene."""
+    _scenes(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 10.0, 40.0)])
+
+    from movie_review.pipeline.orchestrator import run_stage
+    from movie_review.pipeline.progress import WorkProgress
+
+    def _fake_analysis(
+        scenes: Any,
+        frames: Any,
+        segments: Any,
+        stage_ctx: Any,
+        port: Any = None,
+        prompt_version: Any = None,
+        on_progress: Any = None,
+    ) -> object:
+        for index, _scene in enumerate(scenes, start=1):
+            if on_progress is not None:
+                on_progress(
+                    WorkProgress(
+                        done=index, total=len(scenes), label=f"scene {index}/{len(scenes)}"
+                    )
+                )
+        return object()
+
+    monkeypatch.setattr("movie_review.vision.analysis.run_visual_analysis", _fake_analysis)
+
+    seen: list[tuple[str, int, int]] = []
+    result = run_stage(
+        "vision",
+        _vision_stage(),
+        ctx,
+        on_work=lambda stage, progress: seen.append((stage, progress.done, progress.total)),
+    )
+
+    assert result.success is True, result.error
+    # Frames first (9), then the 2 scenes the stub reports.
+    assert ("vision", 1, 2) in seen
+    assert ("vision", 2, 2) in seen
 
 
 # ---------------------------------------------------------------------------

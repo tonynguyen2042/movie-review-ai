@@ -225,15 +225,23 @@ job_id=job_20261006_001 status=CREATED
 The pipeline then reports each stage as it starts, so you can see it working:
 
 ```text
-  -> ingest ...
-  ingest: OK (14s)
-  -> scenes ...
+  -> ingest (stage 1/18) ...
+  ingest: OK (14s, stage 1/18)
+  -> scenes (stage 2/18) ...
   ... scenes still running (10s)
-  scenes: OK (1m02s)
-  -> transcript ...
+  scenes: OK (1m02s, stage 2/18)
+  -> vision (stage 3/18) ...
+  vision [############------------]  50%   frame 180/360 (2m10s)
+  vision [########################] 100%   frame 360/360 (4m05s)
+  vision [########################] 100%   scene 210/420 (48m12s)
+  vision: OK (52m30s, stage 3/18)
 ```
 
-Every line starting with `->` means that stage has just started. A `... still running` line repeats every 10 seconds while a stage is still working — a single stage such as transcription or rendering can run for many minutes with no output of its own, and that heartbeat is what tells you it is alive rather than hung.
+Every line starting with `->` means that stage has just started; the `stage N/18` counter is your position in the run. A `... still running` line repeats every 10 seconds while a stage is still working — a single stage such as transcription or rendering can run for many minutes with no output of its own, and that heartbeat is what tells you it is alive rather than hung.
+
+A progress bar like `vision [####----] 50%` appears for stages that can divide their work up front, currently frame sampling and visual scene analysis. Both count items — frames and scenes — so the percentage is real rather than an estimate. Progress lines are throttled to one every 2 seconds: a long film reports once per scene, and printing all of them would scroll the start lines and results off the screen.
+
+Stages whose work cannot be divided report no bar. Transcription, TTS and rendering are each a single long call, and inventing a percentage that advances on its own would be worse than saying nothing — for those, the 10-second heartbeat and the elapsed time are the signal.
 
 When a stage fails, the run stops there and exits non-zero:
 
