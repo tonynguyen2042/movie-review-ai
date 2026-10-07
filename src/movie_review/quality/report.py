@@ -70,6 +70,7 @@ def build_quality_report(
             artifact_id=f"{job_id}-quality-report",
             job_id=job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(jobs_dir, job_id, report_path),
             input_hash=output_hash,
             output_hash=output_hash,
         ),

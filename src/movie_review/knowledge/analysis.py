@@ -168,6 +168,7 @@ def build_movie_analysis(ctx: StageContext) -> AnalysisResult:
             artifact_id=f"{ctx.job_id}-movie-analysis",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, analysis_path),
             input_hash=key,
             output_hash=output_hash,
         ),

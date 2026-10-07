@@ -50,11 +50,7 @@ def test_integrity_scanner_blocks_path_traversal() -> None:
         report = scan_job_integrity(
             jobs,
             "job_ok",
-            [
-                ArtifactRecord(
-                    stage="../..", filename="secret.txt", expected_hash=sha256_file(secret)
-                )
-            ],
+            [ArtifactRecord(relative_path="../../secret.txt", expected_hash=sha256_file(secret))],
         )
         assert report.ok == 0
         assert report.unsafe == ["../../secret.txt"]
@@ -72,7 +68,7 @@ def test_integrity_scanner_blocks_traversal_in_filename() -> None:
         report = scan_job_integrity(
             jobs,
             "job_ok",
-            [ArtifactRecord(stage="qc", filename="../secret.txt", expected_hash="0" * 64)],
+            [ArtifactRecord(relative_path="qc/../secret.txt", expected_hash="0" * 64)],
         )
         assert report.unsafe == ["qc/../secret.txt"]
         assert report.passed is False
@@ -87,7 +83,7 @@ def test_verify_or_raise_rejects_unsafe_paths() -> None:
             verify_or_raise(
                 jobs,
                 "job_ok",
-                [ArtifactRecord(stage="../..", filename="x", expected_hash="0" * 64)],
+                [ArtifactRecord(relative_path="../../x", expected_hash="0" * 64)],
             )
 
 
@@ -103,7 +99,7 @@ def test_integrity_scanner_still_accepts_valid_records() -> None:
         report = scan_job_integrity(
             jobs,
             "job_ok",
-            [ArtifactRecord(stage="qc", filename="report.json", expected_hash=expected)],
+            [ArtifactRecord(relative_path="qc/report.json", expected_hash=expected)],
         )
         assert report.ok == 1
         assert report.passed is True
@@ -121,7 +117,7 @@ def test_integrity_scanner_detects_corruption() -> None:
         report = scan_job_integrity(
             jobs,
             "job_ok",
-            [ArtifactRecord(stage="qc", filename="report.json", expected_hash="0" * 64)],
+            [ArtifactRecord(relative_path="qc/report.json", expected_hash="0" * 64)],
         )
         assert report.corrupt == ["qc/report.json"]
         assert report.passed is False

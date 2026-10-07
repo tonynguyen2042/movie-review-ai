@@ -333,6 +333,7 @@ def translate_script(
             artifact_id=f"{ctx.job_id}-review-script-{target}",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, path),
             input_hash=artifacts.sha256_bytes(script.model_dump_json().encode("utf-8")),
             output_hash=output_hash,
             model=model_id,

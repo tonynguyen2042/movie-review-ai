@@ -123,6 +123,7 @@ def extract_story_arcs(
             artifact_id=f"{job_id}-story-arcs",
             job_id=job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(jobs_dir, job_id, arcs_path),
             input_hash=key,
             output_hash=output_hash,
             model=model_id,

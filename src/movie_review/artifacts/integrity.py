@@ -13,18 +13,28 @@ from pathlib import Path
 from movie_review.artifacts.manager import (
     ArtifactIntegrityError,
     UnsafePathError,
-    artifact_path,
+    resolve_relative,
     sha256_file,
 )
 
 
 @dataclass(frozen=True)
 class ArtifactRecord:
-    """One file whose integrity must hold."""
+    """One file whose integrity must hold.
 
-    stage: str
-    filename: str
-    expected_hash: str
+    ``relative_path`` is the path under the job root, exactly as the stage wrote
+    it -- ``scenes/scenes.json``, ``media/media.json``, ``movie-analysis.json``.
+    It replaces a stage plus a filename because those two are not enough:
+    ingest, proxy, the quality report and movie-analysis.json all write outside a
+    directory named after their stage, so a stage-scoped path had to be guessed
+    and was wrong.
+    """
+
+    relative_path: str
+    #: Recorded hash of the file, or None when the stage recorded none. None
+    #: means the file is checked for existence only: claiming a hash comparison
+    #: that was never recorded would report every such file as corrupt.
+    expected_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -37,6 +47,11 @@ class IntegrityReport:
     missing: list[str] = field(default_factory=list)
     corrupt: list[str] = field(default_factory=list)
     unsafe: list[str] = field(default_factory=list)
+    #: Records that name no file, so nothing could be verified for them. Counted
+    #: rather than folded into the failures: a row without a path is missing
+    #: coverage, not a damaged file, and reporting it as a failure would send the
+    #: operator looking for damage that is not there.
+    unlocated: list[str] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -48,19 +63,19 @@ def scan_job_integrity(
 ) -> IntegrityReport:
     """Hash-verify each record under ``<jobs_dir>/<job_id>``.
 
-    Paths are resolved through :func:`artifact_path`, which rejects traversal
-    segments. Records naming a stage or filename outside the safe segment set
-    are reported as ``unsafe`` rather than read: a corrupted manifest must not
-    be able to make the scanner hash arbitrary files on disk.
+    Paths are resolved through :func:`resolve_relative`, which validates every
+    segment. Records naming a path outside the safe segment set are reported as
+    ``unsafe`` rather than read: a tampered row must not be able to make the
+    scanner hash arbitrary files on disk.
     """
     missing: list[str] = []
     corrupt: list[str] = []
     unsafe: list[str] = []
     ok = 0
     for record in records:
-        label = f"{record.stage}/{record.filename}"
+        label = record.relative_path
         try:
-            path = artifact_path(jobs_dir, job_id, record.stage, record.filename)
+            path = resolve_relative(jobs_dir, job_id, label)
         except UnsafePathError:
             unsafe.append(label)
             continue
@@ -72,7 +87,7 @@ def scan_job_integrity(
         except OSError:
             missing.append(label)
             continue
-        if actual != record.expected_hash:
+        if record.expected_hash is not None and actual != record.expected_hash:
             corrupt.append(label)
         else:
             ok += 1

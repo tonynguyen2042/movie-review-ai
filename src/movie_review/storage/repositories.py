@@ -678,14 +678,15 @@ def save_artifact(conn: sqlite3.Connection, artifact: Artifact) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO artifacts
-                (artifact_id, job_id, stage, version, created_at,
+                (artifact_id, job_id, stage, relative_path, version, created_at,
                  input_hash, output_hash, model, prompt_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 artifact.artifact_id,
                 artifact.job_id,
                 artifact.stage,
+                artifact.relative_path,
                 artifact.version,
                 artifact.created_at.isoformat(),
                 artifact.input_hash,
@@ -697,10 +698,15 @@ def save_artifact(conn: sqlite3.Connection, artifact: Artifact) -> None:
 
 
 def _row_to_artifact(row: sqlite3.Row) -> Artifact:
+    # A database from before schema 9 has no filename column at all, so the key
+    # is probed rather than assumed; an old row then reads as "no filename",
+    # which validation reports rather than guesses at.
+    relative = row["relative_path"] if "relative_path" in row.keys() else None
     return Artifact(
         artifact_id=row["artifact_id"],
         job_id=row["job_id"],
         stage=row["stage"],
+        relative_path=relative,
         version=row["version"],
         created_at=_parse_dt(row["created_at"]),
         input_hash=row["input_hash"],

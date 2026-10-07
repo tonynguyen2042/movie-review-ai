@@ -191,6 +191,7 @@ def write_script(
             artifact_id=f"{ctx.job_id}-review-script",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, script_path),
             input_hash=run_hash,
             output_hash=output_hash,
             model=model_id,

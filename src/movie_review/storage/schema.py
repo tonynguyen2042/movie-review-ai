@@ -5,7 +5,7 @@ artifacts. Later tasks add their tables as new migration versions; existing
 statements are append-only history and must not be edited.
 """
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 MIGRATION_1 = [
     """
@@ -203,6 +203,16 @@ MIGRATION_8 = [
     """
 ]
 
+MIGRATION_9 = [
+    # Added so validation can locate a file from its row instead of guessing a
+    # filename from the job status. ALTER rather than a new table: the existing
+    # rows are the provenance record, and migrate() applies each version once
+    # (tracked by user_version), so this is not re-run on the same database.
+    """
+    ALTER TABLE artifacts ADD COLUMN relative_path TEXT
+    """,
+]
+
 MIGRATIONS: dict[int, list[str]] = {
     1: MIGRATION_1,
     2: MIGRATION_2,
@@ -212,4 +222,5 @@ MIGRATIONS: dict[int, list[str]] = {
     6: MIGRATION_6,
     7: MIGRATION_7,
     8: MIGRATION_8,
+    9: MIGRATION_9,
 }

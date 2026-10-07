@@ -21,8 +21,8 @@ import sqlite3
 import wave
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 import pytest
 

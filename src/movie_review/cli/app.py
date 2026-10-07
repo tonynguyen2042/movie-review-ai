@@ -488,15 +488,35 @@ def inspect(
 def validate(
     job_id: Annotated[str, typer.Argument(help="Job ID.")], db_path: DbOption = None
 ) -> None:
-    """Check a job record is well-formed and validate its artifacts."""
+    """Check that a job's recorded artifacts are present and unmodified."""
     # validate_job loads the job itself, so resolve it here first to report an
     # unknown ID as a usage error instead of a traceback.
     manager, conn = _manager(db_path)
     with conn:
         job = _load_job(manager, job_id)
-    is_valid = validate_job(job_id, db_path)
-    typer.echo(f"job_id={job.job_id} status={job.status.value} valid={is_valid}")
-    if not is_valid:
+
+    report = validate_job(job_id, db_path)
+
+    typer.echo(f"job_id={job.job_id} status={job.status.value} valid={report.passed}")
+    typer.echo(f"  artifacts checked : {report.checked}")
+    typer.echo(f"  verified          : {report.ok}")
+    for label, items in (
+        ("missing", report.missing),
+        ("corrupt", report.corrupt),
+        ("unsafe path", report.unsafe),
+    ):
+        for item in items:
+            typer.echo(f"  {label:<17}: {item}", err=True)
+    if report.unlocated:
+        # Not a failure: these rows predate schema 9 and name no file, so nothing
+        # could be checked for them. Saying so beats implying they were verified.
+        typer.echo(
+            f"  not recorded      : {len(report.unlocated)} artifact row(s) name no file",
+            err=True,
+        )
+    if not report.checked and not report.unlocated:
+        typer.echo("  no artifacts recorded for this job yet", err=True)
+    if not report.passed:
         raise typer.Exit(code=1)
 
 

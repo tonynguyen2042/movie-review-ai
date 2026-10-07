@@ -271,6 +271,9 @@ def sample_movie(
             artifact_id=f"{job_id}-frames",
             job_id=job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(
+                jobs_dir, job_id, frames_dir / MANIFEST_FILENAME
+            ),
             input_hash=file_hash,
             output_hash=manifest_hash,
         ),

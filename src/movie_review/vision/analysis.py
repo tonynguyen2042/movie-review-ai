@@ -190,6 +190,7 @@ def run_visual_analysis(
             artifact_id=f"{ctx.job_id}-vision",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, vision_path),
             input_hash=_run_input_hash(scenes),
             output_hash=output_hash,
             model=model,

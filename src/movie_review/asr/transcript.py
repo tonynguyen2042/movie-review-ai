@@ -145,6 +145,9 @@ def run_transcript(
             artifact_id=f"{ctx.job_id}-transcript",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(
+                ctx.jobs_dir, ctx.job_id, transcript_path
+            ),
             input_hash=file_hash,
             output_hash=output_hash,
             model=model,

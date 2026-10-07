@@ -10,11 +10,11 @@ import logging
 import sqlite3
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from movie_review.artifacts import ArtifactRecord
+from movie_review.artifacts import ArtifactRecord, IntegrityReport
 from movie_review.artifacts import manager as artifacts_manager
 from movie_review.cache.manager import CacheManager
 from movie_review.domain import JobStatus, ReviewScript
@@ -865,8 +865,22 @@ def resume_job(
     )
 
 
-def validate_job(job_id: str, db_path: str | None = None) -> bool:
-    """Validate a job record and its artifacts."""
+def validate_job(job_id: str, db_path: str | None = None) -> IntegrityReport:
+    """Check that every artifact a job recorded is present and unmodified.
+
+    The records come from the artifacts table, which is the only place that knows
+    what was written and what it hashed to. Deriving them from the job status
+    instead -- which is what this did -- meant guessing filenames that were wrong
+    three different ways: the stage name is not the directory several stages write
+    into, the hash was left empty, and the jobs directory was off by one level. A
+    job with its media.json sitting on disk and its hash in the database was
+    reported invalid.
+
+    Returns:
+        An :class:`IntegrityReport`; ``passed`` is False when anything is missing,
+        corrupt or names an unsafe path.
+    """
+    from movie_review.artifacts import scan_job_integrity
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
 
@@ -875,50 +889,40 @@ def validate_job(job_id: str, db_path: str | None = None) -> bool:
     conn = sqlite3.connect(str(bootstrap(resolved_db)))
     conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
-    manager = JobManager(conn)
 
-    job = manager.get(job_id)
+    # Raises JobNotFoundError for an unknown id, which the CLI reports as a
+    # usage error rather than a traceback.
+    JobManager(conn).get(job_id)
 
-    # Run integrity check
-    from movie_review.artifacts import scan_job_integrity
-
-    # Build artifact records based on job status
-    records = _build_artifact_records(job, settings.paths.data_dir)
-    report = scan_job_integrity(settings.paths.data_dir, job_id, records)
-
-    return report.passed
+    jobs_dir = Path(settings.paths.data_dir) / "jobs"
+    records, unlocated = _records_for(conn, job_id)
+    report = scan_job_integrity(jobs_dir, job_id, records)
+    if unlocated:
+        report = replace(report, unlocated=unlocated)
+    return report
 
 
-def _build_artifact_records(job: Any, jobs_dir: str) -> list[ArtifactRecord]:
-    """Build artifact records for integrity check based on job status."""
-    from movie_review.artifacts import ArtifactRecord
-    from movie_review.domain import JobStatus
+def _records_for(conn: sqlite3.Connection, job_id: str) -> tuple[list[ArtifactRecord], list[str]]:
+    """Records for a job's artifacts, plus the ones that name no file.
+
+    A row without a ``relative_path`` predates schema 9. It cannot be located, and
+    guessing a path for it is exactly what made validation wrong before -- so it
+    is reported instead. A row without an ``output_hash`` is passed through as
+    None, which checks the file exists without claiming a comparison that was
+    never recorded; an empty string would instead mismatch every file.
+    """
+    from movie_review.storage.repositories import list_artifacts
 
     records: list[ArtifactRecord] = []
-
-    # Map job status to expected artifacts
-    if job.status in (
-        JobStatus.MEDIA_READY,
-        JobStatus.SCENES_READY,
-        JobStatus.TRANSCRIPT_READY,
-        JobStatus.VISUAL_ANALYSIS_READY,
-        JobStatus.CHARACTERS_READY,
-        JobStatus.EVENTS_READY,
-        JobStatus.STORY_READY,
-        JobStatus.REVIEW_PLAN_READY,
-        JobStatus.SCRIPT_READY,
-        JobStatus.SCRIPT_VERIFIED,
-        JobStatus.AUDIO_READY,
-        JobStatus.EDIT_PLAN_READY,
-        JobStatus.RENDERED,
-        JobStatus.QUALITY_CHECKED,
-        JobStatus.COMPLETED,
-    ):
-        records.append(ArtifactRecord(stage="media", filename="media.json", expected_hash=""))
-        records.append(ArtifactRecord(stage="scenes", filename="scenes.json", expected_hash=""))
+    unlocated: list[str] = []
+    for artifact in list_artifacts(conn, job_id):
+        if not artifact.relative_path:
+            unlocated.append(artifact.artifact_id)
+            continue
         records.append(
-            ArtifactRecord(stage="transcript", filename="transcript.json", expected_hash="")
+            ArtifactRecord(
+                relative_path=artifact.relative_path,
+                expected_hash=artifact.output_hash,
+            )
         )
-
-    # Add more based on status...
-    return records
+    return records, unlocated

@@ -123,6 +123,7 @@ def extract_themes(
             artifact_id=f"{job_id}-themes",
             job_id=job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(jobs_dir, job_id, themes_path),
             input_hash=key,
             output_hash=output_hash,
             model=model_id,

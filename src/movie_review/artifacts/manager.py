@@ -57,6 +57,40 @@ def manifest_path(jobs_dir: str | Path, job_id: str) -> Path:
     return Path(jobs_dir) / job_id / _MANIFEST_FILENAME
 
 
+def relative_artifact_path(jobs_dir: str | Path, job_id: str, path: str | Path) -> str:
+    """``path`` expressed relative to the job root, for recording.
+
+    Stages do not all write into a directory named after themselves -- ingest and
+    proxy both write into ``media/``, the quality report into ``qc/``, and
+    movie-analysis.json sits at the job root. Recording the path that was
+    actually written, rather than a stage name plus a guessed filename, is what
+    lets validation find the file instead of reconstructing where it should be.
+    """
+    root = Path(jobs_dir) / _safe_segment(job_id, "job")
+    resolved = Path(path)
+    try:
+        relative = resolved.resolve().relative_to(root.resolve())
+    except ValueError as exc:
+        raise UnsafePathError(f"{resolved} is not inside the job root {root}") from exc
+    return relative.as_posix()
+
+
+def resolve_relative(jobs_dir: str | Path, job_id: str, relative: str) -> Path:
+    """Resolve a recorded relative path; rejects anything escaping the job root.
+
+    Every segment is validated, so a tampered row cannot make a validator read
+    an arbitrary file on disk. An absolute path or a ``..`` segment fails here
+    rather than being normalised away.
+    """
+    root = Path(jobs_dir) / _safe_segment(job_id, "job")
+    segments = [segment for segment in relative.split("/") if segment]
+    if not segments:
+        raise UnsafePathError("Empty artifact path")
+    for segment in segments:
+        _safe_segment(segment, "path")
+    return root.joinpath(*segments)
+
+
 def sha256_bytes(data: bytes) -> str:
     """Hex SHA-256 of in-memory bytes."""
     return hashlib.sha256(data).hexdigest()
