@@ -191,6 +191,7 @@ The `remote` profile in `config/models.yaml` ships with placeholder hostnames (`
 ```bash
 uv run movie-review process ./my-movie.mp4 \
   --language en \
+  --target-language en \
   --duration 20m \
   --style youtube \
   --profile balanced
@@ -201,7 +202,8 @@ uv run movie-review process ./my-movie.mp4 \
 | Option | Default | Description |
 |---|---|---|
 | `MOVIE` | required | Path to the input movie. |
-| `--language` | `en` | Language of the review narration. |
+| `--language` | `en` | Source language: the movie's dialogue, and the language the review is written in. Given to ASR so it does not have to be detected. |
+| `--target-language` | = `--language` | Language the narration is spoken in. Omit it and nothing is translated. |
 | `--duration` | `20m` | Target length, e.g. `20m` or `15`. |
 | `--style` | `youtube` | Review style profile. |
 | `--profile` | from config | Model profile: `fast`, `balanced`, `quality`, or `remote`. Overrides `config/default.yaml` and `MOVIE_REVIEW_MODELS__PROFILE` for this run. |
@@ -242,6 +244,22 @@ Every line starting with `->` means that stage has just started; the `stage N/18
 A progress bar like `vision [####----] 50%` appears for stages that can divide their work up front, currently frame sampling and visual scene analysis. Both count items — frames and scenes — so the percentage is real rather than an estimate. Progress lines are throttled to one every 2 seconds: a long film reports once per scene, and printing all of them would scroll the start lines and results off the screen.
 
 Stages whose work cannot be divided report no bar. Transcription, TTS and rendering are each a single long call, and inventing a percentage that advances on its own would be worse than saying nothing — for those, the 10-second heartbeat and the elapsed time are the signal.
+
+### Speaking in another language
+
+`--language` is the source: the movie's dialogue, and the language the review is written in. `--target-language` is what the narration is spoken and subtitled in. Omit it and the two are the same, so nothing is translated and no extra model calls are made:
+
+```bash
+# Vietnamese movie, English narration
+uv run movie-review process ./phim.mp4 --language vi --target-language en
+
+# No target: narration stays in the movie's own language
+uv run movie-review process ./phim.mp4 --language vi
+```
+
+Translation runs in its own `review-translate` stage, after the script is written and before any audio exists, so chunking, synthesis, subtitles and the quality gate all see one language and cannot disagree with each other. The translated script goes to `review/review-script.<lang>.json` and the source is left untouched, so changing the target later re-translates from the original rather than from the previous translation.
+
+Each paragraph is cached on its own text, so a retry re-translates only what is missing. Names and `INSUFFICIENT_EVIDENCE` markers must survive translation intact — a model that drops the marker turns "we cannot support this" into a confident sentence, and the paragraph is rejected rather than published.
 
 When a stage fails, the run stops there and exits non-zero:
 
@@ -310,6 +328,7 @@ uv run movie-review stages
   twists: Detect twists
   story: Build movie-analysis.json
   review: Write review script
+  review-translate: Translate script to the target language
   tts-chunks: Plan and synthesize TTS chunks
   tts-concat: Concatenate narration
   tts-reconcile: Reconcile narration duration
@@ -334,8 +353,8 @@ Stage names are validated up front. An unknown name is rejected as a usage error
 $ uv run movie-review process ./my-movie.mp4 --stage-from nope
 Invalid value for '--stage-from': 'nope' is not one of 'ingest', 'scenes',
 'transcript', 'vision', 'characters', 'locations', 'events', 'arcs', 'themes',
-'twists', 'story', 'review', 'tts-chunks', 'tts-concat', 'tts-reconcile',
-'render-manifest', 'render', 'quality'
+'twists', 'story', 'review', 'review-translate', 'tts-chunks', 'tts-concat',
+'tts-reconcile', 'render-manifest', 'render', 'quality'
 $ echo $?
 2
 ```

@@ -17,6 +17,7 @@ from typing import Any
 from movie_review.artifacts import ArtifactRecord
 from movie_review.artifacts import manager as artifacts_manager
 from movie_review.cache.manager import CacheManager
+from movie_review.domain import JobStatus, ReviewScript
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.recovery import recovery_plan
 from movie_review.pipeline.context import StageContext
@@ -24,6 +25,10 @@ from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.utils import logging as ulog
 
 _logger = logging.getLogger(__name__)
+
+#: Language used when a caller states none. Matches the ASR adapter's own
+#: default so the transcript, the script and TTS all agree.
+DEFAULT_LANGUAGE = "en"
 
 # Stage execution order matching T006 state machine
 STAGE_SEQUENCE: list[tuple[str, str]] = [
@@ -39,6 +44,7 @@ STAGE_SEQUENCE: list[tuple[str, str]] = [
     ("twists", "Detect twists"),
     ("story", "Build movie-analysis.json"),
     ("review", "Write review script"),
+    ("review-translate", "Translate script to the target language"),
     ("tts-chunks", "Plan and synthesize TTS chunks"),
     ("tts-concat", "Concatenate narration"),
     ("tts-reconcile", "Reconcile narration duration"),
@@ -73,6 +79,25 @@ class PipelineContext(StageContext):
 
     movie_path: Path
     stage_progress: ProgressReporter | None = None
+    #: Language the movie's dialogue is spoken in; given to ASR so it does not
+    #: have to be detected, and treated as the source language for translation.
+    source_language: str = DEFAULT_LANGUAGE
+    #: Language the narration must end up in. Defaults to the source, which means
+    #: no translation runs at all.
+    target_language: str = DEFAULT_LANGUAGE
+
+
+def load_effective_script(ctx: PipelineContext) -> ReviewScript:
+    """The review script in the language the narration must be spoken in.
+
+    Every stage after translation -- chunking, concatenation, reconciliation and
+    the render manifest -- reads the script through here. Four of them previously
+    opened review-script.json directly, so a job that asked for another language
+    would have been spoken, and subtitled, in the source one.
+    """
+    from movie_review.review.translate import effective_script_path, load_script
+
+    return load_script(effective_script_path(ctx.jobs_dir, ctx.job_id, ctx.target_language))
 
 
 def _sub_step(ctx: PipelineContext) -> ProgressReporter | None:
@@ -164,6 +189,8 @@ def _build_context(
     movie_path: str | Path,
     db_path: str | None,
     profile: str | None = None,
+    source_language: str | None = None,
+    target_language: str | None = None,
 ) -> PipelineContext:
     """Build runtime context from settings and job database.
 
@@ -173,6 +200,10 @@ def _build_context(
 
     ``profile`` selects a ``models.yaml`` profile for this run only, overriding
     the environment and ``default.yaml``.
+
+    ``source_language`` is given to ASR and treated as the language the review is
+    written in; ``target_language`` is what the narration must end up in and
+    defaults to the source, which skips translation entirely.
     """
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
@@ -187,6 +218,7 @@ def _build_context(
     # Cache dir is under data_dir/cache
     cache_dir = data_dir / "cache"
     cache = CacheManager(cache_dir)
+    source = source_language or DEFAULT_LANGUAGE
     return PipelineContext(
         job_id=job_id,
         jobs_dir=data_dir / "jobs",
@@ -195,6 +227,10 @@ def _build_context(
         cache=cache,
         settings=settings,
         movie_path=Path(movie_path),
+        source_language=source,
+        # Not passing a target means "speak the source language", which is why
+        # this falls back to the source rather than to a fixed default.
+        target_language=target_language or source,
     )
 
 
@@ -207,6 +243,8 @@ def run_pipeline(
     on_progress: Callable[[str, StageResult | None], None] | None = None,
     profile: str | None = None,
     on_work: Callable[[str, WorkProgress], None] | None = None,
+    source_language: str | None = None,
+    target_language: str | None = None,
 ) -> list[StageResult]:
     """Execute pipeline stages in sequence with optional start/end bounds.
 
@@ -218,10 +256,19 @@ def run_pipeline(
     ``on_work`` likewise receives in-stage steps.
 
     ``profile`` selects a ``models.yaml`` profile for this run only.
+    ``source_language`` and ``target_language`` are described in
+    :func:`_build_context`.
     """
     # Pass profile by keyword: it is a trailing option, and call sites that
     # patch this helper should not have to track its position.
-    ctx = _build_context(job_id, movie_path, db_path, profile=profile)
+    ctx = _build_context(
+        job_id,
+        movie_path,
+        db_path,
+        profile=profile,
+        source_language=source_language,
+        target_language=target_language,
+    )
     results: list[StageResult] = []
     order = [name for name, _ in STAGE_SEQUENCE]
 
@@ -298,6 +345,10 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
                 cache=ctx.cache,
                 settings=ctx.settings,
             ),
+            # The CLI's --language used to be logged and then dropped, so ASR was
+            # left to auto-detect every time. Told explicitly it skips a detection
+            # pass and keeps the transcript's language column meaningful.
+            language=ctx.source_language,
         )
 
     def vision_fn(ctx: PipelineContext) -> Any:
@@ -545,8 +596,46 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             model=ctx.settings.models.reasoning.model,
         )
 
+    def review_translate_fn(ctx: PipelineContext) -> Any:
+        from movie_review.review.translate import (
+            load_script,
+            source_script_path,
+            translate_script,
+        )
+
+        source_path = source_script_path(ctx.jobs_dir, ctx.job_id)
+        script = load_script(source_path)
+
+        try:
+            result = translate_script(
+                script,
+                StageContext(
+                    job_id=ctx.job_id,
+                    jobs_dir=ctx.jobs_dir,
+                    conn=ctx.conn,
+                    manager=ctx.manager,
+                    cache=ctx.cache,
+                    settings=ctx.settings,
+                ),
+                source_language=ctx.source_language,
+                target_language=ctx.target_language,
+                model=ctx.settings.models.reasoning.model,
+                on_progress=_sub_step(ctx),
+            )
+        except Exception as exc:
+            # Recorded so `retry --stage review-translate` knows where to resume,
+            # the same way the transcript stage reports its own failures.
+            if ctx.manager.get(ctx.job_id).status is not JobStatus.FAILED:
+                ctx.manager.fail(ctx.job_id, "review-translate", str(exc))
+            raise
+
+        if result.skipped:
+            # Same language in and out: no artifact, no model call, and the
+            # source script stays the effective one.
+            return result
+        return result
+
     def tts_chunks_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import ReviewScript
         from movie_review.tts.chunks import (
             DEFAULT_VOICE,
             plan_chunks,
@@ -554,13 +643,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         )
         from movie_review.tts.factory import build_tts_adapter
 
-        script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
-        import json
-
-        with script_path.open() as f:
-            script_data = json.load(f)
-
-        script = ReviewScript.model_validate(script_data["script"])
+        script = load_effective_script(ctx)
 
         # build_tts_adapter honours ModelSpec.backend; constructing QwenTTSAdapter
         # directly ignored it and required MLX on every host.
@@ -577,7 +660,6 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         )
 
     def tts_concat_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import ReviewScript
         from movie_review.tts.chunks import (
             DEFAULT_VOICE,
             collect_chunk_results,
@@ -585,13 +667,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         )
         from movie_review.tts.concat import NARRATION_FILENAME, concatenate
 
-        script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
-        import json
-
-        with script_path.open() as f:
-            script_data = json.load(f)
-
-        script = ReviewScript.model_validate(script_data["script"])
+        script = load_effective_script(ctx)
 
         # Re-planned rather than carried in memory: concatenation is its own
         # retryable stage, and chunk IDs are positional, so the same script and
@@ -607,16 +683,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         )
 
     def tts_reconcile_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import ReviewScript
         from movie_review.tts.reconcile import run_reconciliation
 
-        script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
-        import json
-
-        with script_path.open() as f:
-            script_data = json.load(f)
-
-        script = ReviewScript.model_validate(script_data["script"])
+        script = load_effective_script(ctx)
         narration_path = Path(ctx.jobs_dir) / ctx.job_id / "tts" / "narration.wav"
         target_seconds = ctx.settings.pipeline.review.target_duration_minutes * 60
         wpm = ctx.settings.pipeline.review.target_wpm
@@ -637,19 +706,12 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         )
 
     def render_manifest_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import ReviewScript
         from movie_review.rendering.clips import select_clips
         from movie_review.rendering.manifest import assemble_manifest
         from movie_review.rendering.planner import plan_visuals
         from movie_review.storage import repositories as repo
 
-        script_path = ctx.jobs_dir / ctx.job_id / "review" / "review-script.json"
-        import json
-
-        with script_path.open() as f:
-            script_data = json.load(f)
-
-        script = ReviewScript.model_validate(script_data["script"])
+        script = load_effective_script(ctx)
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
         paragraphs = [p for s in script.sections for p in s.paragraphs]
 
@@ -744,6 +806,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         "twists": twists_fn,
         "story": story_fn,
         "review": review_fn,
+        "review-translate": review_translate_fn,
         "tts-chunks": tts_chunks_fn,
         "tts-concat": tts_concat_fn,
         "tts-reconcile": tts_reconcile_fn,
@@ -759,12 +822,15 @@ def resume_job(
     on_progress: Callable[[str, StageResult | None], None] | None = None,
     profile: str | None = None,
     on_work: Callable[[str, WorkProgress], None] | None = None,
+    source_language: str | None = None,
+    target_language: str | None = None,
 ) -> list[StageResult]:
     """Resume a job from its recovery point.
 
     ``on_progress`` is forwarded to :func:`run_pipeline`; see there.
     ``on_work`` likewise receives in-stage steps.
-    ``profile`` selects a ``models.yaml`` profile for this resume only.
+    ``profile`` selects a ``models.yaml`` profile for this resume only, and the
+    languages behave as they do for a fresh run.
     """
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
@@ -792,6 +858,8 @@ def resume_job(
         on_progress=on_progress,
         profile=profile,
         on_work=on_work,
+        source_language=source_language,
+        target_language=target_language,
     )
 
 

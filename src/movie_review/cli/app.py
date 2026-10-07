@@ -32,6 +32,7 @@ from movie_review.pipeline.orchestrator import (
     validate_job,
 )
 from movie_review.pipeline.progress import WorkProgress
+from movie_review.review.translate import TranslationError
 from movie_review.storage.database import bootstrap
 from movie_review.utils import logging as ulog
 
@@ -278,6 +279,24 @@ def _warn_unusable_backends(settings: AppSettings) -> list[str]:
     return local
 
 
+def _resolve_languages(source: str, target: str | None) -> tuple[str, str]:
+    """Validate the source language and settle the narration language.
+
+    An omitted target means the narration is spoken in the source language, which
+    skips translation entirely. Both tags are validated here so a typo is a usage
+    error rather than a job that fails several stages later with an unusable
+    filename.
+    """
+    from movie_review.review.translate import validate_language
+
+    try:
+        source_tag = validate_language(source)
+        target_tag = validate_language(target) if target else source_tag
+    except TranslationError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    return source_tag, target_tag
+
+
 def _manager(db_path: str | None) -> tuple[JobManager, sqlite3.Connection]:
     settings = load_settings()
     resolved = Path(db_path) if db_path else Path(settings.paths.data_dir) / "jobs.db"
@@ -350,7 +369,19 @@ def _startup(
 @app.command()
 def process(
     movie: Annotated[str, typer.Argument(help="Input movie file.")],
-    language: Annotated[str, typer.Option(help="Review language.")] = "en",
+    language: Annotated[
+        str,
+        typer.Option(
+            help="Source language: the movie's dialogue, and the language the review is written in."
+        ),
+    ] = "en",
+    target_language: Annotated[
+        str | None,
+        typer.Option(
+            "--target-language",
+            help="Narration language. Defaults to --language, so nothing is translated.",
+        ),
+    ] = None,
     duration: Annotated[str, typer.Option(help="Target review length, e.g. '20m'.")] = "20m",
     style: Annotated[str, typer.Option(help="Review style profile.")] = "youtube",
     profile: ProfileOption = None,
@@ -378,6 +409,9 @@ def process(
         if value is not None and value not in order:
             raise typer.BadParameter(f"Invalid value for '{flag}': {value!r} is not one of {order}")
     minutes = _parse_duration(duration)
+    # An omitted target means "speak the source language", so the fallback is the
+    # source rather than any fixed default: no translation, no extra model calls.
+    source_language, narration_language = _resolve_languages(language, target_language)
     # Resolve the profile before creating the job, so a bad name is a usage
     # error rather than a job that exists but can never run.
     selected_profile = _resolve_profile(profile, quality)
@@ -393,7 +427,8 @@ def process(
             ulog.get_logger("cli"),
             event="cli.process.accepted",
             status="ok",
-            language=language,
+            language=source_language,
+            target_language=narration_language,
             target_minutes=minutes,
             style=style,
             profile=_effective_profile(effective),
@@ -421,6 +456,8 @@ def process(
             on_progress=reporter,
             on_work=reporter.work,
             profile=selected_profile,
+            source_language=source_language,
+            target_language=narration_language,
         )
     except KeyboardInterrupt:
         reporter.close()
@@ -464,9 +501,16 @@ def resume(
     db_path: DbOption = None,
     profile: ProfileOption = None,
     quality: QualityAliasOption = None,
+    language: Annotated[str, typer.Option(help="Source language of the movie.")] = "en",
+    target_language: Annotated[
+        str | None, typer.Option("--target-language", help="Narration language.")
+    ] = None,
 ) -> None:
     """Resume an interrupted job from its last checkpoint."""
     selected_profile = _resolve_profile(profile, quality)
+    # A resume has to state the languages again: the job record never held them,
+    # so without this a translated job would quietly continue in the source one.
+    source_language, narration_language = _resolve_languages(language, target_language)
     # Same reasoning as process(): a resume that quietly falls back to an
     # unusable profile fails at the same stage the user is trying to escape.
     _warn_unusable_backends(load_settings(profile=selected_profile))
@@ -481,6 +525,8 @@ def resume(
             on_progress=reporter,
             on_work=reporter.work,
             profile=selected_profile,
+            source_language=source_language,
+            target_language=narration_language,
         )
     except KeyboardInterrupt:
         reporter.close()
@@ -499,6 +545,10 @@ def retry(
     ] = None,
     profile: ProfileOption = None,
     quality: QualityAliasOption = None,
+    language: Annotated[str, typer.Option(help="Source language of the movie.")] = "en",
+    target_language: Annotated[
+        str | None, typer.Option("--target-language", help="Narration language.")
+    ] = None,
 ) -> None:
     """Retry a failed job or specific stage."""
     from movie_review.jobs.recovery import recovery_plan
@@ -507,6 +557,7 @@ def retry(
     # Resolved before the retries start, so a bad name fails immediately instead
     # of once per attempt.
     selected_profile = _resolve_profile(profile, quality)
+    source_language, narration_language = _resolve_languages(language, target_language)
     _warn_unusable_backends(load_settings(profile=selected_profile))
     manager, conn = _manager(db_path)
     with conn:
@@ -537,6 +588,8 @@ def retry(
             on_progress=reporter,
             on_work=reporter.work,
             profile=selected_profile,
+            source_language=source_language,
+            target_language=narration_language,
         )
         if not results or not results[0].success:
             raise RuntimeError(

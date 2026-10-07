@@ -22,6 +22,7 @@ from typing import Any
 
 import pytest
 
+from movie_review.pipeline.orchestrator import STAGE_SEQUENCE
 from movie_review.pipeline.progress import WorkProgress
 
 cliapp = importlib.import_module("movie_review.cli.app")
@@ -174,8 +175,9 @@ def test_stage_lines_carry_the_run_position(reporter: Any, lines: list[str]) -> 
     reporter("scenes", StageResult(stage="scenes", success=True, duration_ms=1))
 
     joined = "\n".join(lines)
-    assert "stage 1/18" in joined
-    assert "stage 2/18" in joined
+    total = len(STAGE_SEQUENCE)
+    assert f"stage 1/{total}" in joined
+    assert f"stage 2/{total}" in joined
 
 
 def test_disabled_reporter_stays_silent(lines: list[str]) -> None:

@@ -29,7 +29,10 @@ _RESUME_STAGE: dict[JobStatus, str] = {
     JobStatus.EVENTS_READY: "arcs",
     JobStatus.STORY_READY: "review",
     JobStatus.REVIEW_PLAN_READY: "review",
-    JobStatus.SCRIPT_READY: "tts-chunks",
+    # Translation sits between writing the script and speaking it. Resuming a
+    # finished script must pass through it, or the narration would be synthesized
+    # from the source-language text while the caller asked for another language.
+    JobStatus.SCRIPT_READY: "review-translate",
     JobStatus.SCRIPT_VERIFIED: "tts-chunks",
     JobStatus.AUDIO_READY: "render-manifest",
     JobStatus.EDIT_PLAN_READY: "render",
