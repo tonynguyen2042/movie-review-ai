@@ -178,6 +178,12 @@ def run_visual_analysis(
     }
     vision_path = artifacts.artifact_path(ctx.jobs_dir, ctx.job_id, STAGE_NAME, VISION_FILENAME)
     output_hash = artifacts.write_json(vision_path, document)
+    # Persisted per scene as well as in the document. Four downstream stages need
+    # these analyses and every one of them used to reopen vision.json and
+    # re-validate the same objects; a query is both cheaper and the reason a
+    # job's visual analysis survives a deleted or moved artifact directory.
+    for analysis in analyses:
+        repo.save_scene_analysis(ctx.conn, ctx.job_id, analysis)
     repo.save_artifact(
         ctx.conn,
         Artifact(

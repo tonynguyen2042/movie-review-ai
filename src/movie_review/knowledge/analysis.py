@@ -108,14 +108,15 @@ def build_movie_analysis(ctx: StageContext) -> AnalysisResult:
         {"speaker": speaker, "character_id": character_id, "confidence": confidence}
         for speaker, character_id, confidence in repo.list_speaker_links(ctx.conn, ctx.job_id)
     ]
-    vision = _read_artifact_list(jobs_dir, ctx.job_id, "vision.json", "analyses")
     arcs = _read_artifact_list(jobs_dir, ctx.job_id, "story-arcs.json", "arcs")
     themes = _read_artifact_list(jobs_dir, ctx.job_id, "themes.json", "themes")
     twists = _read_artifact_list(jobs_dir, ctx.job_id, "twists.json", "twists")
+    # From the database, like every other consumer of the visual analyses. The
+    # other three lists here still come from their artifacts because they have no
+    # table of their own.
     analyses_by_scene = {
-        entry["scene_id"]: entry
-        for entry in vision
-        if isinstance(entry, dict) and "scene_id" in entry
+        analysis.scene_id: analysis.model_dump(mode="json")
+        for analysis in repo.list_scene_analyses(ctx.conn, ctx.job_id)
     }
 
     document: dict[str, Any] = {

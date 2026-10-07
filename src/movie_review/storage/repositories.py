@@ -31,6 +31,7 @@ from movie_review.domain import (
     Relationship,
     RelationType,
     Scene,
+    SceneAnalysis,
     TranscriptSegment,
 )
 
@@ -164,6 +165,85 @@ def save_scene(conn: sqlite3.Connection, job_id: str, scene: Scene) -> None:
                 scene.audio_energy,
             ),
         )
+
+
+def save_scene_analysis(conn: sqlite3.Connection, job_id: str, analysis: SceneAnalysis) -> None:
+    """Persist one scene's visual analysis.
+
+    Lists are stored as JSON text rather than a side table: they are only ever
+    read whole, never queried by element, and keeping one row per scene means the
+    downstream stages can join against it like any other scene record.
+    """
+    with conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO scene_analyses
+                (job_id, scene_id, location, characters_json, actions_json,
+                 objects_json, emotions_json, visual_events_json,
+                 importance, confidence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                analysis.scene_id,
+                analysis.location,
+                json.dumps(analysis.characters),
+                json.dumps(analysis.actions),
+                json.dumps(analysis.objects),
+                json.dumps(analysis.emotions),
+                json.dumps(analysis.visual_events),
+                analysis.importance,
+                analysis.confidence,
+            ),
+        )
+
+
+def _row_to_scene_analysis(row: sqlite3.Row) -> SceneAnalysis:
+    def _list(column: str) -> list[str]:
+        raw = row[column]
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            # A column that cannot be read is treated as empty rather than
+            # crashing the whole stage: the other fields are still usable, and
+            # silently dropping one list is better than losing the analysis.
+            return []
+        return [str(item) for item in parsed] if isinstance(parsed, list) else []
+
+    return SceneAnalysis(
+        scene_id=row["scene_id"],
+        location=row["location"],
+        characters=_list("characters_json"),
+        actions=_list("actions_json"),
+        objects=_list("objects_json"),
+        emotions=_list("emotions_json"),
+        visual_events=_list("visual_events_json"),
+        importance=row["importance"],
+        confidence=row["confidence"],
+    )
+
+
+def list_scene_analyses(conn: sqlite3.Connection, job_id: str) -> list[SceneAnalysis]:
+    """Every visual analysis for a job, ordered by scene.
+
+    Ordered by scene rather than by rowid so downstream stages see the analyses
+    in the same order as the scene timeline they came from.
+    """
+    rows = conn.execute(
+        "SELECT * FROM scene_analyses WHERE job_id = ? ORDER BY scene_id",
+        (job_id,),
+    ).fetchall()
+    return [_row_to_scene_analysis(row) for row in rows]
+
+
+def get_scene_analysis(
+    conn: sqlite3.Connection, job_id: str, scene_id: str
+) -> SceneAnalysis | None:
+    row = conn.execute(
+        "SELECT * FROM scene_analyses WHERE job_id = ? AND scene_id = ?",
+        (job_id, scene_id),
+    ).fetchone()
+    return _row_to_scene_analysis(row) if row is not None else None
 
 
 def _row_to_scene(row: sqlite3.Row) -> Scene:

@@ -23,6 +23,7 @@ from movie_review.domain import (
     Relationship,
     RelationType,
     Scene,
+    SceneAnalysis,
     TranscriptSegment,
 )
 from movie_review.jobs.manager import JobManager
@@ -115,10 +116,10 @@ def _harness(tmp_path: Path) -> Harness:
     )
     repo.save_speaker_link(conn, "job_1", "SPEAKER_00", "char_001", 0.8)
     jobs_dir = tmp_path / "jobs"
-    (jobs_dir / "job_1" / "vision").mkdir(parents=True)
-    (jobs_dir / "job_1" / "vision" / "vision.json").write_text(
-        json.dumps({"analyses": [{"scene_id": "scene_000001"}]}), encoding="utf-8"
-    )
+    # The scene analyses now come from the database rather than the artifact, so
+    # the fixture seeds a row. The artifact is still written by the vision stage
+    # in production; this stage no longer reads it.
+    repo.save_scene_analysis(conn, "job_1", SceneAnalysis(scene_id="scene_000001"))
     (jobs_dir / "job_1" / "story").mkdir(parents=True)
     for name, key in (("story-arcs", "arcs"), ("themes", "themes"), ("twists", "twists")):
         (jobs_dir / "job_1" / "story" / f"{name}.json").write_text(
@@ -157,7 +158,7 @@ def test_scene_carries_its_analysis(tmp_path: Path) -> None:
     result = harness.build()
     [scene] = result.document["scenes"]
     assert scene["scene_id"] == "scene_000001"
-    assert scene["analysis"] == {"scene_id": "scene_000001"}
+    assert scene["analysis"]["scene_id"] == "scene_000001"
 
 
 def test_second_run_hits_cache(tmp_path: Path) -> None:
@@ -182,8 +183,31 @@ def test_failed_job_rejected(tmp_path: Path) -> None:
         harness.build()
 
 
-def test_corrupt_vision_rejected(tmp_path: Path) -> None:
+def test_analysis_is_read_from_the_database_not_the_artifact(tmp_path: Path) -> None:
+    """A damaged artifact no longer blocks the story stage.
+
+    The visual analyses are validated when the vision stage writes them, and
+    every consumer now queries the table. A truncated vision.json used to stop
+    the pipeline here with "Cannot read"; it now costs nothing, because the
+    artifact is a copy rather than the source. Artifact integrity is still
+    checked by `movie-review validate`.
+    """
     harness = _harness(tmp_path)
+    (tmp_path / "jobs" / "job_1" / "vision").mkdir(parents=True, exist_ok=True)
     (tmp_path / "jobs" / "job_1" / "vision" / "vision.json").write_text("nope", encoding="utf-8")
-    with pytest.raises(AnalysisError, match="Cannot read"):
-        harness.build()
+
+    result = harness.build()
+
+    [scene] = result.document["scenes"]
+    assert scene["analysis"]["scene_id"] == "scene_000001"
+
+
+def test_scene_without_an_analysis_gets_none(tmp_path: Path) -> None:
+    """Missing analyses are absent, not fatal: a scene may have none."""
+    harness = _harness(tmp_path)
+    with harness.conn:
+        harness.conn.execute("DELETE FROM scene_analyses WHERE job_id = 'job_1'")
+
+    result = harness.build()
+
+    assert all(scene["analysis"] is None for scene in result.document["scenes"])

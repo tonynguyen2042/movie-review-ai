@@ -381,22 +381,13 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
     def characters_fn(ctx: PipelineContext) -> Any:
         from movie_review.characters.discovery import discover_characters, save_discovery
-        from movie_review.domain import SceneAnalysis
         from movie_review.storage import repositories as repo
 
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
-        analyses_list: list[SceneAnalysis] = []
-        vision_path = ctx.jobs_dir / ctx.job_id / "vision" / "vision.json"
-        if vision_path.is_file():
-            import json
-
-            with vision_path.open() as f:
-                vision_data = json.load(f)
-                analyses_list = [
-                    SceneAnalysis.model_validate(a)
-                    for a in vision_data.get("analyses", [])
-                    if "scene_id" in a
-                ]
+        # From the database rather than by reopening vision.json. The file
+        # stays the artifact of record; this is the queryable copy, and it is
+        # why the analyses survive a moved or pruned artifact tree.
+        analyses_list = repo.list_scene_analyses(ctx.conn, ctx.job_id)
 
         scene_spans = {scene.scene_id: (scene.start, scene.end) for scene in scenes}
         segments = repo.list_transcript_segments(ctx.conn, ctx.job_id)
@@ -412,24 +403,11 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         return result
 
     def locations_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import SceneAnalysis
         from movie_review.knowledge.locations import extract_locations, scene_locations
         from movie_review.storage import repositories as repo
 
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
-        vision_path = Path(ctx.jobs_dir) / ctx.job_id / "vision" / "vision.json"
-        analyses_list = []
-        if vision_path.is_file():
-            import json
-
-            with vision_path.open() as f:
-                vision_data = json.load(f)
-                analyses_list = vision_data.get("analyses", [])
-
-        analyses = {
-            a["scene_id"]: SceneAnalysis.model_validate(a) for a in analyses_list if "scene_id" in a
-        }
-        analyses_list = list(analyses.values())
+        analyses_list = repo.list_scene_analyses(ctx.conn, ctx.job_id)
 
         scene_spans = scene_locations(scenes)
         locations = extract_locations(analyses_list, scene_spans)
@@ -439,23 +417,11 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         return locations
 
     def events_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import SceneAnalysis
         from movie_review.storage import repositories as repo
         from movie_review.story.events import run_event_extraction
 
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
-        analyses_list = []
-        vision_path = Path(ctx.jobs_dir) / ctx.job_id / "vision" / "vision.json"
-        if vision_path.is_file():
-            import json
-
-            with vision_path.open() as f:
-                vision_data = json.load(f)
-                analyses_list = vision_data.get("analyses", [])
-
-        analyses = {
-            a["scene_id"]: SceneAnalysis.model_validate(a) for a in analyses_list if "scene_id" in a
-        }
+        analyses = {a.scene_id: a for a in repo.list_scene_analyses(ctx.conn, ctx.job_id)}
 
         characters = repo.list_characters(ctx.conn, ctx.job_id)
         segments = repo.list_transcript_segments(ctx.conn, ctx.job_id)
@@ -671,7 +637,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         )
 
     def render_manifest_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import ReviewScript, SceneAnalysis
+        from movie_review.domain import ReviewScript
         from movie_review.rendering.clips import select_clips
         from movie_review.rendering.manifest import assemble_manifest
         from movie_review.rendering.planner import plan_visuals
@@ -687,18 +653,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
         paragraphs = [p for s in script.sections for p in s.paragraphs]
 
-        # Load analyses
-        vision_path = ctx.jobs_dir / ctx.job_id / "vision" / "vision.json"
-        analyses_list: list[SceneAnalysis] = []
-        if vision_path.is_file():
-            with vision_path.open() as f:
-                vision_data = json.load(f)
-                analyses_list = [
-                    SceneAnalysis.model_validate(a)
-                    for a in vision_data.get("analyses", [])
-                    if "scene_id" in a
-                ]
-        analyses = {a.scene_id: a for a in analyses_list}
+        analyses = {a.scene_id: a for a in repo.list_scene_analyses(ctx.conn, ctx.job_id)}
 
         events = repo.list_events(ctx.conn, ctx.job_id)
 
