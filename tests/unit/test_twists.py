@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from movie_review.cache.manager import CacheManager
+from movie_review.config.settings import ModelSpec
 from movie_review.domain import Event, EventType, Job
 from movie_review.reasoning.port import ReasoningPort
 from movie_review.storage import repositories as repo
@@ -52,7 +53,7 @@ def _run(tmp_path: Path, reasoner: _FakeReasoner) -> tuple[sqlite3.Connection, T
         jobs_dir=tmp_path / "jobs",
         conn=conn,
         cache=CacheManager(tmp_path / "cache"),
-        model="test-reasoning",
+        spec=ModelSpec(model="test-reasoning"),
         reasoner=reasoner,
     )
     return conn, result
@@ -102,7 +103,7 @@ def test_unknown_foreshadowing_rejected(tmp_path: Path) -> None:
             jobs_dir=tmp_path / "jobs",
             conn=conn,
             cache=CacheManager(tmp_path / "cache"),
-            model="m",
+            spec=ModelSpec(model="m"),
             reasoner=_FakeReasoner(_twist("x", ["event_00001", "event_999"])),
         )
     conn.close()
@@ -118,7 +119,7 @@ def test_single_foreshadowing_rejected(tmp_path: Path) -> None:
             jobs_dir=tmp_path / "jobs",
             conn=conn,
             cache=CacheManager(tmp_path / "cache"),
-            model="m",
+            spec=ModelSpec(model="m"),
             reasoner=_FakeReasoner(_twist("x", ["event_00001"])),
         )
     conn.close()
@@ -134,7 +135,7 @@ def test_empty_events_rejected(tmp_path: Path) -> None:
             jobs_dir=tmp_path / "jobs",
             conn=conn,
             cache=CacheManager(tmp_path / "cache"),
-            model="m",
+            spec=ModelSpec(model="m"),
             reasoner=_FakeReasoner([]),
         )
     conn.close()

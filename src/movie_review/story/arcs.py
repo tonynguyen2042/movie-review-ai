@@ -16,9 +16,10 @@ from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.cache.manager import CacheManager
 from movie_review.config.prompts import load_prompt, render
+from movie_review.config.settings import ModelSpec
 from movie_review.domain import Artifact, Event, StoryArc
+from movie_review.reasoning.factory import build_reasoning_adapter
 from movie_review.reasoning.port import ReasoningPort
-from movie_review.reasoning.qwen import QwenReasoningAdapter
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
 
@@ -51,16 +52,25 @@ def extract_story_arcs(
     jobs_dir: str | Path,
     conn: sqlite3.Connection,
     cache: CacheManager,
-    model: str,
+    spec: ModelSpec,
     reasoner: ReasoningPort | None = None,
     prompt_version: str | None = None,
 ) -> ArcsResult:
-    """Map ordered events to story arcs; persists ``story-arcs.json``."""
+    """Map ordered events to story arcs; persists ``story-arcs.json``.
+
+    ``spec`` is the configured reasoning model. The adapter is built from it, so
+    ``backend: openai_compatible`` routes to a remote endpoint. Constructing
+    QwenReasoningAdapter directly ignored the configured backend and demanded MLX
+    on every host.
+    """
     if not events:
         raise StoryArcError("Event extraction must run before story arcs")
     prompt = load_prompt("story_arc", prompt_version)
-    active = reasoner or QwenReasoningAdapter(model)
-    model_id = active.model if isinstance(active, QwenReasoningAdapter) else type(active).__name__
+    active = reasoner or build_reasoning_adapter(spec)
+    # The adapter's own model, not its class name: a class-name key gives every
+    # remote model the same cache entry, so switching models silently reuses the
+    # previous model's output.
+    model_id = active.model
 
     selected = sorted(events, key=lambda e: (-e.importance, e.timestamp))[:MAX_EVENTS]
     selected = sorted(selected, key=lambda e: e.timestamp)
@@ -69,14 +79,14 @@ def extract_story_arcs(
         for event in selected
     )
     text = render(prompt, events=event_lines, characters=characters or "none yet")
-    spec = CacheSpec(
+    cache_spec = CacheSpec(
         stage=STAGE_NAME,
         stage_version=STAGE_VERSION,
         input_hash=artifacts.sha256_bytes(event_lines.encode("utf-8")),
         model_id=model_id,
         prompt_version=f"{prompt.name}:{prompt.version}",
     )
-    key = cache_key(spec)
+    key = cache_key(cache_spec)
     cached = cache.lookup_json(key)
     if cached is not None:
         if not isinstance(cached, list):

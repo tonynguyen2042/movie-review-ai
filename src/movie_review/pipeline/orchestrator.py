@@ -507,7 +507,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             jobs_dir=ctx.jobs_dir,
             conn=ctx.conn,
             cache=ctx.cache,
-            model=ctx.settings.models.reasoning.model,
+            spec=ctx.settings.models.reasoning,
         )
 
     def themes_fn(ctx: PipelineContext) -> Any:
@@ -525,7 +525,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             jobs_dir=ctx.jobs_dir,
             conn=ctx.conn,
             cache=ctx.cache,
-            model=ctx.settings.models.reasoning.model,
+            spec=ctx.settings.models.reasoning,
         )
 
     def twists_fn(ctx: PipelineContext) -> Any:
@@ -543,7 +543,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             jobs_dir=ctx.jobs_dir,
             conn=ctx.conn,
             cache=ctx.cache,
-            model=ctx.settings.models.reasoning.model,
+            spec=ctx.settings.models.reasoning,
         )
 
     def story_fn(ctx: PipelineContext) -> Any:
@@ -593,7 +593,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
                 cache=ctx.cache,
                 settings=ctx.settings,
             ),
-            model=ctx.settings.models.reasoning.model,
+            spec=ctx.settings.models.reasoning,
         )
 
     def review_translate_fn(ctx: PipelineContext) -> Any:
