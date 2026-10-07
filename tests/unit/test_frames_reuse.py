@@ -206,7 +206,10 @@ def _vision_ctx(workspace: _Workspace, job_id: str) -> PipelineContext:
 
 
 def test_frames_survive_a_remote_failure_and_are_reused(
-    workspace: _Workspace, counter: dict[str, int], monkeypatch: pytest.MonkeyPatch
+    workspace: _Workspace,
+    counter: dict[str, int],
+    monkeypatch: pytest.MonkeyPatch,
+    stub_analysis_proxy: None,
 ) -> None:
     """The user's report, end to end: VLM 500 on run 1, no re-decode on run 2."""
     from movie_review.vision.port import VLMUnavailableError

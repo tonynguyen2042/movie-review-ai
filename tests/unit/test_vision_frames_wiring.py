@@ -154,7 +154,9 @@ def captured_frames(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, list[Path
 # ---------------------------------------------------------------------------
 
 
-def test_vision_stage_samples_frames(ctx: PipelineContext, captured_frames: list[Any]) -> None:
+def test_vision_stage_samples_frames(
+    ctx: PipelineContext, captured_frames: list[Any], stub_analysis_proxy: None
+) -> None:
     """The stage that failed on its first scene must now supply frames."""
     _scenes(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 5.0, 35.0)])
 
@@ -168,7 +170,7 @@ def test_vision_stage_samples_frames(ctx: PipelineContext, captured_frames: list
 
 
 def test_frames_are_ordered_within_a_scene(
-    ctx: PipelineContext, captured_frames: list[Any]
+    ctx: PipelineContext, captured_frames: list[Any], stub_analysis_proxy: None
 ) -> None:
     """The VLM reads frames as a sequence; timestamp order is the sequence."""
     _scenes(ctx, [("scene_000001", 0.0, 30.0)])
@@ -182,7 +184,7 @@ def test_frames_are_ordered_within_a_scene(
 
 
 def test_frame_counts_follow_the_configured_buckets(
-    ctx: PipelineContext, captured_frames: list[Any]
+    ctx: PipelineContext, captured_frames: list[Any], stub_analysis_proxy: None
 ) -> None:
     """Short/medium/long buckets must reach the stage, not just the module."""
     # default.yaml: short_threshold 10, medium_threshold 60, 3/6/12 frames
@@ -203,7 +205,9 @@ def test_frame_counts_follow_the_configured_buckets(
     assert len(frames["scene_000003"]) == 12
 
 
-def test_no_scenes_yields_no_frames(ctx: PipelineContext, captured_frames: list[Any]) -> None:
+def test_no_scenes_yields_no_frames(
+    ctx: PipelineContext, captured_frames: list[Any], stub_analysis_proxy: None
+) -> None:
     """Degenerate input must not raise from the sampler."""
     _vision_stage()(ctx)
 
@@ -216,7 +220,10 @@ def test_no_scenes_yields_no_frames(ctx: PipelineContext, captured_frames: list[
 
 
 def test_vision_stage_reports_frame_progress(
-    ctx: PipelineContext, monkeypatch: pytest.MonkeyPatch, stub_ffmpeg: None
+    ctx: PipelineContext,
+    monkeypatch: pytest.MonkeyPatch,
+    stub_ffmpeg: None,
+    stub_analysis_proxy: None,
 ) -> None:
     """Sampling knows its frame total up front, so it must report it."""
     _scenes(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 10.0, 40.0)])
@@ -248,7 +255,10 @@ def _is_monotonic(seen: list[Any]) -> bool:
 
 
 def test_vision_stage_reports_scene_progress(
-    ctx: PipelineContext, monkeypatch: pytest.MonkeyPatch, stub_ffmpeg: None
+    ctx: PipelineContext,
+    monkeypatch: pytest.MonkeyPatch,
+    stub_ffmpeg: None,
+    stub_analysis_proxy: None,
 ) -> None:
     """One VLM call per scene is the long pole; the bar must move per scene."""
     _scenes(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 10.0, 40.0)])
@@ -296,7 +306,10 @@ def test_vision_stage_reports_scene_progress(
 
 
 def test_second_vision_run_reuses_cached_frames(
-    ctx: PipelineContext, captured_frames: list[Any], monkeypatch: pytest.MonkeyPatch
+    ctx: PipelineContext,
+    captured_frames: list[Any],
+    monkeypatch: pytest.MonkeyPatch,
+    stub_analysis_proxy: None,
 ) -> None:
     """Resuming or retrying vision must not re-extract every frame.
 
@@ -329,7 +342,7 @@ def test_second_vision_run_reuses_cached_frames(
 
 
 def test_frame_extraction_failure_fails_the_stage(
-    ctx: PipelineContext, monkeypatch: pytest.MonkeyPatch
+    ctx: PipelineContext, monkeypatch: pytest.MonkeyPatch, stub_analysis_proxy: None
 ) -> None:
     """If ffmpeg cannot extract a frame, the stage must say so."""
     from movie_review.media import ffmpeg as ff

@@ -27,7 +27,10 @@ from movie_review.utils import logging as ulog
 _logger = logging.getLogger(__name__)
 
 STAGE_NAME = "frames"
-STAGE_VERSION = "v1"
+#: Bumped to v2 when frames came from the analysis proxy rather than the
+#: original source. Same scenes, same timestamps, different pixels -- so the v1
+#: cache entries describe images that no longer match what is produced.
+STAGE_VERSION = "v2"
 MANIFEST_FILENAME = "frames.json"
 
 
@@ -191,6 +194,11 @@ def sample_movie(
     src = Path(source)
     if not src.is_file():
         raise FrameSamplingError(f"Input file not found: {src}")
+    # The hash is of the file frames are actually read from, not of the job's
+    # original movie. Sampling the proxy and sampling the source produce
+    # different pixels from identical timestamps, so the cache key has to name
+    # which one produced a frame -- otherwise switching between them would
+    # silently reuse the other's frames.
     file_hash = artifacts.sha256_file(src)
     key = frames_cache_key(file_hash, scenes, cfg)
     frames_dir = Path(jobs_dir) / job_id / STAGE_NAME

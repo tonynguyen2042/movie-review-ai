@@ -301,11 +301,38 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
     def vision_fn(ctx: PipelineContext) -> Any:
         from movie_review.media.frames import sample_movie, sampling_config_from
+        from movie_review.media.proxy import generate_proxy
         from movie_review.storage import repositories as repo
         from movie_review.vision.analysis import run_visual_analysis
 
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
         segments = repo.list_transcript_segments(ctx.conn, ctx.job_id)
+
+        # A downscaled analysis proxy, built once and reused. Frames are read from
+        # it rather than from the source: the vision adapter inlines each frame
+        # as a base64 data URI, so a 4K Blu-ray JPEG is megabytes per frame and a
+        # feature film would send gigabytes to the VLM. At 720p the same frames
+        # cost a fraction of that, and scene structure, blocking and action are
+        # what the analysis prompt actually asks about.
+        #
+        # Generated here rather than as its own stage because it exists only to
+        # make this stage's input cheaper; the checkpoint sequence and the job
+        # state machine stay untouched. generate_proxy is idempotent (cache key
+        # over the source hash and the scaling settings, re-verified against the
+        # proxy's own sha256), so retries and resumes reuse it.
+        proxy_settings = ctx.settings.media.proxy
+        proxy = generate_proxy(
+            ctx.movie_path,
+            job_id=ctx.job_id,
+            jobs_dir=ctx.jobs_dir,
+            conn=ctx.conn,
+            cache=ctx.cache,
+            max_width=proxy_settings.max_width,
+            max_height=proxy_settings.max_height,
+            preset=proxy_settings.preset,
+            crf=proxy_settings.crf,
+            ffmpeg=ctx.settings.media.ffmpeg,
+        )
 
         # Frames are the vision stage's input, sampled here for the same reason
         # the transcript stage extracts its own audio: preparation belongs to
@@ -313,11 +340,12 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         # now empty" comment, so run_visual_analysis raised "No frames for
         # <scene>" on the first scene every single time.
         #
-        # sample_movie is idempotent (cache key over file hash, scene spans and
-        # bucket settings, re-verified against each frame's sha256), so a retry
-        # or resume re-uses the frames instead of re-running ffmpeg.
+        # sample_movie is idempotent (cache key over the sampled file's hash,
+        # scene spans and bucket settings, re-verified against each frame's
+        # sha256), so a retry or resume re-uses the frames instead of re-running
+        # ffmpeg.
         sampled = sample_movie(
-            ctx.movie_path,
+            proxy.path,
             [(scene.scene_id, scene.start, scene.end) for scene in scenes],
             job_id=ctx.job_id,
             jobs_dir=ctx.jobs_dir,
