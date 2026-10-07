@@ -94,6 +94,11 @@ class ModelSpec(BaseModel):
     endpoint_path: str | None = None
     api_key_env: str | None = None
     timeout_seconds: float = Field(default=120.0, gt=0.0)
+    #: Completion-token budget for remote chat models. Left unset, each adapter
+    #: applies its own default. Set it when a reply gets cut off -- a truncated
+    #: reply is indistinguishable from prose once the closing brace is missing,
+    #: and the model needs room for every list it was asked to produce.
+    max_tokens: int | None = Field(default=None, gt=0)
 
     @property
     def is_remote(self) -> bool:
