@@ -32,6 +32,7 @@ from movie_review.pipeline.orchestrator import (
     validate_job,
 )
 from movie_review.pipeline.progress import WorkProgress
+from movie_review.publishing.metadata import VideoMetadata
 from movie_review.review.translate import TranslationError
 from movie_review.storage.database import bootstrap
 from movie_review.utils import logging as ulog
@@ -634,6 +635,185 @@ def retry(
         raise typer.Exit(code=1) from exc
     finally:
         reporter.close()
+
+
+@app.command("publish-platforms")
+def publish_platforms() -> None:
+    """List supported publishing platforms and whether each can upload here."""
+    from movie_review.publishing.registry import build_adapter, platform_names, unavailable_reason
+
+    typer.echo("Supported platforms:")
+    for name in platform_names():
+        adapter = build_adapter(name)
+        if adapter.available():
+            typer.echo(f"  {name}: ready")
+        else:
+            typer.echo(f"  {name}: unavailable -- {unavailable_reason(name, adapter)}", err=True)
+    typer.echo(
+        "\nCredentials come from the environment "
+        "(MOVIE_REVIEW_FACEBOOK_PAGE_ID, MOVIE_REVIEW_FACEBOOK_TOKEN, "
+        "MOVIE_REVIEW_TIKTOK_TOKEN), never from config files."
+    )
+
+
+@app.command()
+def publish(
+    job_id: Annotated[str, typer.Argument(help="Job ID.")],
+    platform: Annotated[
+        str, typer.Option("--platform", help="youtube, facebook or tiktok.")
+    ] = "youtube",
+    db_path: DbOption = None,
+    profile: ProfileOption = None,
+    language: Annotated[str, typer.Option(help="Target language for the metadata.")] = "en",
+    privacy: Annotated[str, typer.Option(help="Privacy level for the upload.")] = "unlisted",
+    confirm: Annotated[
+        bool,
+        typer.Option("--confirm", help="Actually upload. Without it, only preview."),
+    ] = False,
+    title_override: Annotated[
+        str | None, typer.Option("--title", help="Use this title instead of the generated one.")
+    ] = None,
+    description_override: Annotated[
+        str | None, typer.Option("--description", help="Use this description instead.")
+    ] = None,
+) -> None:
+    """Generate metadata for a rendered video and optionally upload it.
+
+    Nothing leaves this machine unless ``--confirm`` is passed. The default
+    prints the title, description and tags and stops, so a title can be read and
+    judged before it becomes public.
+
+    Copyright: this makes no claim that any clip duration or percentage is
+    legally safe. That determination depends on actual use and jurisdiction.
+    """
+    from movie_review.publishing.registry import build_adapter, is_platform, platform_names
+
+    if not is_platform(platform):
+        raise typer.BadParameter(
+            f"Unknown platform {platform!r}; expected one of {', '.join(platform_names())}"
+        )
+    _resolve_languages(language, None)
+    selected_profile = _resolve_profile(profile, None)
+    settings = load_settings(profile=selected_profile)
+    _warn_unusable_backends(settings)
+
+    manager, conn = _manager(db_path)
+    with conn:
+        job = _load_job(manager, job_id)
+
+    from movie_review.pipeline.context import StageContext
+    from movie_review.publishing.ai_metadata import (
+        PublishingMetadataError,
+        generate_publishing_metadata,
+        metadata_path,
+        recorded_video_path,
+    )
+    from movie_review.publishing.metadata import build_chapters
+    from movie_review.publishing.thumbnail import thumbnail_path
+    from movie_review.review.translate import effective_script_path, load_script
+
+    ctx = StageContext.from_settings(settings, conn, job_id)
+    video = recorded_video_path(ctx)
+    if video is None:
+        typer.echo(
+            f"No rendered video for {job_id}. Run the pipeline through the render stage first.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    # The translated script when the job produced one, the source otherwise --
+    # the same rule every downstream stage follows, so the packaging describes the
+    # video that was actually rendered.
+    script = load_script(effective_script_path(ctx.jobs_dir, job_id, language))
+    chapters = build_chapters(script)
+
+    existing = metadata_path(ctx.jobs_dir, job_id)
+    if existing.is_file() and not confirm:
+        from movie_review.publishing.ai_metadata import load_metadata
+
+        metadata = load_metadata(existing)
+        typer.echo(f"Using existing metadata: {existing}", err=True)
+    else:
+        try:
+            result = generate_publishing_metadata(
+                script,
+                ctx,
+                movie_title=job.input_file.rsplit("/", 1)[-1].rsplit(".", 1)[0],
+                platform=platform,
+                target_language=language,
+                spec=settings.models.reasoning,
+                chapters=chapters,
+            )
+        except PublishingMetadataError as exc:
+            typer.echo(f"Could not generate metadata: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        metadata = result.metadata
+        typer.echo(
+            f"Generated metadata (model={result.model}, prompt={result.prompt_version}, "
+            f"cache_hit={result.cache_hit})",
+            err=True,
+        )
+
+    if title_override:
+        metadata = _with_title(metadata, title_override)
+    if description_override:
+        metadata = _with_description(metadata, description_override)
+
+    typer.echo("")
+    typer.echo(f"Video   : {video}")
+    typer.echo(f"Platform: {platform}  privacy={privacy}")
+    typer.echo(f"Title   : {metadata.title}")
+    typer.echo("")
+    typer.echo("Description:")
+    typer.echo(metadata.description)
+    typer.echo("")
+    typer.echo(f"Tags    : {', '.join(metadata.tags)}")
+    typer.echo("")
+
+    if not confirm:
+        typer.echo("Preview only. Re-run with --confirm to upload.")
+        return
+
+    from movie_review.publishing.port import PublishingError, UploadRequest
+
+    try:
+        adapter = build_adapter(platform)
+        if not adapter.available():
+            from movie_review.publishing.registry import unavailable_reason
+
+            typer.echo(
+                f"{platform} cannot upload here: {unavailable_reason(platform, adapter)}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        thumb = thumbnail_path(ctx.jobs_dir, job_id)
+        receipt = adapter.upload(
+            UploadRequest(
+                video_path=video,
+                metadata=metadata,
+                thumbnail_path=thumb if thumb.is_file() else None,
+                privacy=privacy,
+            )
+        )
+    except PublishingError as exc:
+        typer.echo(f"Upload failed: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Uploaded: {receipt.url or receipt.video_id} (status={receipt.status})")
+
+
+def _with_title(metadata: VideoMetadata, title: str) -> VideoMetadata:
+    """Metadata with a caller-supplied title, for a human edit before upload."""
+    from dataclasses import replace
+
+    return replace(metadata, title=title)
+
+
+def _with_description(metadata: VideoMetadata, description: str) -> VideoMetadata:
+    """Metadata with a caller-supplied description."""
+    from dataclasses import replace
+
+    return replace(metadata, description=description)
 
 
 @app.command()
