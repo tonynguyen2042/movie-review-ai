@@ -15,6 +15,7 @@ from pathlib import Path
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.domain import ReviewScript, SpeechAudio, TTSRequest
+from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.tts.port import TTSPort
 from movie_review.utils import logging as ulog
 
@@ -22,6 +23,17 @@ _logger = logging.getLogger(__name__)
 
 WORDS_PER_60S = 150
 _CHUNK_DIR = "tts"
+
+#: Voice used for narration unless a caller overrides it. Defined here because
+#: two stages need the same value: tts-chunks synthesizes with it and tts-concat
+#: re-derives the chunk plan to find the files. If they disagreed, the
+#: concatenation metadata would name a voice nobody synthesised.
+DEFAULT_VOICE = "default"
+
+
+class ChunkCollectionError(Exception):
+    """Synthesized chunks could not be located for concatenation."""
+
 
 _SENTENCE_RE = re.compile(r"(?<=[.!?…])\s+")
 
@@ -125,9 +137,62 @@ def synthesize_chunks(
     port: TTSPort,
     jobs_dir: str | Path,
     job_id: str,
+    on_progress: ProgressReporter | None = None,
 ) -> list[ChunkResult]:
-    """Synthesize chunks in order (retry granularity stays per chunk)."""
+    """Synthesize chunks in order (retry granularity stays per chunk).
+
+    Reports one step per chunk when ``on_progress`` is given. Each chunk is a
+    separate round trip to the TTS endpoint, so the total is known up front and
+    the fraction is real.
+    """
+    results: list[ChunkResult] = []
     try:
-        return [synthesize_chunk(chunk, port, jobs_dir, job_id) for chunk in chunks]
+        for index, chunk in enumerate(chunks, start=1):
+            results.append(synthesize_chunk(chunk, port, jobs_dir, job_id))
+            if on_progress is not None:
+                on_progress(
+                    WorkProgress(
+                        done=index, total=len(chunks), label=f"chunk {index}/{len(chunks)}"
+                    )
+                )
     finally:
         port.unload()
+    return results
+
+
+def collect_chunk_results(
+    chunks: list[TTSChunk],
+    jobs_dir: str | Path,
+    job_id: str,
+) -> list[ChunkResult]:
+    """Re-derive :class:`ChunkResult` for chunks synthesized in an earlier run.
+
+    Concatenation is a separate, retryable stage, so it cannot carry results in
+    memory from synthesis. It re-plans with the same inputs to obtain the same
+    chunk IDs -- they are positional, derived from the script -- and measures each
+    file rather than trusting a recorded duration, so a chunk that was truncated
+    or replaced is reported at its real length.
+
+    Raises:
+        ChunkCollectionError: if a planned chunk has no file. Continuing would
+            silently produce narration that is missing a paragraph.
+    """
+    from movie_review.tts.reconcile import measure_wav
+
+    if not chunks:
+        raise ChunkCollectionError("Nothing to concatenate: the script planned no chunks")
+
+    results: list[ChunkResult] = []
+    for chunk in chunks:
+        path = artifacts.artifact_path(jobs_dir, job_id, _CHUNK_DIR, chunk_filename(chunk.chunk_id))
+        if not path.is_file():
+            raise ChunkCollectionError(
+                f"Missing synthesized chunk {chunk.chunk_id} for paragraph "
+                f"{chunk.paragraph_id} at {path}"
+            )
+        try:
+            duration = measure_wav(path)
+        except Exception as exc:  # measure_wav raises ReconciliationError
+            raise ChunkCollectionError(f"Cannot measure chunk {path}: {exc}") from exc
+        results.append(ChunkResult(chunk=chunk, path=path, duration_seconds=duration))
+    return results

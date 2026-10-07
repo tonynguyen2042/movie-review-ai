@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from movie_review.artifacts import ArtifactRecord
+from movie_review.artifacts import manager as artifacts_manager
 from movie_review.cache.manager import CacheManager
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.recovery import recovery_plan
@@ -580,7 +581,11 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
     def tts_chunks_fn(ctx: PipelineContext) -> Any:
         from movie_review.domain import ReviewScript
-        from movie_review.tts.chunks import plan_chunks, synthesize_chunks
+        from movie_review.tts.chunks import (
+            DEFAULT_VOICE,
+            plan_chunks,
+            synthesize_chunks,
+        )
         from movie_review.tts.factory import build_tts_adapter
 
         script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
@@ -594,14 +599,46 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         # build_tts_adapter honours ModelSpec.backend; constructing QwenTTSAdapter
         # directly ignored it and required MLX on every host.
         port = build_tts_adapter(ctx.settings.models.tts)
-        chunks = plan_chunks(script, voice="default")
-        return synthesize_chunks(chunks, port, ctx.jobs_dir, ctx.job_id)
+        # Same voice constant the concat stage re-plans with, so the narration
+        # metadata names the voice that actually synthesised the audio.
+        chunks = plan_chunks(script, voice=DEFAULT_VOICE)
+        return synthesize_chunks(
+            chunks,
+            port,
+            ctx.jobs_dir,
+            ctx.job_id,
+            on_progress=_sub_step(ctx),
+        )
 
     def tts_concat_fn(ctx: PipelineContext) -> Any:
+        from movie_review.domain import ReviewScript
+        from movie_review.tts.chunks import (
+            DEFAULT_VOICE,
+            collect_chunk_results,
+            plan_chunks,
+        )
+        from movie_review.tts.concat import NARRATION_FILENAME, concatenate
 
-        # Load chunk results from artifacts
-        # This is simplified - in practice would load from chunk metadata
-        pass
+        script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
+        import json
+
+        with script_path.open() as f:
+            script_data = json.load(f)
+
+        script = ReviewScript.model_validate(script_data["script"])
+
+        # Re-planned rather than carried in memory: concatenation is its own
+        # retryable stage, and chunk IDs are positional, so the same script and
+        # voice reproduce the same plan. Durations are measured from the files.
+        planned = plan_chunks(script, voice=DEFAULT_VOICE)
+        chunks = collect_chunk_results(planned, ctx.jobs_dir, ctx.job_id)
+
+        # Deliberately no cache lookup: joining WAVs is pure local I/O and
+        # redoing it costs a second, while a stale narration.wav would be worse.
+        return concatenate(
+            chunks,
+            artifacts_manager.artifact_path(ctx.jobs_dir, ctx.job_id, "tts", NARRATION_FILENAME),
+        )
 
     def tts_reconcile_fn(ctx: PipelineContext) -> Any:
         from movie_review.domain import ReviewScript
