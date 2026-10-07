@@ -261,6 +261,17 @@ Translation runs in its own `review-translate` stage, after the script is writte
 
 Each paragraph is cached on its own text, so a retry re-translates only what is missing. Names and `INSUFFICIENT_EVIDENCE` markers must survive translation intact — a model that drops the marker turns "we cannot support this" into a confident sentence, and the paragraph is rejected rather than published.
 
+Translation has its own model slot in `config/models.yaml`, so it can be a different size, quantisation or host than the reasoning model:
+
+```yaml
+translation:
+  model: Qwen3.5-9B
+  backend: openai_compatible
+  base_url: http://gpu-box.local:8000/v1
+```
+
+A profile that omits the slot borrows `reasoning`, which is what it did before the slot existed. The paragraph cache is keyed on the translation model, so pointing it at a different checkpoint re-translates rather than reusing the previous model's prose.
+
 When a stage fails, the run stops there and exits non-zero:
 
 ```text

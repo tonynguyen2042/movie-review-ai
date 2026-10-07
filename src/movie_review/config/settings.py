@@ -163,6 +163,17 @@ class ModelsSettings(BaseModel):
     reasoning: ModelSpec
     critic: ModelSpec
     tts: ModelSpec
+    #: Dedicated translation model. Optional: a profile that does not declare
+    #: one borrows ``reasoning``, which is what it did before the slot existed.
+    #: Optional rather than defaulted because there is no sensible checkpoint to
+    #: name here, and an invented default would be used by every profile that
+    #: forgot to set it.
+    translation: ModelSpec | None = None
+
+    @property
+    def effective_translation(self) -> ModelSpec:
+        """The spec translation should actually run on."""
+        return self.translation or self.reasoning
 
 
 class ReviewSettings(BaseModel):

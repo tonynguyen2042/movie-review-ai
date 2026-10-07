@@ -47,6 +47,16 @@ def extract_json_output(text: str) -> Any:
 class ReasoningPort(ABC):
     """Text completion with structured-output helpers."""
 
+    @property
+    def model(self) -> str:
+        """Model identity recorded in artifacts and cache keys.
+
+        Concrete adapters override it with the configured checkpoint. See
+        :attr:`movie_review.asr.port.ASRPort.model` for why this is part of the
+        contract rather than something callers should reach for by type check.
+        """
+        return type(self).__name__
+
     @abstractmethod
     def complete(self, prompt: str, *, temperature: float = 0.4) -> str:
         """Complete a prompt with raw model text."""

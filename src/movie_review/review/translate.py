@@ -27,12 +27,13 @@ from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.cache.manager import CacheManager
 from movie_review.config.prompts import Prompt, load_prompt, render
+from movie_review.config.settings import ModelSpec
 from movie_review.domain import Artifact, JobStatus, ReviewScript, ReviewSection
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
 from movie_review.pipeline.progress import ProgressReporter, WorkProgress
+from movie_review.reasoning.factory import build_reasoning_adapter
 from movie_review.reasoning.port import ReasoningPort
-from movie_review.reasoning.qwen import QwenReasoningAdapter
 from movie_review.review.writer import SCRIPT_FILENAME
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
@@ -244,16 +245,24 @@ def translate_script(
     *,
     source_language: str,
     target_language: str,
-    model: str,
+    spec: ModelSpec,
     reasoner: ReasoningPort | None = None,
     prompt_version: str | None = None,
     on_progress: ProgressReporter | None = None,
 ) -> TranslationResult:
     """Translate ``script`` paragraph by paragraph and persist the result.
 
+    ``spec`` is the dedicated translation model, not the reasoning one: a
+    translation model is typically a different size, sometimes on a different
+    host, and it is the one the operator would want to swap without touching
+    anything else. The adapter is built from the spec, so ``backend:
+    openai_compatible`` is honoured rather than assumed to be local MLX.
+
     Each paragraph is cached on its own text, its target language, the model and
     the prompt version, so a retry after a failure re-translates only what is
-    missing, and editing one paragraph does not invalidate the rest.
+    missing, editing one paragraph does not invalidate the rest, and pointing at
+    a different translation model produces different output rather than reusing
+    the previous model's.
     """
     source = validate_language(source_language)
     target = validate_language(target_language)
@@ -276,9 +285,11 @@ def translate_script(
 
     prompt = load_prompt("translate", prompt_version)
     version = f"{prompt.name}:{prompt.version}"
-    active = reasoner or QwenReasoningAdapter(model)
-    model_id = active.model if isinstance(active, QwenReasoningAdapter) else type(active).__name__
-
+    # Built from the spec so a remote translation endpoint is actually used;
+    # constructing QwenReasoningAdapter directly would demand MLX on every host,
+    # the same defect the other stages had.
+    active = reasoner or build_reasoning_adapter(spec)
+    model_id = active.model
     sections: list[ReviewSection] = []
     translated = 0
     hits = 0

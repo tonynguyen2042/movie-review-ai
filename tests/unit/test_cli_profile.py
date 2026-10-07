@@ -247,8 +247,22 @@ def test_log_states_each_slot_backend(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     backends = _accepted_log(result.output)["backends"]
-    assert set(backends) == {"asr", "vision", "reasoning", "tts"}
+    assert set(backends) == {"asr", "vision", "reasoning", "tts", "translation"}
     assert backends["asr"].startswith("openai_compatible:")
+
+
+def test_translation_slot_is_logged_even_when_borrowed(tmp_path: Path) -> None:
+    """The log answers "which model will translate", not "did I configure one"."""
+    result = runner.invoke(
+        app,
+        ["process", str(_movie(tmp_path)), "--db-path", _db(tmp_path), "--no-run"],
+    )
+    assert result.exit_code == 0, result.output
+    backends = _accepted_log(result.output)["backends"]
+    models = cliapp.load_settings().models
+    assert backends["translation"] == (
+        f"{models.effective_translation.backend}:{models.effective_translation.model}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +278,10 @@ def test_warns_when_a_local_slot_cannot_run(monkeypatch: pytest.MonkeyPatch) -> 
     warned: list[str] = []
     monkeypatch.setattr(cliapp.typer, "echo", lambda msg, **kw: warned.append(msg))
 
-    assert cliapp._warn_unusable_backends(settings) == ["asr", "vision", "reasoning", "tts"]
+    # Sorted, and no "translation": this profile borrows reasoning, so listing
+    # it separately would point the operator at a slot they never configured.
+    assert cliapp._warn_unusable_backends(settings) == ["asr", "reasoning", "tts", "vision"]
+    assert settings.models.translation is None
     assert any("cannot run on" in m for m in warned)
 
 

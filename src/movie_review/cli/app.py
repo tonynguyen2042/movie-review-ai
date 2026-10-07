@@ -226,7 +226,9 @@ class _ProgressReporter:
             self._stage_started = None
 
 
-#: Model slots that pick a runtime through ``ModelSpec.backend``.
+#: Model slots that pick a runtime through ``ModelSpec.backend``. ``translation``
+#: is optional, so it is resolved rather than read: a profile without one borrows
+#: reasoning and must not be reported twice.
 MODEL_SLOTS = ("asr", "vision", "reasoning", "tts")
 
 
@@ -243,10 +245,9 @@ def _effective_profile(settings: AppSettings) -> str:
 
 def _slot_backends(settings: AppSettings) -> dict[str, str]:
     """Per-slot ``backend:model``, for the acceptance log."""
-    return {
-        slot: f"{getattr(settings.models, slot).backend}:{getattr(settings.models, slot).model}"
-        for slot in MODEL_SLOTS
-    }
+    slots = {name: getattr(settings.models, name) for name in MODEL_SLOTS}
+    slots["translation"] = settings.models.effective_translation
+    return {name: f"{spec.backend}:{spec.model}" for name, spec in slots.items()}
 
 
 def _mlx_available_on_this_host() -> bool:
@@ -262,11 +263,15 @@ def _mlx_available_on_this_host() -> bool:
 
 def _warn_unusable_backends(settings: AppSettings) -> list[str]:
     """Warn about local slots on a host without MLX; return the slot names."""
-    local = [
-        slot
-        for slot in MODEL_SLOTS
-        if getattr(settings.models, slot).backend != "openai_compatible"
-    ]
+    candidates: dict[str, str] = {
+        name: getattr(settings.models, name).backend for name in MODEL_SLOTS
+    }
+    candidates["translation"] = settings.models.effective_translation.backend
+    # A translation slot that merely borrows reasoning is the same local model,
+    # so it is not reported twice.
+    if settings.models.translation is None:
+        candidates.pop("translation")
+    local = sorted(name for name, backend in candidates.items() if backend != "openai_compatible")
     if not local or _mlx_available_on_this_host():
         return []
     typer.echo(

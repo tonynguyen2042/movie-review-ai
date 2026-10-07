@@ -25,7 +25,12 @@ from typing import Any
 import pytest
 
 from movie_review.cache.manager import CacheManager
-from movie_review.config.settings import load_settings
+from movie_review.config.settings import (
+    ModelSpec,
+    ModelsSettings,
+    available_profiles,
+    load_settings,
+)
 from movie_review.domain import Job, JobStatus, ReviewScript
 from movie_review.jobs.manager import JobManager
 from movie_review.pipeline.context import StageContext
@@ -76,14 +81,15 @@ def _script(paragraphs: int = 2) -> ReviewScript:
 class _RecordingReasoner(ReasoningPort):
     """Returns a marked translation and records every prompt it was given."""
 
-    def __init__(self, reply: str | None = None) -> None:
+    def __init__(self, reply: str | None = None, model_name: str = "fake-reasoner") -> None:
         self.prompts: list[str] = []
         self.calls = 0
+        self.model_name = model_name
         self._reply = reply
 
     @property
     def model(self) -> str:
-        return "fake-reasoner"
+        return self.model_name
 
     def complete(self, prompt: str, *, temperature: float = 0.4) -> str:
         self.prompts.append(prompt)
@@ -147,7 +153,7 @@ def _translate(ctx: _Ctx, script: ReviewScript, **kwargs: Any) -> TranslationRes
     options: dict[str, Any] = {
         "source_language": SOURCE,
         "target_language": TARGET,
-        "model": "fake",
+        "spec": ModelSpec(model="fake-translator"),
         "reasoner": ctx.reasoner,
     }
     options.update(kwargs)
@@ -480,3 +486,106 @@ def test_context_defaults_target_to_source(tmp_path: Path) -> None:
     built = _build_context("job_x", tmp_path / "m.mp4", str(tmp_path / "jobs.db"))
 
     assert built.target_language == built.source_language == "en"
+
+
+# ---------------------------------------------------------------------------
+# The dedicated translation model
+# ---------------------------------------------------------------------------
+
+
+def test_translation_slot_falls_back_to_reasoning() -> None:
+    """A profile that does not declare one keeps its previous behaviour."""
+    models = load_settings(profile="balanced").models
+
+    assert models.translation is None
+    assert models.effective_translation.model == models.reasoning.model
+
+
+def test_translation_slot_is_independent_when_declared() -> None:
+    """The whole point: swap the translator without touching reasoning."""
+    models = ModelsSettings(
+        asr=ModelSpec(model="asr"),
+        vision=ModelSpec(model="vision"),
+        reasoning=ModelSpec(model="Qwen3.5-27B"),
+        critic=ModelSpec(model="critic"),
+        tts=ModelSpec(model="tts"),
+        translation=ModelSpec(model="Qwen3.5-9B"),
+    )
+
+    assert models.effective_translation.model == "Qwen3.5-9B"
+    assert models.reasoning.model == "Qwen3.5-27B"
+
+
+def test_every_shipped_profile_resolves_a_translation_model() -> None:
+    for name in available_profiles():
+        models = load_settings(profile=name).models
+        assert models.effective_translation.model, name
+
+
+def test_remote_profile_declares_its_own_translator() -> None:
+    """The remote profile is the one a non-Apple host actually runs."""
+    spec = load_settings(profile="remote").models.effective_translation
+
+    assert spec.model != load_settings(profile="remote").models.reasoning.model
+
+
+def test_translation_honours_the_configured_backend() -> None:
+    """A remote translation endpoint must not be reached through MLX.
+
+    Building the adapter by hand -- as this function used to -- ignored the
+    backend and demanded mlx-vlm on every host.
+    """
+    from movie_review.reasoning.factory import build_reasoning_adapter
+
+    spec = ModelSpec(
+        model="translator",
+        backend="openai_compatible",
+        base_url="http://gpu:8000/v1",
+    )
+    adapter = build_reasoning_adapter(spec)
+
+    assert type(adapter).__name__ == "OpenAICompatAdapter"
+    assert adapter.model == "translator"
+
+
+def test_the_stage_passes_the_translation_slot(tmp_path: Path) -> None:
+    """Not the reasoning slot: that is the bug this slot exists to prevent."""
+    import inspect
+
+    from movie_review.pipeline import orchestrator
+
+    source = inspect.getsource(orchestrator._get_stage_function)
+    assert "effective_translation" in source
+    assert "models.reasoning.model" not in source.split("review_translate_fn")[1].split("def ")[0]
+
+
+def test_translation_model_identity_enters_the_cache_key(ctx: _Ctx) -> None:
+    """Pointing at a different translator must not reuse the old one's output.
+
+    The cache key uses the identity of the adapter that actually ran, which in
+    production is the configured spec's model -- swap the translation model in
+    models.yaml and every paragraph is translated again, rather than the new
+    model silently inheriting the old model's cached prose.
+    """
+    _translate(ctx, _script())
+    first_calls = ctx.reasoner.calls
+
+    # A different adapter identity, same cache directory.
+    ctx.reasoner = _RecordingReasoner(model_name="translator-b")
+    second = _translate(ctx, _script())
+
+    assert first_calls == 2
+    assert second.cache_hits == 0, "reused another model's cached text"
+    assert second.translated_paragraphs == 2
+    assert ctx.reasoner.calls == 2
+
+
+def test_same_model_reuses_the_cache(ctx: _Ctx) -> None:
+    """The control: an unchanged configuration must still hit the cache."""
+    _translate(ctx, _script())
+    calls = ctx.reasoner.calls
+
+    second = _translate(ctx, _script())
+
+    assert second.cache_hits == 2
+    assert ctx.reasoner.calls == calls

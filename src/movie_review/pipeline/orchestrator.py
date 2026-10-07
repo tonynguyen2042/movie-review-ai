@@ -619,7 +619,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
                 ),
                 source_language=ctx.source_language,
                 target_language=ctx.target_language,
-                model=ctx.settings.models.reasoning.model,
+                # The dedicated translation slot, which falls back to reasoning
+                # when a profile does not declare one.
+                spec=ctx.settings.models.effective_translation,
                 on_progress=_sub_step(ctx),
             )
         except Exception as exc:
