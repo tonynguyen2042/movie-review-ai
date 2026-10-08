@@ -1,0 +1,48 @@
+# electron-builder configuration for the desktop app (T111).
+#
+# The Python side is deliberately NOT bundled. The app shells out to the
+# repository's own `uv run movie-review`, so a packaged build runs the pipeline
+# the user has configured rather than a frozen copy that silently drifts from
+# config/ and the prompts. The trade-off is that the packaged app needs the repo
+# and uv on the machine; that is the same requirement as running the CLI.
+appId: dev.moviereview.desktop
+productName: Movie Review
+copyright: Movie Review contributors
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - src/**/*
+  - package.json
+  - "!**/*.map"
+
+extraMetadata:
+  main: src/main/main.js
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  category: public.app-category.video
+  # Unsigned by default: signing needs an Apple identity, and an unsigned build
+  # is still the honest artefact for local use. The CLI, not the app, is what
+  # needs notarisation for distribution.
+  identity: null
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+
+# No bundled pipeline: these are external, not packaged.
+asar: true

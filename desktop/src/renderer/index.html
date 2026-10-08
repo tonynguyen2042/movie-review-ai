@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- No remote origins, no inline script, no eval: the renderer loads local
+         files and talks to Node only through the preload bridge. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self';"
+    />
+    <title>Movie Review</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">MR</span>
+        <div>
+          <h1>Movie Review</h1>
+          <p id="repo-root" class="muted">loading&hellip;</p>
+        </div>
+      </div>
+      <nav class="tabs" role="tablist">
+        <button class="tab is-active" data-tab="run" role="tab">Run</button>
+        <button class="tab" data-tab="jobs" role="tab">Jobs</button>
+        <button class="tab" data-tab="models" role="tab">Models</button>
+        <button class="tab" data-tab="settings" role="tab">Settings</button>
+      </nav>
+    </header>
+
+    <div id="banner" class="banner" hidden></div>
+
+    <main>
+      <!-- ------------------------------------------------------------ Run -->
+      <section class="panel is-active" data-panel="run">
+        <div class="run-layout">
+          <form class="card form" id="form">
+            <h2>New run</h2>
+
+            <label class="field">
+              <span>Command</span>
+              <select id="command" name="command">
+                <option value="process">process &mdash; new movie</option>
+                <option value="resume">resume &mdash; continue a job</option>
+                <option value="retry">retry &mdash; rerun a failed stage</option>
+                <option value="publish">publish &mdash; metadata and upload</option>
+              </select>
+            </label>
+
+            <label class="field" id="movie-field">
+              <span>Movie file</span>
+              <span class="row">
+                <input type="text" id="movie" name="movie" placeholder="/path/to/movie.mkv" />
+                <button type="button" id="pick-movie" class="ghost">Browse&hellip;</button>
+              </span>
+            </label>
+
+            <label class="field" id="job-field" hidden>
+              <span>Job id</span>
+              <span class="row">
+                <input type="text" id="jobId" name="jobId" placeholder="job_20261008_001" />
+                <button type="button" id="pick-job" class="ghost">From jobs&hellip;</button>
+              </span>
+            </label>
+
+            <div id="dynamic-fields" class="fields"></div>
+
+            <div class="preview" id="preview" aria-live="polite"></div>
+
+            <div class="actions">
+              <button type="button" id="start" class="primary">Start</button>
+              <button type="button" id="stop" class="danger" disabled>Stop</button>
+              <button type="button" id="validate" class="ghost">Validate artifacts</button>
+            </div>
+            <p class="hint" id="run-hint"></p>
+          </form>
+
+          <div class="card progress-card">
+            <h2>Progress</h2>
+            <div class="overall">
+              <div class="bar"><div class="bar-fill" id="overall-fill"></div></div>
+              <span id="overall-text" class="muted">idle</span>
+            </div>
+            <div class="stage-now">
+              <strong id="stage-now">no stage running</strong>
+              <div class="bar thin">
+                <div class="bar-fill" id="stage-fill"></div>
+              </div>
+              <span id="stage-label" class="muted"></span>
+            </div>
+            <ol class="stages" id="stages"></ol>
+          </div>
+        </div>
+
+        <div class="card log-card">
+          <div class="card-head">
+            <h2>Log</h2>
+            <div class="row">
+              <label class="inline">
+                <input type="checkbox" id="autoscroll" checked />
+                follow
+              </label>
+              <button type="button" id="clear-log" class="ghost">Clear</button>
+            </div>
+          </div>
+          <div class="log" id="log" tabindex="0"></div>
+        </div>
+      </section>
+
+      <!-- ----------------------------------------------------------- Jobs -->
+      <section class="panel" data-panel="jobs">
+        <div class="card">
+          <div class="card-head">
+            <h2>Jobs</h2>
+            <div class="row">
+              <button type="button" id="refresh-jobs" class="ghost">Refresh</button>
+              <button type="button" id="open-output" class="ghost" disabled>
+                Open output folder
+              </button>
+            </div>
+          </div>
+          <table class="jobs">
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Status</th>
+                <th>Stage</th>
+                <th>Input</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody id="jobs-body">
+              <tr class="empty">
+                <td colspan="5">loading&hellip;</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------------- Models -->
+      <section class="panel" data-panel="models">
+        <div class="card">
+          <div class="card-head">
+            <h2>Model catalog</h2>
+            <div class="row">
+              <label class="inline">
+                Profile
+                <select id="profile-picker"></select>
+              </label>
+              <button type="button" id="save-models" class="primary">Save models.yaml</button>
+            </div>
+          </div>
+          <p class="muted" id="models-path"></p>
+          <div id="models-body" class="models"></div>
+          <div id="models-errors" class="errors" hidden></div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------- Settings -->
+      <section class="panel" data-panel="settings">
+        <div class="card">
+          <div class="card-head">
+            <h2>Pipeline settings</h2>
+            <div class="row">
+              <button type="button" id="reload-settings" class="ghost">Reload</button>
+              <button type="button" id="save-default" class="primary">Save default.yaml</button>
+            </div>
+          </div>
+          <p class="muted" id="settings-path"></p>
+          <div id="settings-body" class="models"></div>
+          <div id="settings-errors" class="errors" hidden></div>
+          <p class="hint">
+            Every save validates through the project's own pydantic settings first and
+            leaves a <code>.bak.&lt;timestamp&gt;</code> beside the file. A value the pipeline
+            cannot load is refused, never written. Writing a config re-serialises the YAML, so
+            comments in the file are not preserved.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
