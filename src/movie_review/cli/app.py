@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import sqlite3
 import sys
@@ -69,12 +70,32 @@ def _format_elapsed(seconds: float) -> str:
     return f"{total // 60}m{total % 60:02d}s"
 
 
+#: Overrides the tty test for progress output. Truthy forces progress on, falsy
+#: forces it off, unset keeps the automatic behaviour. The desktop app (T111)
+#: needs this: it spawns the CLI with piped stdio, so stderr is not a terminal
+#: and the tty test would silence every stage line -- leaving the app with a
+#: window that shows nothing happening for hours.
+_PROGRESS_ENV_VAR = "MOVIE_REVIEW_PROGRESS"
+_PROGRESS_TRUE = frozenset({"1", "true", "yes", "on"})
+_PROGRESS_FALSE = frozenset({"0", "false", "no", "off"})
+
+
 def _progress_enabled() -> bool:
     """Silence progress lines when stderr is not a terminal.
 
     A heartbeat every 10s is helpful interactively and noise in a log file.
     stderr is the right stream to test because that is where progress goes.
+
+    ``MOVIE_REVIEW_PROGRESS`` overrides the test in both directions. The
+    override exists for callers that consume the progress stream themselves --
+    a GUI attaching to the pipe -- and for tests, which would otherwise need a
+    real terminal to exercise the reporter.
     """
+    override = os.environ.get(_PROGRESS_ENV_VAR, "").strip().lower()
+    if override in _PROGRESS_TRUE:
+        return True
+    if override in _PROGRESS_FALSE:
+        return False
     return sys.stderr.isatty()
 
 

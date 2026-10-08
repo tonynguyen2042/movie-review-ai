@@ -206,6 +206,46 @@ def test_progress_requires_a_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _progress_enabled() is True
 
 
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", " on "])
+def test_progress_env_forces_output_on_a_pipe(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """The desktop app reads the pipe and needs the stage lines.
+
+    T111 spawns the CLI with piped stdio, so the tty test above says "off" for
+    exactly the case the GUI depends on. Without this override the app would show
+    nothing at all until the pipeline finished.
+    """
+    monkeypatch.setattr(cliapp.sys, "stderr", _FakeStream(tty=False))
+    monkeypatch.setenv("MOVIE_REVIEW_PROGRESS", value)
+    assert _progress_enabled() is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off"])
+def test_progress_env_forces_output_off(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """The other direction: a terminal user who wants a quiet run."""
+    monkeypatch.setattr(cliapp.sys, "stderr", _FakeStream(tty=True))
+    monkeypatch.setenv("MOVIE_REVIEW_PROGRESS", value)
+    assert _progress_enabled() is False
+
+
+def test_progress_env_ignores_an_unrecognised_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typo must not silently enable or disable progress.
+
+    Falling back to the tty test is the safe reading: the run behaves exactly as
+    it would without the variable, so the mistake is visible rather than hidden.
+    """
+    monkeypatch.setattr(cliapp.sys, "stderr", _FakeStream(tty=True))
+    monkeypatch.setenv("MOVIE_REVIEW_PROGRESS", "maybe")
+    assert _progress_enabled() is True
+    monkeypatch.setattr(cliapp.sys, "stderr", _FakeStream(tty=False))
+    assert _progress_enabled() is False
+
+
 class _FakeStream:
     def __init__(self, tty: bool) -> None:
         self._tty = tty
