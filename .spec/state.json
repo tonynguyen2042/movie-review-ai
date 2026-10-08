@@ -1199,6 +1199,24 @@
       "updated_at": "2026-10-05T21:55:04.340151+00:00",
       "started_at": "2026-10-05T21:55:04.118068+00:00",
       "completed_at": "2026-10-05T21:55:04.340151+00:00"
+    },
+    "T111": {
+      "title": "Electron Desktop App",
+      "status": "in_progress",
+      "depends_on": [
+        "T002",
+        "T070",
+        "T084",
+        "T085",
+        "T098",
+        "T101"
+      ],
+      "attempts": 1,
+      "implementation": "pending",
+      "tests": "pending",
+      "review": "pending",
+      "updated_at": "2026-10-08T00:00:00+00:00",
+      "started_at": "2026-10-08T00:00:00+00:00"
     }
   }
 }

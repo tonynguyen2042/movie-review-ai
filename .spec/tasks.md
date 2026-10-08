@@ -260,6 +260,81 @@ Never fabricate a PR URL.
 - [ ] **T097** Thumbnail Generator
 - [ ] **T098** YouTube Publishing Adapter
 
+# Phase 13 — Desktop App
+
+- [ ] **T111** Electron Desktop App
+
+## T111 — Electron Desktop App
+
+**Objective**
+
+Ship a cross-platform desktop GUI (macOS + Windows) that drives the existing
+`movie-review` CLI. The app never re-implements the pipeline: it builds the same
+CLI arguments a user would type, spawns the CLI as a subprocess, and surfaces
+its stdout/stderr live.
+
+**Depends on**: T084 (`process`), T085 (`resume`), T070 (`retry`), T098
+(`publish`), T002 (config), T101 (CLI progress reporting).
+
+**Scope**
+
+- `desktop/` Electron app, isolated from `src/movie_review` (no Python added to
+  the package, no new runtime dependency for the CLI).
+- Main process spawns `uv run movie-review ...` from the repo root.
+- Start form exposes every option of `process` plus `resume`, `retry`,
+  `publish`, `publish-platforms`.
+- Live log console: stderr is parsed into structured entries (JSON
+  `log_event` lines and the ASCII progress bar) and streamed to the renderer.
+- Progress: current stage, in-stage `WorkProgress` fraction, and per-stage
+  status across the 19-stage sequence.
+- Stop: terminate the process tree; job state is left resumable.
+- Job list from `jobs.db`, plus open-output-folder.
+- Settings tab edits `config/default.yaml` and `config/models.yaml`: validated
+  with the project's own pydantic settings before writing, timestamped `.bak`
+  backup on every write.
+- electron-builder targets `dmg` (macOS) and `nsis` (Windows).
+
+**Files**
+
+```text
+desktop/package.json
+desktop/package-lock.json
+desktop/electron-builder.yml
+desktop/src/main/main.js
+desktop/src/main/preload.js
+desktop/src/main/python-runner.js
+desktop/src/main/line-parser.js
+desktop/src/main/config-store.js
+desktop/src/main/jobs-store.js
+desktop/src/main/ipc.js
+desktop/src/renderer/index.html
+desktop/src/renderer/styles.css
+desktop/src/renderer/app.js
+desktop/test/*.test.js
+docs/DESKTOP-APP.md
+```
+
+**Acceptance criteria**
+
+- [ ] `npm run start` launches the window with no console errors.
+- [ ] Every `process` option is reachable from the form and maps to the exact
+      CLI flag, with the CLI default shown when untouched.
+- [ ] Clicking Start spawns `uv run movie-review process` with the built argv,
+      visible in the app before launch.
+- [ ] Stderr JSON log lines render as structured log entries, not raw text.
+- [ ] Stage progress updates while a run is in flight; the 19 stages are listed
+      with current/done/failed state.
+- [ ] Stop terminates the child process tree and reports the exit as cancelled,
+      not as a pipeline failure.
+- [ ] A non-zero CLI exit surfaces the exit code and the last error, and the
+      app does not report success.
+- [ ] Saving `config/default.yaml` or `config/models.yaml` validates through
+      pydantic first; a rejected value blocks the write and shows the error.
+- [ ] Every config write leaves a `.bak.<timestamp>` beside the file.
+- [ ] Job list renders status/failed_stage/error from `jobs.db`.
+- [ ] `npm test` passes.
+- [ ] `pytest -q`, `ruff check .`, `ruff format --check .`, `mypy .` still pass.
+
 ---
 
 # Task Execution Rules
