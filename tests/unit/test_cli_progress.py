@@ -207,9 +207,7 @@ def test_progress_requires_a_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", " on "])
-def test_progress_env_forces_output_on_a_pipe(
-    monkeypatch: pytest.MonkeyPatch, value: str
-) -> None:
+def test_progress_env_forces_output_on_a_pipe(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
     """The desktop app reads the pipe and needs the stage lines.
 
     T111 spawns the CLI with piped stdio, so the tty test above says "off" for
@@ -222,9 +220,7 @@ def test_progress_env_forces_output_on_a_pipe(
 
 
 @pytest.mark.parametrize("value", ["0", "false", "no", "off"])
-def test_progress_env_forces_output_off(
-    monkeypatch: pytest.MonkeyPatch, value: str
-) -> None:
+def test_progress_env_forces_output_off(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
     """The other direction: a terminal user who wants a quiet run."""
     monkeypatch.setattr(cliapp.sys, "stderr", _FakeStream(tty=True))
     monkeypatch.setenv("MOVIE_REVIEW_PROGRESS", value)

@@ -29,6 +29,7 @@ data/jobs/*
 data/cache/*
 data/models/*
 data/output/*
+data/jobs.db
 !*.gitkeep
 
 # OS / editor
