@@ -16,12 +16,20 @@ uv.lock.tmp
 .coverage
 htmlcov/
 
+# Desktop app (T111)
+desktop/node_modules/
+desktop/dist/
+desktop/dist-*/
+desktop/.vite/
+desktop/screenshot*.png
+
 # Pipeline data (large / local-only artifacts)
 data/movies/*
 data/jobs/*
 data/cache/*
 data/models/*
 data/output/*
+data/jobs.db
 !*.gitkeep
 
 # OS / editor

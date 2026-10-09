@@ -16,6 +16,7 @@ Every command and output below was captured by running the tool on `master`, not
 6. [Pipeline stages](#6-pipeline-stages)
 7. [Inspect, validate, resume, retry](#7-inspect-validate-resume-retry)
 8. [The job dashboard](#8-the-job-dashboard)
+8a. [The desktop app](#8a-the-desktop-app)
 9. [Where your data lives](#9-where-your-data-lives)
 10. [What does not work yet](#10-what-does-not-work-yet)
 11. [Troubleshooting](#11-troubleshooting)
@@ -455,6 +456,27 @@ The other six viewers (timeline, characters, story graph, script editor, visual 
 
 ---
 
+## 8a. The desktop app
+
+An Electron GUI for the same CLI, if you would rather not type commands:
+
+```bash
+cd desktop
+npm install     # once
+npm start
+```
+
+Pick a command and a movie, press **Start**, and watch the 19 stages and the live
+CLI log. There is also a job list, and editors for `config/default.yaml` and
+`config/models.yaml` that validate through the project's own pydantic settings
+before writing and leave a timestamped `.bak` beside the file.
+
+The app spawns `uv run movie-review` in this checkout — it does not re-implement
+the pipeline, so anything the CLI can do is reachable from the form. Full details,
+including packaging and troubleshooting: [DESKTOP-APP.md](DESKTOP-APP.md).
+
+---
+
 ## 9. Where your data lives
 
 ```text
@@ -640,6 +662,7 @@ uv run pytest -q
 
 - [`README.md`](../README.md) — full product and architecture specification
 - [`AGENTS.md`](../AGENTS.md) — contribution workflow and task rules
+- [`DESKTOP-APP.md`](DESKTOP-APP.md) — the Electron GUI (T111)
 - [`config/default.yaml`](../config/default.yaml) — all settings with comments
 - [`config/models.yaml`](../config/models.yaml) — model profiles, including `remote`
 

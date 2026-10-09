@@ -260,6 +260,122 @@ Never fabricate a PR URL.
 - [ ] **T097** Thumbnail Generator
 - [ ] **T098** YouTube Publishing Adapter
 
+# Phase 13 — Desktop App
+
+- [x] **T111** Electron Desktop App
+
+## T111 — Electron Desktop App
+
+**Objective**
+
+Ship a cross-platform desktop GUI (macOS + Windows) that drives the existing
+`movie-review` CLI. The app never re-implements the pipeline: it builds the same
+CLI arguments a user would type, spawns the CLI as a subprocess, and surfaces
+its stdout/stderr live.
+
+**Depends on**: T084 (`process`), T085 (`resume`), T070 (`retry`), T098
+(`publish`), T002 (config), T101 (CLI progress reporting).
+
+**Scope**
+
+- `desktop/` Electron app, isolated from `src/movie_review` (no Python added to
+  the package, no new runtime dependency for the CLI).
+- Main process spawns `uv run movie-review ...` from the repo root.
+- Start form exposes every option of `process` plus `resume`, `retry`,
+  `publish`, `publish-platforms`.
+- Live log console: stderr is parsed into structured entries (JSON
+  `log_event` lines and the ASCII progress bar) and streamed to the renderer.
+- Progress: current stage, in-stage `WorkProgress` fraction, and per-stage
+  status across the 19-stage sequence.
+- Stop: terminate the process tree; job state is left resumable.
+- Job list from `jobs.db`, plus open-output-folder.
+- Settings tab edits `config/default.yaml` and `config/models.yaml`: validated
+  with the project's own pydantic settings before writing, timestamped `.bak`
+  backup on every write.
+- electron-builder targets `dmg` (macOS) and `nsis` (Windows).
+
+**Files**
+
+```text
+desktop/package.json
+desktop/package-lock.json
+desktop/electron-builder.yml
+desktop/src/main/main.js
+desktop/src/main/preload.js
+desktop/src/main/python-runner.js
+desktop/src/main/line-parser.js
+desktop/src/main/config-store.js
+desktop/src/main/jobs-store.js
+desktop/src/main/ipc.js
+desktop/src/renderer/index.html
+desktop/src/renderer/styles.css
+desktop/src/renderer/app.js
+desktop/test/*.test.js
+docs/DESKTOP-APP.md
+```
+
+**Acceptance criteria**
+
+- [x] `npm run start` launches the window with no console errors.
+- [x] Every `process` option is reachable from the form and maps to the exact
+      CLI flag, with the CLI default shown when untouched.
+- [x] Clicking Start spawns `uv run movie-review process` with the built argv,
+      visible in the app before launch.
+- [x] Stderr JSON log lines render as structured log entries, not raw text.
+- [x] Stage progress updates while a run is in flight; the 19 stages are listed
+      with current/done/failed state.
+- [x] Stop terminates the child process tree and reports the exit as cancelled,
+      not as a pipeline failure.
+- [x] A non-zero CLI exit surfaces the exit code and the last error, and the
+      app does not report success.
+- [x] Saving `config/default.yaml` or `config/models.yaml` validates through
+      pydantic first; a rejected value blocks the write and shows the error.
+- [x] Every config write leaves a `.bak.<timestamp>` beside the file.
+- [x] Job list renders status/failed_stage/error from `jobs.db`.
+- [x] `npm test` passes (59 tests).
+- [x] `pytest -q` passes (1207 passed).
+- [x] `ruff check .` and `ruff format --check .` pass.
+- [x] `mypy` introduces no new errors (see "Known pre-existing failures").
+
+**Required change to the CLI**
+
+`_progress_enabled()` in `src/movie_review/cli/app.py` gated progress on
+`sys.stderr.isatty()`. A spawned child always has a pipe on stderr, so the app
+would have received no stage lines at all and shown an empty window for hours.
+`MOVIE_REVIEW_PROGRESS` now overrides the test in both directions; unset keeps
+the original behaviour, so nothing changes for existing users.
+
+**Verification**
+
+| Checked | How |
+| --- | --- |
+| Window renders, no console errors | `test/screenshot.js`, four tabs captured |
+| Real run streams stages and verdicts | `test/e2e-run.js` on a generated 6s clip |
+| Stop kills the tree, reports cancelled | `test/e2e-stop.js` on a generated 10min clip |
+| Config writes validate, back up, refuse | `tests/unit/test_desktop_bridge.py` (17 tests) |
+| argv matches the CLI | `test/argv.test.js` (20 tests) |
+| Log parsing matches the CLI format | `test/line-parser.test.js` (27 tests) |
+| Spawn prefixes | `test/python-runner.test.js` (8 tests) |
+
+**Known pre-existing failures (not caused by T111)**
+
+- `mypy .` reports 106 errors, all in `tests/` and `scripts/task-state.py`,
+  identical in count and file list before and after this task. `mypy src desktop
+  tests/unit/test_desktop_bridge.py` is clean.
+- `pytest -q` reports 2 failures on a machine with
+  `MOVIE_REVIEW_PATHS__DATA_DIR` set in the environment
+  (`test_ingest.py::test_context_from_settings`,
+  `test_orchestrator.py::test_build_context_uses_jobs_subdirectory`). Both
+  reproduce on `09bf05e` with that variable set and pass without it.
+
+**Risks**
+
+- Saving a config re-serialises the YAML, so comments in `config/*.yaml` are not
+  preserved. Documented in `docs/DESKTOP-APP.md`; the `.bak` file keeps the
+  commented original.
+- Stop on Windows is `taskkill /T /F`, because `SIGINT` cannot reach a spawned
+  child with no console. The job stays resumable. Documented.
+
 ---
 
 # Task Execution Rules

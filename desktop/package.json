@@ -1,0 +1,22 @@
+{
+  "name": "movie-review-desktop",
+  "productName": "Movie Review",
+  "version": "0.1.0",
+  "description": "Desktop GUI for the movie-review-ai CLI (T111).",
+  "private": true,
+  "license": "MIT",
+  "main": "src/main/main.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  }
+}
