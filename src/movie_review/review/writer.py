@@ -135,7 +135,7 @@ def write_script(
                     ).encode()
                 ),
                 model_id=model_id,
-                prompt_version=f"{prompt.name}:{prompt.version}",
+                prompt_version=prompt.cache_version,
             )
             key = cache_key(cache_spec)
             cached = ctx.cache.lookup_json(key)
@@ -188,7 +188,7 @@ def write_script(
         "job_id": ctx.job_id,
         "stage": STAGE_NAME,
         "stage_version": STAGE_VERSION,
-        "prompt": f"{prompt.name}:{prompt.version}",
+        "prompt": prompt.cache_version,
         "model": model_id,
         "word_count": word_count,
         "script": script.model_dump(mode="json"),
@@ -205,7 +205,7 @@ def write_script(
             input_hash=run_hash,
             output_hash=output_hash,
             model=model_id,
-            prompt_version=f"{prompt.name}:{prompt.version}",
+            prompt_version=prompt.cache_version,
         ),
     )
     duration_ms = int((time.perf_counter() - started) * 1000)

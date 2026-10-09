@@ -84,7 +84,7 @@ def extract_story_arcs(
         stage_version=STAGE_VERSION,
         input_hash=artifacts.sha256_bytes(event_lines.encode("utf-8")),
         model_id=model_id,
-        prompt_version=f"{prompt.name}:{prompt.version}",
+        prompt_version=prompt.cache_version,
     )
     key = cache_key(cache_spec)
     cached = cache.lookup_json(key)
@@ -121,7 +121,7 @@ def extract_story_arcs(
         "job_id": job_id,
         "stage": STAGE_NAME,
         "stage_version": STAGE_VERSION,
-        "prompt": f"{prompt.name}:{prompt.version}",
+        "prompt": prompt.cache_version,
         "model": model_id,
         "arcs": [arc.model_dump(mode="json") for arc in arcs],
     }
@@ -137,7 +137,7 @@ def extract_story_arcs(
             input_hash=key,
             output_hash=output_hash,
             model=model_id,
-            prompt_version=f"{prompt.name}:{prompt.version}",
+            prompt_version=prompt.cache_version,
         ),
     )
     with ulog.logging_context(job_id=job_id, stage=STAGE_NAME):

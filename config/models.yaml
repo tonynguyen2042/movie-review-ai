@@ -98,25 +98,25 @@ profiles:
     asr:
       model: whisper-large-v3-turbo
       backend: openai_compatible
-      base_url: http://gpu-box.local:9000/v1
+      base_url: http://192.168.1.144:9000/v1
       # api_key_env: MOVIE_REVIEW_ASR_TOKEN
       timeout_seconds: 600
     vision:
       model: Qwen3-VL
       backend: openai_compatible
-      base_url: http://gpu-box.local:8000/v1
+      base_url: http://192.168.1.144:8000/v1
       # api_key_env: MOVIE_REVIEW_LLM_TOKEN
       timeout_seconds: 300
     reasoning:
       model: Qwen3.5-27B
       backend: openai_compatible
-      base_url: http://gpu-box.local:8000/v1
+      base_url: http://192.168.1.144:8000/v1
       # api_key_env: MOVIE_REVIEW_LLM_TOKEN
       timeout_seconds: 120
     critic:
       model: Qwen3.5-27B
       backend: openai_compatible
-      base_url: http://gpu-box.local:8000/v1
+      base_url: http://192.168.1.144:8000/v1
       enabled: false
     # Translation gets its own slot so it can be a different size, a different
     # quantisation, or a different host from the reasoning model -- without
@@ -127,11 +127,11 @@ profiles:
     translation:
       model: Qwen3.5-9B
       backend: openai_compatible
-      base_url: http://gpu-box.local:8000/v1
+      base_url: http://192.168.1.144:8000/v1
       # api_key_env: MOVIE_REVIEW_TRANSLATION_TOKEN
       timeout_seconds: 120
     tts:
       model: Qwen3-TTS-12Hz-1.7B
       backend: openai_compatible
-      base_url: http://gpu-box.local:8000/v1
+      base_url: http://192.168.1.144:8000/v1
       timeout_seconds: 120

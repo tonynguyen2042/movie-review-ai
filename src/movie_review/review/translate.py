@@ -284,7 +284,7 @@ def translate_script(
         raise TranslationError(f"Job {ctx.job_id} failed; use retry to continue")
 
     prompt = load_prompt("translate", prompt_version)
-    version = f"{prompt.name}:{prompt.version}"
+    version = prompt.cache_version
     # Built from the spec so a remote translation endpoint is actually used;
     # constructing QwenReasoningAdapter directly would demand MLX on every host,
     # the same defect the other stages had.
