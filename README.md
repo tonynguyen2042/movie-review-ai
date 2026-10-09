@@ -3150,7 +3150,6 @@ Do NOT implement initially:
 
 ```text
 AI-generated movie replacement
-full automatic YouTube upload
 automatic copyright dispute handling
 automatic monetization
 multi-GPU distributed inference
@@ -3161,6 +3160,12 @@ complex vector database
 ```
 
 These can be added later.
+
+Note on publishing: `movie-review publish` uploads to YouTube, a Facebook Page,
+and TikTok. It is opt-in, previews the generated title, description and tags
+before anything is sent, and never runs as a pipeline stage. What remains out of
+scope is *automatic* publishing - no upload happens without an explicit
+`--confirm`.
 
 ---
 

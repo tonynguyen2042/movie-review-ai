@@ -502,7 +502,75 @@ Nothing in the test suite exercises a real model or a real FFmpeg encode. The pi
 
 ### Not yet wired to the CLI
 
-Analyzing, rendering, and publishing are reachable as Python APIs but have no dedicated CLI command. The publishing modules — metadata, thumbnails, YouTube upload — never act on their own; uploading is an explicit user action by design.
+Analyzing and rendering are reachable as Python APIs but have no dedicated CLI command. Publishing now has one - `movie-review publish` - but it is opt-in by design: it previews the title, description and tags and stops unless you pass `--confirm`. Nothing it generates ever uploads on its own.
+
+## 10a. Publishing a review
+
+Once a job has rendered a video, `movie-review publish` generates the packaging for it and can upload it.
+
+Start with the platforms the host can actually reach:
+
+```console
+$ movie-review publish-platforms
+Supported platforms:
+  youtube: unavailable -- No publishing backend could be loaded on this host.
+  facebook: unavailable -- MOVIE_REVIEW_FACEBOOK_PAGE_ID is not set.
+  tiktok: unavailable -- TikTok Content Posting API requires an app that has passed TikTok's developer review. Uploads from an unapproved app are refused by TikTok.
+```
+
+Generate and preview the metadata without uploading anything:
+
+```console
+$ movie-review publish job_20261007_001 --platform youtube --profile remote
+Generated metadata (model=qwen3.5-27b, prompt=publishing_metadata:v1, cache_hit=False)
+
+Video   : data/jobs/job_20261007_001/render/review.mp4
+Platform: youtube  privacy=unlisted
+Title   : This review argues the letter is the whole film
+
+Description:
+A review of the office scenes and what the letter changes.
+
+Tags    : movie review, drama, analysis
+
+Preview only. Re-run with --confirm to upload.
+```
+
+Nothing leaves the machine until you add `--confirm`. To edit the packaging before it goes public:
+
+```console
+$ movie-review publish job_20261007_001 --title "Your own title" --confirm
+```
+
+### Credentials
+
+Credentials come from the environment, never from a config file - a token in a tracked YAML file is a leak.
+
+| Variable | Needed for |
+|---|---|
+| `MOVIE_REVIEW_FACEBOOK_PAGE_ID` | Facebook Page target |
+| `MOVIE_REVIEW_FACEBOOK_TOKEN` | Facebook Page access token |
+| `MOVIE_REVIEW_TIKTOK_TOKEN` | TikTok creator access token |
+
+YouTube uses the standard Google client credentials (`~/.gd.json` or the path in `GOOGLE_APPLICATION_CREDENTIALS`).
+
+### What the metadata generator may and may not say
+
+The title, description and tags are written by the reasoning model, constrained by the narration. The model may write about the review and offer opinion. It may not assert anything about the film that the narration does not state - no invented dialogue, scenes, relationships, deaths or chronology - and it may not publish `INSUFFICIENT_EVIDENCE`, which is a status marker for an unsupported claim rather than a selling point.
+
+If the model puts the marker in a title, the run fails rather than publishing it, so a human decides what happens. `movie-review publish` then exists to make that decision easy: read the title, override it if it is wrong, and upload.
+
+If the generated title is wrong or misses, `--title` and `--description` override it.
+
+### Platform differences worth knowing
+
+- **Facebook Page** - Page videos cannot be published unlisted or private per upload; audience is a Page-level setting. Uploading with `--privacy unlisted` is refused with an explanation rather than silently published as public. Reels and Groups are not supported.
+- **TikTok** - requires an app that has passed TikTok's developer review. The adapter is written to the documented API but has never been run against a live endpoint.
+- **YouTube** - the only adapter whose call shape is exercised against a real client.
+
+### Copyright
+
+`movie-review publish` makes no claim that any clip duration or percentage is legally safe. That determination depends on the actual use and your jurisdiction.
 
 ---
 

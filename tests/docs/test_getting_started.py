@@ -315,3 +315,40 @@ def test_guide_documents_the_remote_profile(guide: str) -> None:
     """config/models.yaml ships a working `remote` profile; the guide must cover it."""
     assert "MOVIE_REVIEW_MODELS__PROFILE" in guide
     assert "api_key_env" in guide, "remote credentials need explaining"
+
+
+def test_guide_documents_publishing(guide: str) -> None:
+    """The publish command previews before uploading; the guide has to say so."""
+    assert "movie-review publish" in guide
+    assert "--confirm" in guide, "the opt-in flag is the safety property"
+    assert "Preview only" in guide or "preview" in guide.lower()
+
+
+def test_guide_explains_where_publishing_credentials_come_from(guide: str) -> None:
+    """Credentials come from the environment; a token in a tracked file is a leak."""
+    assert "MOVIE_REVIEW_FACEBOOK_PAGE_ID" in guide
+    assert "MOVIE_REVIEW_FACEBOOK_TOKEN" in guide
+    assert "MOVIE_REVIEW_TIKTOK_TOKEN" in guide
+
+
+def test_guide_states_the_metadata_evidence_constraint(guide: str) -> None:
+    """The generated title may not assert plot facts the narration does not state."""
+    assert "INSUFFICIENT_EVIDENCE" in guide
+    assert "narration" in guide
+
+
+def test_guide_records_the_platform_differences(guide: str) -> None:
+    """Facebook cannot take a per-video privacy value; TikTok needs app review.
+
+    Both are things a user discovers only by failing, so the guide names them.
+    """
+    assert "TikTok" in guide
+    assert "developer review" in guide
+    assert "Reels" in guide, "the unsupported Facebook surfaces should be named"
+
+
+def test_guide_makes_no_copyright_safety_claim(guide: str) -> None:
+    """AGENTS.md: never claim a fixed duration or percentage is legally safe."""
+    lowered = guide.lower()
+    assert "legally safe" in lowered
+    assert "jurisdiction" in lowered
