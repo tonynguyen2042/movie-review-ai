@@ -221,6 +221,7 @@ def apply_feedback(
                 artifact_id=f"{job_id}-frames",
                 job_id=job_id,
                 stage=FRAMES_STAGE,
+                relative_path=artifacts.relative_artifact_path(jobs_dir, job_id, manifest_path),
                 input_hash=file_hash,
                 output_hash=output_hash,
             ),

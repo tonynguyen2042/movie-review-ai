@@ -19,10 +19,24 @@ from typing import Any
 
 from movie_review.domain.scene_analysis import SceneAnalysis
 from movie_review.remote import http
+from movie_review.utils import logging as ulog
 from movie_review.vision.port import AnalysisInput, VLMError, VLMPort, VLMUnavailableError
 from movie_review.vision.qwen_vl import parse_analysis
 
 CHAT_PATH = "/chat/completions"
+
+#: Fallback completion budget when the profile does not set ``max_tokens``.
+DEFAULT_MAX_TOKENS = 2048
+
+#: How much of a bad reply to quote back in an error. Enough to recognise the
+#: shape of the failure, short enough not to flood a log line.
+EXCERPT_CHARS = 300
+
+#: Appended on the second attempt, after the first reply could not be parsed.
+RETRY_INSTRUCTION = (
+    "\n\nYour previous reply could not be parsed. Reply with a single JSON "
+    "object and nothing else: no prose, no explanation, no code fence."
+)
 
 
 def encode_frame(path: str | Path) -> str:
@@ -77,7 +91,15 @@ class OpenAICompatVLMAdapter(VLMPort):
         return [{"role": "user", "content": parts}]
 
     def analyze(self, analysis_input: AnalysisInput, prompt: str) -> SceneAnalysis:
-        """Send frames plus prompt and return a validated analysis."""
+        """Send frames plus prompt and return a validated analysis.
+
+        Retries once when the reply cannot be parsed. The common cause is
+        truncation at ``max_tokens``: the model opens the object, runs out of
+        budget part-way through, and the half-written text is neither prose nor
+        valid JSON. Failing the stage on that discards every scene already
+        analysed -- for a feature film, most of an hour of VLM calls. The second
+        attempt doubles the budget and restates the format.
+        """
         if not analysis_input.frames:
             raise VLMError("Analysis requires at least one frame")
         for frame in analysis_input.frames:
@@ -87,27 +109,82 @@ class OpenAICompatVLMAdapter(VLMPort):
             raise VLMError("Prompt must not be empty")
 
         url = http.build_endpoint(self._base_url, CHAT_PATH)
-        payload = {
-            "model": self._model,
-            "messages": self._messages(analysis_input, prompt),
-            "temperature": self._temperature,
-            "max_tokens": self._max_tokens,
-            "stream": False,
-        }
-        try:
-            document = http.post_json(
-                url,
-                payload,
-                api_key=self._api_key,
-                timeout=self._timeout,
-                transport=self._transport,
-            )
-        except http.RemoteUnavailableError as exc:
-            raise VLMUnavailableError(self._model, str(exc)) from exc
-        except http.RemoteProtocolError as exc:
-            raise VLMError(str(exc)) from exc
+        budget = self._max_tokens
+        last_error = "the model returned no usable reply"
+        last_finish: str | None = None
+        last_excerpt = ""
 
-        return parse_analysis(_content_of(document, url), analysis_input.scene_id)
+        for attempt in (1, 2):
+            payload = {
+                "model": self._model,
+                "messages": self._messages(
+                    analysis_input, prompt + RETRY_INSTRUCTION if attempt == 2 else prompt
+                ),
+                "temperature": self._temperature,
+                "max_tokens": budget,
+                "stream": False,
+            }
+            try:
+                document = http.post_json(
+                    url,
+                    payload,
+                    api_key=self._api_key,
+                    timeout=self._timeout,
+                    transport=self._transport,
+                )
+            except http.RemoteUnavailableError as exc:
+                # A transport failure is not a formatting problem; a second
+                # attempt would only repeat it.
+                raise VLMUnavailableError(self._model, str(exc)) from exc
+            except http.RemoteProtocolError as exc:
+                raise VLMError(str(exc)) from exc
+
+            content, last_finish = _content_of(document, url)
+            last_excerpt = ""
+            exhausted = False
+
+            if not content.strip():
+                last_error = "the model returned an empty reply"
+                last_excerpt = _excerpt(content)
+            elif last_finish == "length":
+                exhausted = True
+                last_error = (
+                    f"the reply was cut off at max_tokens={budget} "
+                    "(finish_reason=length); raise max_tokens for this model in "
+                    "the profile, or ask for shorter lists"
+                )
+                last_excerpt = _excerpt(content)
+            else:
+                try:
+                    return parse_analysis(content, analysis_input.scene_id)
+                except VLMError as exc:
+                    # parse_analysis already quotes the reply it choked on;
+                    # repeating it here would double every error message.
+                    last_error = str(exc)
+
+            if exhausted:
+                # A bigger budget is the one thing that fixes truncation, so the
+                # retry gets one. An unparseable-but-complete reply keeps the
+                # budget: raising the ceiling cannot turn prose into JSON.
+                budget *= 2
+
+            ulog.get_logger("vision.remote").warning(
+                "vlm.reply_unusable",
+                extra={
+                    "scene_id": analysis_input.scene_id,
+                    "attempt": attempt,
+                    "max_tokens": budget if exhausted else budget // 2,
+                    "finish_reason": last_finish,
+                    "reason": last_error,
+                    "excerpt": last_excerpt or _excerpt(content),
+                },
+            )
+
+        quoted = f"; last reply began: {last_excerpt!r}" if last_excerpt else ""
+        raise VLMError(
+            f"No usable analysis for {analysis_input.scene_id} after 2 attempts: "
+            f"{last_error}. finish_reason={last_finish!r}{quoted}"
+        )
 
     def unload(self) -> None:
         """No local weights are held; the remote host owns the model."""
@@ -118,15 +195,30 @@ class OpenAICompatVLMAdapter(VLMPort):
         return bool(self._base_url and self._model)
 
 
-def _content_of(document: Any, url: str) -> str:
-    """Pull the assistant text out of a chat-completions response."""
+def _excerpt(text: str) -> str:
+    """A bounded, single-line view of a reply, for logs and error messages."""
+    flattened = " ".join(text.split())
+    if len(flattened) <= EXCERPT_CHARS:
+        return flattened
+    return flattened[:EXCERPT_CHARS] + "..."
+
+
+def _content_of(document: Any, url: str) -> tuple[str, str | None]:
+    """Pull the assistant text and the finish reason out of a chat response.
+
+    ``finish_reason`` is not decoration: ``length`` is the only reliable signal
+    that the reply was cut short, which is otherwise indistinguishable from a
+    model that simply answered in prose.
+    """
     if not isinstance(document, dict):
         raise VLMError(f"VLM response from {url} is not a JSON object")
     choices = document.get("choices")
     if not isinstance(choices, list) or not choices:
         raise VLMError(f"VLM response from {url} has no choices")
-    message = choices[0].get("message") or {}
+    choice = choices[0] if isinstance(choices[0], dict) else {}
+    message = choice.get("message") or {}
     content = message.get("content")
     if not isinstance(content, str):
         raise VLMError(f"VLM response from {url} has no message.content string")
-    return content
+    finish = choice.get("finish_reason")
+    return content, finish if isinstance(finish, str) else None

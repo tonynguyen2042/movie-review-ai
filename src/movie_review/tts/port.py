@@ -29,6 +29,15 @@ class TTSUnavailableError(TTSError):
 class TTSPort(ABC):
     """Paragraph-to-audio narration synthesis (spec section 39)."""
 
+    @property
+    def model(self) -> str:
+        """Model identity recorded alongside synthesized narration.
+
+        See :attr:`movie_review.asr.port.ASRPort.model`; concrete adapters
+        override it with the configured checkpoint.
+        """
+        return type(self).__name__
+
     @abstractmethod
     def synthesize(self, request: TTSRequest) -> SpeechAudio:
         """Synthesize one request; voice/emotion/speed come from the caller."""

@@ -30,8 +30,8 @@ from movie_review.domain import (
 )
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
+from movie_review.reasoning.factory import build_reasoning_adapter
 from movie_review.reasoning.port import ReasoningPort
-from movie_review.reasoning.qwen import QwenReasoningAdapter
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
 from movie_review.vision.analysis import scene_dialogue
@@ -89,8 +89,11 @@ def run_event_extraction(
     owns_completion = job.status is JobStatus.CHARACTERS_READY
 
     prompt = load_prompt("event_extraction", prompt_version)
-    active = reasoner or QwenReasoningAdapter(ctx.settings.models.reasoning.model)
-    model = active.model if isinstance(active, QwenReasoningAdapter) else type(active).__name__
+    active = reasoner or build_reasoning_adapter(ctx.settings.models.reasoning)
+    # The adapter's own model, not its class name: a class-name key gives every
+    # remote model the same cache entry, so switching models silently reuses the
+    # previous model's output.
+    model = active.model
     character_lines = "\n".join(f"{c.id}: {c.name}" for c in characters) or "none yet"
 
     raw_entries: list[dict[str, object]] = []
@@ -176,6 +179,7 @@ def run_event_extraction(
             artifact_id=f"{ctx.job_id}-events",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, events_path),
             input_hash=_run_input_hash(scenes),
             output_hash=output_hash,
             model=model,

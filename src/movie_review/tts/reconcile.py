@@ -126,6 +126,9 @@ def run_reconciliation(
                 artifact_id=f"{ctx.job_id}-review-script",
                 job_id=ctx.job_id,
                 stage="review",
+                relative_path=artifacts.relative_artifact_path(
+                    ctx.jobs_dir, ctx.job_id, script_path
+                ),
                 input_hash=output_hash,
                 output_hash=output_hash,
             ),

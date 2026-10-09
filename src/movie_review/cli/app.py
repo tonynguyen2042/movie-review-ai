@@ -7,6 +7,7 @@ pipeline. Stages run sequentially with checkpointing and resume support.
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 import sys
@@ -19,7 +20,7 @@ from typing import Annotated
 import typer
 
 from movie_review import __version__
-from movie_review.config.settings import load_settings
+from movie_review.config.settings import AppSettings, available_profiles, load_settings
 from movie_review.domain import Job
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.state_machine import JobNotFoundError
@@ -30,6 +31,8 @@ from movie_review.pipeline.orchestrator import (
     run_pipeline,
     validate_job,
 )
+from movie_review.pipeline.progress import WorkProgress
+from movie_review.review.translate import TranslationError
 from movie_review.storage.database import bootstrap
 from movie_review.utils import logging as ulog
 
@@ -39,6 +42,14 @@ _DURATION_RE = re.compile(r"(?P<minutes>\d+)\s*m?$", re.IGNORECASE)
 
 #: How often to report elapsed time while a stage is running, in seconds.
 _HEARTBEAT_SECONDS = 10.0
+
+#: Minimum gap between in-stage progress lines, in seconds. A vision run over a
+#: feature film reports once per scene; at ~1s per scene that is hundreds of
+#: lines a minute, which scrolls the useful output off the screen.
+_PROGRESS_MIN_INTERVAL = 2.0
+
+#: Width of the rendered bar in characters.
+_PROGRESS_BAR_WIDTH = 24
 
 
 def _parse_duration(value: str) -> int:
@@ -66,6 +77,22 @@ def _progress_enabled() -> bool:
     return sys.stderr.isatty()
 
 
+def _format_bar(fraction: float, width: int = _PROGRESS_BAR_WIDTH) -> str:
+    """Render a fraction as a fixed-width bar of ``#`` and ``-``.
+
+    The width is constant rather than proportional so the line does not jitter as
+    the percentage ticks over, and it is clamped so a fraction outside [0, 1]
+    from a miscounting stage cannot produce a bar of the wrong length. NaN is
+    handled explicitly: comparisons against it are all False, so it would
+    otherwise fall through to round() and raise.
+    """
+    if math.isnan(fraction):
+        fraction = 0.0
+    bounded = max(0.0, min(1.0, fraction))
+    filled = int(round(bounded * width))
+    return "[" + "#" * filled + "-" * (width - filled) + "]"
+
+
 class _ProgressReporter:
     """Print each stage as it starts and finishes, with a liveness heartbeat.
 
@@ -89,6 +116,10 @@ class _ProgressReporter:
         self._stage_started: float | None = None
         self._stage_name: str | None = None
         self._timer: threading.Timer | None = None
+        # Throttle state for in-stage bars: a vision run over a feature film
+        # reports once per scene, which at ~1s each would bury the output.
+        self._last_progress_at: float = 0.0
+        self._completed_stages = 0
 
     def _echo(self, message: str) -> None:
         if not self._enabled:
@@ -136,7 +167,13 @@ class _ProgressReporter:
             with self._lock:
                 self._stage_name = stage
                 self._stage_started = time.perf_counter()
-            self._echo(f"  -> {stage} ...")
+                # Force the first bar of a new stage to print immediately: the
+                # stage-start line is the only thing on screen, and an empty bar
+                # right after it is what makes progress legible.
+                self._last_progress_at = 0.0
+            self._echo(
+                f"  -> {stage} (stage {self._completed_stages + 1}/{len(STAGE_SEQUENCE)}) ..."
+            )
             self._schedule_heartbeat()
             return
 
@@ -145,10 +182,41 @@ class _ProgressReporter:
             elapsed = time.perf_counter() - (self._stage_started or time.perf_counter())
             self._stage_name = None
             self._stage_started = None
+            self._completed_stages += 1
         verdict = "OK" if result.success else "FAILED"
-        self._echo(f"  {stage}: {verdict} ({_format_elapsed(elapsed)})")
+        self._echo(
+            f"  {stage}: {verdict} ({_format_elapsed(elapsed)}, "
+            f"stage {self._completed_stages}/{len(STAGE_SEQUENCE)})"
+        )
         if result.error:
             self._echo(f"    error: {result.error}")
+
+    def work(self, stage: str, progress: WorkProgress) -> None:
+        """Render an in-stage bar for stages that can divide their work.
+
+        Throttled by time rather than printed per event. A stage that reports
+        hundreds of times a minute would otherwise scroll the start line, the
+        heartbeat and the result off the screen -- the very output that answers
+        "is it hung?".
+
+        The final update always prints: a bar that stops at 97% because the
+        throttle swallowed the last event would be worse than no bar at all.
+        """
+        if not self._enabled:
+            return
+        now = time.perf_counter()
+        with self._lock:
+            finished = progress.total > 0 and progress.done >= progress.total
+            if not finished and now - self._last_progress_at < _PROGRESS_MIN_INTERVAL:
+                return
+            self._last_progress_at = now
+            elapsed = time.perf_counter() - self._stage_started if self._stage_started else 0.0
+
+        parts = [f"  {stage} {_format_bar(progress.fraction)} {progress.percent:3d}%"]
+        if progress.label:
+            parts.append(f"  {progress.label}")
+        parts.append(f"({_format_elapsed(elapsed)})")
+        self._echo(" ".join(parts))
 
     def close(self) -> None:
         """Stop any pending heartbeat, e.g. after a keyboard interrupt."""
@@ -156,6 +224,82 @@ class _ProgressReporter:
             self._cancel_timer()
             self._stage_name = None
             self._stage_started = None
+
+
+#: Model slots that pick a runtime through ``ModelSpec.backend``. ``translation``
+#: is optional, so it is resolved rather than read: a profile without one borrows
+#: reasoning and must not be reported twice.
+MODEL_SLOTS = ("asr", "vision", "reasoning", "tts")
+
+
+def _effective_profile(settings: AppSettings) -> str:
+    """The profile actually in force, after env and flag resolution.
+
+    The accepted-job log used to record the raw flag value, which is ``None``
+    for a normal run. A reader then could not tell that ``config/default.yaml``
+    had silently selected a profile that cannot work on this host -- the exact
+    confusion behind a run dying 15 seconds in at the ASR stage.
+    """
+    return settings.models.profile
+
+
+def _slot_backends(settings: AppSettings) -> dict[str, str]:
+    """Per-slot ``backend:model``, for the acceptance log."""
+    slots = {name: getattr(settings.models, name) for name in MODEL_SLOTS}
+    slots["translation"] = settings.models.effective_translation
+    return {name: f"{spec.backend}:{spec.model}" for name, spec in slots.items()}
+
+
+def _mlx_available_on_this_host() -> bool:
+    """Whether the MLX runtime can run here at all.
+
+    MLX is Apple-silicon-only, so on Windows or Linux a profile pinning any slot
+    to ``backend: mlx`` cannot succeed. Reported as a warning rather than an
+    error: a remote slot may cover the stage that would otherwise fail, and
+    refusing to start would be wrong.
+    """
+    return sys.platform == "darwin"
+
+
+def _warn_unusable_backends(settings: AppSettings) -> list[str]:
+    """Warn about local slots on a host without MLX; return the slot names."""
+    candidates: dict[str, str] = {
+        name: getattr(settings.models, name).backend for name in MODEL_SLOTS
+    }
+    candidates["translation"] = settings.models.effective_translation.backend
+    # A translation slot that merely borrows reasoning is the same local model,
+    # so it is not reported twice.
+    if settings.models.translation is None:
+        candidates.pop("translation")
+    local = sorted(name for name, backend in candidates.items() if backend != "openai_compatible")
+    if not local or _mlx_available_on_this_host():
+        return []
+    typer.echo(
+        f"warning: profile {_effective_profile(settings)!r} uses the local 'mlx' backend "
+        f"for {', '.join(local)}, and MLX cannot run on {sys.platform}. "
+        f"That stage will fail with 'not installed'. Select a profile that routes "
+        f"those slots remotely, e.g. --profile remote.",
+        err=True,
+    )
+    return local
+
+
+def _resolve_languages(source: str, target: str | None) -> tuple[str, str]:
+    """Validate the source language and settle the narration language.
+
+    An omitted target means the narration is spoken in the source language, which
+    skips translation entirely. Both tags are validated here so a typo is a usage
+    error rather than a job that fails several stages later with an unusable
+    filename.
+    """
+    from movie_review.review.translate import validate_language
+
+    try:
+        source_tag = validate_language(source)
+        target_tag = validate_language(target) if target else source_tag
+    except TranslationError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    return source_tag, target_tag
 
 
 def _manager(db_path: str | None) -> tuple[JobManager, sqlite3.Connection]:
@@ -179,6 +323,45 @@ DbOption = Annotated[
     typer.Option("--db-path", help="Jobs database file (default: <data_dir>/jobs.db)."),
 ]
 
+ProfileOption = Annotated[
+    str | None,
+    typer.Option(
+        "--profile",
+        help="Model profile from config/models.yaml: fast, balanced, quality, remote.",
+    ),
+]
+
+# The flag used to be called --quality and did nothing: it was read into the
+# acceptance log event and never reached settings, so the only way to select a
+# profile was editing config/default.yaml or exporting an env var. It is kept as
+# a hidden alias because it shipped, but --profile is the real name -- a
+# "quality" flag that means "which models" is the same concept as profile, and
+# having both invites the belief that they differ.
+QualityAliasOption = Annotated[
+    str | None,
+    typer.Option("--quality", hidden=True),
+]
+
+
+def _resolve_profile(profile: str | None, quality: str | None) -> str | None:
+    """Reconcile ``--profile`` with the deprecated ``--quality`` alias.
+
+    Returns the profile name to apply, or ``None`` to leave configuration alone.
+
+    An unknown name is rejected here, as a usage error, rather than surfacing
+    later as a ``ValueError`` from the settings loader once the job is already
+    created and running.
+    """
+    if profile and quality and profile != quality:
+        raise typer.BadParameter("--quality is deprecated, use --profile; conflicting values given")
+    chosen = profile or quality
+    if chosen is None:
+        return None
+    available = available_profiles()
+    if chosen not in available:
+        raise typer.BadParameter(f"Unknown profile {chosen!r}; available: {', '.join(available)}")
+    return chosen
+
 
 @app.callback()
 def _startup(
@@ -191,12 +374,23 @@ def _startup(
 @app.command()
 def process(
     movie: Annotated[str, typer.Argument(help="Input movie file.")],
-    language: Annotated[str, typer.Option(help="Review language.")] = "en",
+    language: Annotated[
+        str,
+        typer.Option(
+            help="Source language: the movie's dialogue, and the language the review is written in."
+        ),
+    ] = "en",
+    target_language: Annotated[
+        str | None,
+        typer.Option(
+            "--target-language",
+            help="Narration language. Defaults to --language, so nothing is translated.",
+        ),
+    ] = None,
     duration: Annotated[str, typer.Option(help="Target review length, e.g. '20m'.")] = "20m",
     style: Annotated[str, typer.Option(help="Review style profile.")] = "youtube",
-    quality: Annotated[
-        str, typer.Option(help="Model profile: fast, balanced, quality.")
-    ] = "balanced",
+    profile: ProfileOption = None,
+    quality: QualityAliasOption = None,
     spoilers: Annotated[str, typer.Option(help="Spoiler level.")] = "full",
     output: Annotated[str, typer.Option(help="Output directory.")] = "./output",
     db_path: DbOption = None,
@@ -220,6 +414,16 @@ def process(
         if value is not None and value not in order:
             raise typer.BadParameter(f"Invalid value for '{flag}': {value!r} is not one of {order}")
     minutes = _parse_duration(duration)
+    # An omitted target means "speak the source language", so the fallback is the
+    # source rather than any fixed default: no translation, no extra model calls.
+    source_language, narration_language = _resolve_languages(language, target_language)
+    # Resolve the profile before creating the job, so a bad name is a usage
+    # error rather than a job that exists but can never run.
+    selected_profile = _resolve_profile(profile, quality)
+    # Read settings with the same override the pipeline will use, so the
+    # acceptance log states the profile and backends that actually run.
+    effective = load_settings(profile=selected_profile)
+    _warn_unusable_backends(effective)
     manager, conn = _manager(db_path)
     with conn:
         job = manager.create(movie)
@@ -228,10 +432,13 @@ def process(
             ulog.get_logger("cli"),
             event="cli.process.accepted",
             status="ok",
-            language=language,
+            language=source_language,
+            target_language=narration_language,
             target_minutes=minutes,
             style=style,
-            quality=quality,
+            profile=_effective_profile(effective),
+            profile_flag=selected_profile,
+            backends=_slot_backends(effective),
             spoilers=spoilers,
             output=output,
         )
@@ -252,6 +459,10 @@ def process(
             start_stage=stage_from,
             end_stage=stage_to,
             on_progress=reporter,
+            on_work=reporter.work,
+            profile=selected_profile,
+            source_language=source_language,
+            target_language=narration_language,
         )
     except KeyboardInterrupt:
         reporter.close()
@@ -277,15 +488,35 @@ def inspect(
 def validate(
     job_id: Annotated[str, typer.Argument(help="Job ID.")], db_path: DbOption = None
 ) -> None:
-    """Check a job record is well-formed and validate its artifacts."""
+    """Check that a job's recorded artifacts are present and unmodified."""
     # validate_job loads the job itself, so resolve it here first to report an
     # unknown ID as a usage error instead of a traceback.
     manager, conn = _manager(db_path)
     with conn:
         job = _load_job(manager, job_id)
-    is_valid = validate_job(job_id, db_path)
-    typer.echo(f"job_id={job.job_id} status={job.status.value} valid={is_valid}")
-    if not is_valid:
+
+    report = validate_job(job_id, db_path)
+
+    typer.echo(f"job_id={job.job_id} status={job.status.value} valid={report.passed}")
+    typer.echo(f"  artifacts checked : {report.checked}")
+    typer.echo(f"  verified          : {report.ok}")
+    for label, items in (
+        ("missing", report.missing),
+        ("corrupt", report.corrupt),
+        ("unsafe path", report.unsafe),
+    ):
+        for item in items:
+            typer.echo(f"  {label:<17}: {item}", err=True)
+    if report.unlocated:
+        # Not a failure: these rows predate schema 9 and name no file, so nothing
+        # could be checked for them. Saying so beats implying they were verified.
+        typer.echo(
+            f"  not recorded      : {len(report.unlocated)} artifact row(s) name no file",
+            err=True,
+        )
+    if not report.checked and not report.unlocated:
+        typer.echo("  no artifacts recorded for this job yet", err=True)
+    if not report.passed:
         raise typer.Exit(code=1)
 
 
@@ -293,14 +524,35 @@ def validate(
 def resume(
     job_id: Annotated[str, typer.Argument(help="Job ID.")],
     db_path: DbOption = None,
+    profile: ProfileOption = None,
+    quality: QualityAliasOption = None,
+    language: Annotated[str, typer.Option(help="Source language of the movie.")] = "en",
+    target_language: Annotated[
+        str | None, typer.Option("--target-language", help="Narration language.")
+    ] = None,
 ) -> None:
     """Resume an interrupted job from its last checkpoint."""
+    selected_profile = _resolve_profile(profile, quality)
+    # A resume has to state the languages again: the job record never held them,
+    # so without this a translated job would quietly continue in the source one.
+    source_language, narration_language = _resolve_languages(language, target_language)
+    # Same reasoning as process(): a resume that quietly falls back to an
+    # unusable profile fails at the same stage the user is trying to escape.
+    _warn_unusable_backends(load_settings(profile=selected_profile))
     manager, conn = _manager(db_path)
     with conn:
         _load_job(manager, job_id)
     reporter = _ProgressReporter(enabled=_progress_enabled())
     try:
-        results = resume_job(job_id, db_path, on_progress=reporter)
+        results = resume_job(
+            job_id,
+            db_path,
+            on_progress=reporter,
+            on_work=reporter.work,
+            profile=selected_profile,
+            source_language=source_language,
+            target_language=narration_language,
+        )
     except KeyboardInterrupt:
         reporter.close()
         typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)
@@ -316,11 +568,22 @@ def retry(
     stage: Annotated[
         str | None, typer.Option("--stage", help="Specific stage to retry (T070).")
     ] = None,
+    profile: ProfileOption = None,
+    quality: QualityAliasOption = None,
+    language: Annotated[str, typer.Option(help="Source language of the movie.")] = "en",
+    target_language: Annotated[
+        str | None, typer.Option("--target-language", help="Narration language.")
+    ] = None,
 ) -> None:
     """Retry a failed job or specific stage."""
     from movie_review.jobs.recovery import recovery_plan
     from movie_review.pipeline.retry import RetryPolicy, run_with_retry
 
+    # Resolved before the retries start, so a bad name fails immediately instead
+    # of once per attempt.
+    selected_profile = _resolve_profile(profile, quality)
+    source_language, narration_language = _resolve_languages(language, target_language)
+    _warn_unusable_backends(load_settings(profile=selected_profile))
     manager, conn = _manager(db_path)
     with conn:
         job = _load_job(manager, job_id)
@@ -348,6 +611,10 @@ def retry(
             start_stage=target_stage,
             end_stage=target_stage,
             on_progress=reporter,
+            on_work=reporter.work,
+            profile=selected_profile,
+            source_language=source_language,
+            target_language=narration_language,
         )
         if not results or not results[0].success:
             raise RuntimeError(

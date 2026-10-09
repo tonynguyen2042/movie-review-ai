@@ -1,12 +1,16 @@
 """Remote ASR adapter for OpenAI-compatible transcription endpoints.
 
-Targets ``POST /audio/transcriptions`` as served by faster-whisper-server,
-whisper.cpp's server mode, or any OpenAI-compatible speech-to-text host. Audio
-is uploaded as multipart form data, so the orchestrating host never needs the
-MLX runtime or the model weights.
+Targets ``POST /audio/transcriptions`` as served by faster-whisper-server or
+any OpenAI-compatible speech-to-text host. whisper.cpp's ``whisper-server`` does
+not implement that route -- it serves ``POST /inference`` with the same
+``verbose_json`` response shape -- so ``endpoint_path`` overrides it. Audio is
+uploaded as multipart form data, so the orchestrating host never needs the MLX
+runtime or the model weights.
 
 The response is mapped through :func:`movie_review.asr.whisper_mlx.map_segments`
 so segment validation and confidence handling are identical to the local path.
+whisper.cpp supplies ``avg_logprob`` per segment, which ``map_segments`` already
+reads for confidence.
 """
 
 from __future__ import annotations
@@ -33,6 +37,7 @@ class OpenAICompatASRAdapter(ASRPort):
         api_key: str | None = None,
         timeout_seconds: float = http.DEFAULT_TIMEOUT_SECONDS,
         transport: http.RawTransport | None = None,
+        endpoint_path: str | None = None,
     ) -> None:
         if not base_url:
             raise ASRError("base_url is required for a remote ASR adapter")
@@ -41,6 +46,7 @@ class OpenAICompatASRAdapter(ASRPort):
         self._api_key = api_key
         self._timeout = timeout_seconds
         self._transport = transport
+        self._endpoint_path = endpoint_path
 
     @property
     def model(self) -> str:
@@ -52,6 +58,11 @@ class OpenAICompatASRAdapter(ASRPort):
         """Configured remote endpoint."""
         return self._base_url
 
+    @property
+    def endpoint_path(self) -> str:
+        """Route this adapter posts to, defaulting to the OpenAI one."""
+        return self._endpoint_path or TRANSCRIPTIONS_PATH
+
     def transcribe(
         self, audio_path: str | Path, *, language: str | None = None
     ) -> list[TranscriptSegment]:
@@ -60,11 +71,12 @@ class OpenAICompatASRAdapter(ASRPort):
         if not source.is_file():
             raise ASRError(f"Audio file does not exist: {source}")
 
-        url = http.build_endpoint(self._base_url, TRANSCRIPTIONS_PATH)
+        url = http.build_endpoint(self._base_url, self.endpoint_path)
         fields = {
             "model": self._model,
             # verbose_json is what carries per-segment timestamps; plain
-            # json_format returns only a single blob of text.
+            # json_format returns only a single blob of text. whisper.cpp
+            # supports the same value and returns the same segment shape.
             "response_format": "verbose_json",
         }
         if language:

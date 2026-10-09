@@ -3,7 +3,9 @@
 Follows the pipeline stage contract with the T011 lifecycle pattern, moving
 ``TRANSCRIPT_READY`` → ``VISUAL_ANALYSIS_READY``. Each scene is analyzed
 independently with a small context window (its frames, overlapping dialogue,
-previous scene summary) per P3. Per-scene caching makes reruns cheap.
+previous scene summary) per P3. Per-scene caching makes reruns cheap. The VLM
+is chosen by :func:`build_vlm_adapter` from the configured ``ModelSpec`` --
+local MLX weights, or a remote OpenAI-compatible endpoint.
 """
 
 from __future__ import annotations
@@ -19,10 +21,11 @@ from movie_review.config.prompts import load_prompt, render
 from movie_review.domain import Artifact, JobStatus, Scene, SceneAnalysis, TranscriptSegment
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
+from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
+from movie_review.vision.factory import build_vlm_adapter
 from movie_review.vision.port import AnalysisInput, VLMPort
-from movie_review.vision.qwen_vl import QwenVLAdapter
 
 _logger = logging.getLogger(__name__)
 
@@ -70,8 +73,14 @@ def run_visual_analysis(
     ctx: StageContext,
     port: VLMPort | None = None,
     prompt_version: str | None = None,
+    on_progress: ProgressReporter | None = None,
 ) -> VisualAnalysisResult:
-    """Analyze scenes for ``ctx.job_id`` through to ``VISUAL_ANALYSIS_READY``."""
+    """Analyze scenes for ``ctx.job_id`` through to ``VISUAL_ANALYSIS_READY``.
+
+    Reports one step per scene when ``on_progress`` is given. This is the longest
+    stage in the pipeline -- one VLM call per scene, each with its own network
+    round trip -- so a per-scene fraction is what tells the user it is moving.
+    """
     started = time.perf_counter()
     try:
         job = ctx.manager.get(ctx.job_id)
@@ -82,8 +91,12 @@ def run_visual_analysis(
     owns_completion = job.status is JobStatus.TRANSCRIPT_READY
 
     prompt = load_prompt("scene_analysis", prompt_version)
-    active = port or QwenVLAdapter(ctx.settings.models.vision.model)
-    model = active.model if isinstance(active, QwenVLAdapter) else type(active).__name__
+    # build_vlm_adapter honours ModelSpec.backend, so a remote VLM is reachable
+    # without MLX installed. Hardcoding QwenVLAdapter ignored the configuration.
+    active = port or build_vlm_adapter(ctx.settings.models.vision)
+    # From the port, not the adapter type: a remote adapter's real model id must
+    # reach the cache key, otherwise every remote run keys on the class name.
+    model = active.model
 
     analyses: list[SceneAnalysis] = []
     cache_hits = 0
@@ -142,6 +155,16 @@ def run_visual_analysis(
                 raise VisualAnalysisError(f"Scene ID drift in analysis for {scene.scene_id}")
             analyses.append(analysis)
             previous = analysis
+            if on_progress is not None:
+                # Reported after a scene is fully done, cache hit or not, so the
+                # count only advances on work that actually completed.
+                on_progress(
+                    WorkProgress(
+                        done=len(analyses),
+                        total=len(scenes),
+                        label=f"scene {len(analyses)}/{len(scenes)}",
+                    )
+                )
     finally:
         active.unload()
 
@@ -155,12 +178,19 @@ def run_visual_analysis(
     }
     vision_path = artifacts.artifact_path(ctx.jobs_dir, ctx.job_id, STAGE_NAME, VISION_FILENAME)
     output_hash = artifacts.write_json(vision_path, document)
+    # Persisted per scene as well as in the document. Four downstream stages need
+    # these analyses and every one of them used to reopen vision.json and
+    # re-validate the same objects; a query is both cheaper and the reason a
+    # job's visual analysis survives a deleted or moved artifact directory.
+    for analysis in analyses:
+        repo.save_scene_analysis(ctx.conn, ctx.job_id, analysis)
     repo.save_artifact(
         ctx.conn,
         Artifact(
             artifact_id=f"{ctx.job_id}-vision",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, vision_path),
             input_hash=_run_input_hash(scenes),
             output_hash=output_hash,
             model=model,

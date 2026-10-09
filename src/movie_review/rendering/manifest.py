@@ -174,6 +174,7 @@ def assemble_manifest(
             artifact_id=f"{ctx.job_id}-render-manifest",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, manifest_path),
             input_hash=key,
             output_hash=output_hash,
         ),

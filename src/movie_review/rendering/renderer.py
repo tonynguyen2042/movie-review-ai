@@ -341,6 +341,7 @@ def render_job(
             artifact_id=f"{ctx.job_id}-review",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, dest),
             input_hash=artifacts.sha256_file(dest),
             output_hash=artifacts.sha256_file(dest),
         ),

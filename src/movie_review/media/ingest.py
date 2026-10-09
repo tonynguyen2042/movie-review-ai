@@ -104,6 +104,7 @@ def ingest_movie(
             artifact_id=f"{ctx.job_id}-ingest-media",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, media_path),
             input_hash=file_hash,
             output_hash=output_hash,
         ),

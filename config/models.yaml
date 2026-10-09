@@ -74,7 +74,18 @@ profiles:
   #                response_format=verbose_json for timestamps)
   #   vision    -> POST {base}/chat/completions     (base64 image_url parts)
   #   reasoning -> POST {base}/chat/completions
+  #   translation -> POST {base}/chat/completions   (own slot; defaults to
+  #                `reasoning` when a profile omits it)
   #   tts       -> POST {base}/audio/speech         (wav or headerless pcm)
+  #
+  # Servers that spell the ASR route differently: whisper.cpp's `whisper-server`
+  # serves POST {base}/inference and has no /audio/transcriptions at all, so a
+  # request to the OpenAI path comes back 404 from an otherwise healthy server.
+  # It returns the same verbose_json segment shape, so only the route changes:
+  #
+  #   asr:
+  #     endpoint_path: /inference
+  #
   #
   # TTS: ask for `wav` so duration can be measured from the bytes. `mp3` is
   # rejected deliberately rather than guessed, since a wrong duration
@@ -107,6 +118,18 @@ profiles:
       backend: openai_compatible
       base_url: http://gpu-box.local:8000/v1
       enabled: false
+    # Translation gets its own slot so it can be a different size, a different
+    # quantisation, or a different host from the reasoning model -- without
+    # touching the reasoning model for every other reasoning stage. Omit the
+    # slot in a profile and translation borrows `reasoning`, which is what it did
+    # before the slot existed. It runs only when --target-language differs from
+    # --language; a same-language run never calls it.
+    translation:
+      model: Qwen3.5-9B
+      backend: openai_compatible
+      base_url: http://gpu-box.local:8000/v1
+      # api_key_env: MOVIE_REVIEW_TRANSLATION_TOKEN
+      timeout_seconds: 120
     tts:
       model: Qwen3-TTS-12Hz-1.7B
       backend: openai_compatible

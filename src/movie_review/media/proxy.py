@@ -135,6 +135,7 @@ def generate_proxy(
             artifact_id=f"{job_id}-proxy-video",
             job_id=job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(jobs_dir, job_id, dest),
             input_hash=file_hash,
             output_hash=output_hash,
         ),

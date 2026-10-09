@@ -17,11 +17,12 @@ from typing import Any
 from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.config.prompts import load_prompt, render
+from movie_review.config.settings import ModelSpec
 from movie_review.domain import Artifact, JobStatus, ReviewPlan, ReviewScript, ReviewSection
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
+from movie_review.reasoning.factory import build_reasoning_adapter
 from movie_review.reasoning.port import ReasoningPort
-from movie_review.reasoning.qwen import QwenReasoningAdapter
 from movie_review.review.styles import StyleProfile
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
@@ -72,12 +73,18 @@ def write_script(
     style: StyleProfile,
     target_words: int,
     ctx: StageContext,
-    model: str,
+    spec: ModelSpec,
     reasoner: ReasoningPort | None = None,
     prompt_version: str | None = None,
     spoilers: str | None = None,
 ) -> ScriptResult:
-    """Write narration for ``ctx.job_id`` through to ``SCRIPT_READY``."""
+    """Write narration for ``ctx.job_id`` through to ``SCRIPT_READY``.
+
+    ``spec`` is the configured reasoning model. The adapter is built from it, so
+    ``backend: openai_compatible`` routes to a remote endpoint. Constructing
+    QwenReasoningAdapter directly ignored the configured backend and demanded MLX
+    on every host.
+    """
     started = time.perf_counter()
     try:
         job = ctx.manager.get(ctx.job_id)
@@ -90,8 +97,11 @@ def write_script(
         raise ScriptWriterError(f"Target words must be positive: {target_words}")
 
     prompt = load_prompt("script_writer", prompt_version)
-    active = reasoner or QwenReasoningAdapter(model)
-    model_id = active.model if isinstance(active, QwenReasoningAdapter) else type(active).__name__
+    active = reasoner or build_reasoning_adapter(spec)
+    # The adapter's own model, not its class name: a class-name key gives every
+    # remote model the same cache entry, so switching models silently reuses the
+    # previous model's output.
+    model_id = active.model
     story = _story_brief(analysis)
     total_seconds = sum(section.target_seconds for section in outline.sections)
     run_hash = artifacts.sha256_bytes(
@@ -116,7 +126,7 @@ def write_script(
                 target_words=str(share),
                 spoilers=spoilers or style.spoilers,
             )
-            spec = CacheSpec(
+            cache_spec = CacheSpec(
                 stage=STAGE_NAME,
                 stage_version=STAGE_VERSION,
                 input_hash=artifacts.sha256_bytes(
@@ -127,7 +137,7 @@ def write_script(
                 model_id=model_id,
                 prompt_version=f"{prompt.name}:{prompt.version}",
             )
-            key = cache_key(spec)
+            key = cache_key(cache_spec)
             cached = ctx.cache.lookup_json(key)
             if cached is not None:
                 try:
@@ -191,6 +201,7 @@ def write_script(
             artifact_id=f"{ctx.job_id}-review-script",
             job_id=ctx.job_id,
             stage=STAGE_NAME,
+            relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, script_path),
             input_hash=run_hash,
             output_hash=output_hash,
             model=model_id,

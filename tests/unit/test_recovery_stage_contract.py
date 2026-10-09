@@ -89,8 +89,25 @@ def test_untracked_stages_are_not_skipped() -> None:
 
 
 def test_tts_resume_uses_a_real_tts_stage() -> None:
-    """Regression: the table said 'tts', which is not a stage name."""
+    """Regression: the table said 'tts', which is not a stage name.
+
+    SCRIPT_READY now resumes at review-translate, which sits between writing the
+    script and speaking it. What matters is that the resume point is a real stage
+    and that no audio stage is skipped on the way to TTS.
+    """
     for status in (JobStatus.SCRIPT_READY, JobStatus.SCRIPT_VERIFIED):
         target = _RESUME_STAGE[status]
-        assert target.startswith("tts-"), f"{status.value} resumes at {target!r}"
-        assert target in STAGES
+        assert target in STAGES, f"{status.value} resumes at unregistered {target!r}"
+
+    assert _RESUME_STAGE[JobStatus.SCRIPT_READY] == "review-translate"
+    assert _RESUME_STAGE[JobStatus.SCRIPT_VERIFIED] == "tts-chunks"
+
+
+def test_script_ready_resume_does_not_skip_translation() -> None:
+    """Resuming straight into TTS would speak the source language.
+
+    The whole point of the target language is lost if a job interrupted after
+    writing the script is resumed with translation bypassed.
+    """
+    target = _RESUME_STAGE[JobStatus.SCRIPT_READY]
+    assert STAGES.index("review") < STAGES.index(target) < STAGES.index("tts-chunks")

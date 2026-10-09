@@ -49,11 +49,22 @@ def _extract_json(text: str) -> Any:
     start = text.find("{")
     end = text.rfind("}")
     if start < 0 or end <= start:
-        raise VLMError("VLM output contains no JSON object")
+        # Quote the reply: "no JSON object" on its own cannot distinguish a
+        # refusal, an empty answer, and output truncated before its closing
+        # brace, which are three different problems with three different fixes.
+        raise VLMError(f"VLM output contains no JSON object; reply began: {_excerpt(text)!r}")
     try:
         return json.loads(text[start : end + 1])
     except json.JSONDecodeError as exc:
-        raise VLMError(f"VLM output is not valid JSON: {exc}") from exc
+        raise VLMError(
+            f"VLM output is not valid JSON: {exc}; reply began: {_excerpt(text)!r}"
+        ) from exc
+
+
+def _excerpt(text: str) -> str:
+    """Bounded single-line view of a reply, for error messages."""
+    flattened = " ".join(text.split())
+    return flattened[:300] + "..." if len(flattened) > 300 else flattened
 
 
 def _load_mlx_analyzer(model: str) -> RawAnalyzer:

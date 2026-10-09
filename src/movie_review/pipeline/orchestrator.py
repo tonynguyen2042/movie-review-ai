@@ -10,18 +10,25 @@ import logging
 import sqlite3
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from movie_review.artifacts import ArtifactRecord
+from movie_review.artifacts import ArtifactRecord, IntegrityReport
+from movie_review.artifacts import manager as artifacts_manager
 from movie_review.cache.manager import CacheManager
+from movie_review.domain import JobStatus, ReviewScript
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.recovery import recovery_plan
 from movie_review.pipeline.context import StageContext
+from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.utils import logging as ulog
 
 _logger = logging.getLogger(__name__)
+
+#: Language used when a caller states none. Matches the ASR adapter's own
+#: default so the transcript, the script and TTS all agree.
+DEFAULT_LANGUAGE = "en"
 
 # Stage execution order matching T006 state machine
 STAGE_SEQUENCE: list[tuple[str, str]] = [
@@ -37,6 +44,7 @@ STAGE_SEQUENCE: list[tuple[str, str]] = [
     ("twists", "Detect twists"),
     ("story", "Build movie-analysis.json"),
     ("review", "Write review script"),
+    ("review-translate", "Translate script to the target language"),
     ("tts-chunks", "Plan and synthesize TTS chunks"),
     ("tts-concat", "Concatenate narration"),
     ("tts-reconcile", "Reconcile narration duration"),
@@ -63,9 +71,44 @@ class PipelineContext(StageContext):
     Extends :class:`StageContext` so it can be handed to any stage without
     conversion -- the stage contract only needs the context fields, plus the
     source movie for the stages that open it.
+
+    ``stage_progress`` is set by :func:`run_stage` for the duration of a stage,
+    already bound to that stage's name, so a stage publishes steps without
+    knowing what it is called. It is None when nobody is listening.
     """
 
     movie_path: Path
+    stage_progress: ProgressReporter | None = None
+    #: Language the movie's dialogue is spoken in; given to ASR so it does not
+    #: have to be detected, and treated as the source language for translation.
+    source_language: str = DEFAULT_LANGUAGE
+    #: Language the narration must end up in. Defaults to the source, which means
+    #: no translation runs at all.
+    target_language: str = DEFAULT_LANGUAGE
+
+
+def load_effective_script(ctx: PipelineContext) -> ReviewScript:
+    """The review script in the language the narration must be spoken in.
+
+    Every stage after translation -- chunking, concatenation, reconciliation and
+    the render manifest -- reads the script through here. Four of them previously
+    opened review-script.json directly, so a job that asked for another language
+    would have been spoken, and subtitled, in the source one.
+    """
+    from movie_review.review.translate import effective_script_path, load_script
+
+    return load_script(effective_script_path(ctx.jobs_dir, ctx.job_id, ctx.target_language))
+
+
+def _sub_step(ctx: PipelineContext) -> ProgressReporter | None:
+    """The progress callback for sub-steps of the running stage.
+
+    ``run_stage`` already bound the stage name, so this only narrows the
+    context field to the single-argument shape the sub-steps take, and returns
+    None when nobody is listening rather than wrapping a call in a no-op that
+    would still be invoked once per frame.
+    """
+    return ctx.stage_progress
 
 
 def _stage_logger(stage: str) -> logging.Logger:
@@ -87,6 +130,7 @@ def run_stage(
     fn: Callable[[PipelineContext], Any],
     ctx: PipelineContext,
     on_progress: Callable[[str, StageResult | None], None] | None = None,
+    on_work: Callable[[str, WorkProgress], None] | None = None,
 ) -> StageResult:
     """Run a single stage with logging and error capture.
 
@@ -94,11 +138,22 @@ def run_stage(
     stage body runs and ``(name, result)`` once it finishes, so a caller can
     report progress while a long stage is still in flight rather than only
     after every stage has completed.
+
+    ``on_work`` receives ``(name, WorkProgress)`` from stages that can divide
+    their work. It is a separate channel from ``on_progress`` on purpose: one
+    means "the stage started or ended", the other means "this is how far along
+    it is", and collapsing them would leave every consumer re-deriving which is
+    which.
     """
     started = time.perf_counter()
     stage_logger = _stage_logger(name)
     if on_progress is not None:
         on_progress(name, None)
+    # Bind the stage name here, where it is known, so a stage can publish steps
+    # without knowing what it is called. Restored afterwards because one context
+    # is reused across every stage in the run.
+    previous_progress = ctx.stage_progress
+    ctx.stage_progress = (lambda progress: on_work(name, progress)) if on_work else None
     with ulog.logging_context(job_id=ctx.job_id, stage=name):
         try:
             # The stage's return value is intentionally unused: stages persist
@@ -122,22 +177,38 @@ def run_stage(
                 error=str(exc),
             )
             result = StageResult(stage=name, success=False, duration_ms=duration_ms, error=str(exc))
+        finally:
+            ctx.stage_progress = previous_progress
     if on_progress is not None:
         on_progress(name, result)
     return result
 
 
-def _build_context(job_id: str, movie_path: str | Path, db_path: str | None) -> PipelineContext:
+def _build_context(
+    job_id: str,
+    movie_path: str | Path,
+    db_path: str | None,
+    profile: str | None = None,
+    source_language: str | None = None,
+    target_language: str | None = None,
+) -> PipelineContext:
     """Build runtime context from settings and job database.
 
     ``jobs_dir`` is the per-job root (``<data_dir>/jobs``), matching
     :meth:`StageContext.from_settings`, so artifacts land under
     ``<data_dir>/jobs/<job_id>/`` as the artifact layout requires.
+
+    ``profile`` selects a ``models.yaml`` profile for this run only, overriding
+    the environment and ``default.yaml``.
+
+    ``source_language`` is given to ASR and treated as the language the review is
+    written in; ``target_language`` is what the narration must end up in and
+    defaults to the source, which skips translation entirely.
     """
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
 
-    settings = load_settings()
+    settings = load_settings(profile=profile)
     data_dir = Path(settings.paths.data_dir)
     resolved_db = Path(db_path) if db_path else data_dir / "jobs.db"
     conn = sqlite3.connect(str(bootstrap(resolved_db)))
@@ -147,6 +218,7 @@ def _build_context(job_id: str, movie_path: str | Path, db_path: str | None) -> 
     # Cache dir is under data_dir/cache
     cache_dir = data_dir / "cache"
     cache = CacheManager(cache_dir)
+    source = source_language or DEFAULT_LANGUAGE
     return PipelineContext(
         job_id=job_id,
         jobs_dir=data_dir / "jobs",
@@ -155,6 +227,10 @@ def _build_context(job_id: str, movie_path: str | Path, db_path: str | None) -> 
         cache=cache,
         settings=settings,
         movie_path=Path(movie_path),
+        source_language=source,
+        # Not passing a target means "speak the source language", which is why
+        # this falls back to the source rather than to a fixed default.
+        target_language=target_language or source,
     )
 
 
@@ -165,6 +241,10 @@ def run_pipeline(
     start_stage: str | None = None,
     end_stage: str | None = None,
     on_progress: Callable[[str, StageResult | None], None] | None = None,
+    profile: str | None = None,
+    on_work: Callable[[str, WorkProgress], None] | None = None,
+    source_language: str | None = None,
+    target_language: str | None = None,
 ) -> list[StageResult]:
     """Execute pipeline stages in sequence with optional start/end bounds.
 
@@ -173,8 +253,22 @@ def run_pipeline(
     stage so later stages never observe broken state.
 
     ``on_progress`` is forwarded to :func:`run_stage`; see there.
+    ``on_work`` likewise receives in-stage steps.
+
+    ``profile`` selects a ``models.yaml`` profile for this run only.
+    ``source_language`` and ``target_language`` are described in
+    :func:`_build_context`.
     """
-    ctx = _build_context(job_id, movie_path, db_path)
+    # Pass profile by keyword: it is a trailing option, and call sites that
+    # patch this helper should not have to track its position.
+    ctx = _build_context(
+        job_id,
+        movie_path,
+        db_path,
+        profile=profile,
+        source_language=source_language,
+        target_language=target_language,
+    )
     results: list[StageResult] = []
     order = [name for name, _ in STAGE_SEQUENCE]
 
@@ -193,7 +287,7 @@ def run_pipeline(
         stage_fn = _get_stage_function(stage_name)
         if stage_fn is None:
             continue
-        result = run_stage(stage_name, stage_fn, ctx, on_progress=on_progress)
+        result = run_stage(stage_name, stage_fn, ctx, on_progress=on_progress, on_work=on_work)
         results.append(result)
         if not result.success:
             break
@@ -251,16 +345,76 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
                 cache=ctx.cache,
                 settings=ctx.settings,
             ),
+            # The CLI's --language used to be logged and then dropped, so ASR was
+            # left to auto-detect every time. Told explicitly it skips a detection
+            # pass and keeps the transcript's language column meaningful.
+            language=ctx.source_language,
         )
 
     def vision_fn(ctx: PipelineContext) -> Any:
+        from movie_review.media.frames import sample_movie, sampling_config_from
+        from movie_review.media.proxy import generate_proxy
         from movie_review.storage import repositories as repo
         from movie_review.vision.analysis import run_visual_analysis
 
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
         segments = repo.list_transcript_segments(ctx.conn, ctx.job_id)
-        # Frames need to be sampled - for now empty
+
+        # A downscaled analysis proxy, built once and reused. Frames are read from
+        # it rather than from the source: the vision adapter inlines each frame
+        # as a base64 data URI, so a 4K Blu-ray JPEG is megabytes per frame and a
+        # feature film would send gigabytes to the VLM. At 720p the same frames
+        # cost a fraction of that, and scene structure, blocking and action are
+        # what the analysis prompt actually asks about.
+        #
+        # Generated here rather than as its own stage because it exists only to
+        # make this stage's input cheaper; the checkpoint sequence and the job
+        # state machine stay untouched. generate_proxy is idempotent (cache key
+        # over the source hash and the scaling settings, re-verified against the
+        # proxy's own sha256), so retries and resumes reuse it.
+        proxy_settings = ctx.settings.media.proxy
+        proxy = generate_proxy(
+            ctx.movie_path,
+            job_id=ctx.job_id,
+            jobs_dir=ctx.jobs_dir,
+            conn=ctx.conn,
+            cache=ctx.cache,
+            max_width=proxy_settings.max_width,
+            max_height=proxy_settings.max_height,
+            preset=proxy_settings.preset,
+            crf=proxy_settings.crf,
+            ffmpeg=ctx.settings.media.ffmpeg,
+        )
+
+        # Frames are the vision stage's input, sampled here for the same reason
+        # the transcript stage extracts its own audio: preparation belongs to
+        # the stage that needs it. This used to pass an empty dict with a "for
+        # now empty" comment, so run_visual_analysis raised "No frames for
+        # <scene>" on the first scene every single time.
+        #
+        # sample_movie is idempotent (cache key over the sampled file's hash,
+        # scene spans and bucket settings, re-verified against each frame's
+        # sha256), so a retry or resume re-uses the frames instead of re-running
+        # ffmpeg.
+        sampled = sample_movie(
+            proxy.path,
+            [(scene.scene_id, scene.start, scene.end) for scene in scenes],
+            job_id=ctx.job_id,
+            jobs_dir=ctx.jobs_dir,
+            conn=ctx.conn,
+            cache=ctx.cache,
+            config=sampling_config_from(ctx.settings.pipeline.visual_sampling),
+            ffmpeg=ctx.settings.media.ffmpeg,
+            # run_stage left the caller's callback here, already bound to
+            # "vision"; both sub-steps report through the same channel.
+            on_progress=_sub_step(ctx),
+        )
+        # Grouped by scene, in timestamp order: sample_movie emits each scene's
+        # frames consecutively and ascending, and the VLM reads them in order.
         frames: dict[str, list[Path]] = {}
+        for frame in sampled.frames:
+            frames.setdefault(frame.scene_id, []).append(frame.path)
+
         return run_visual_analysis(
             scenes,
             frames,
@@ -273,26 +427,18 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
                 cache=ctx.cache,
                 settings=ctx.settings,
             ),
+            on_progress=_sub_step(ctx),
         )
 
     def characters_fn(ctx: PipelineContext) -> Any:
         from movie_review.characters.discovery import discover_characters, save_discovery
-        from movie_review.domain import SceneAnalysis
         from movie_review.storage import repositories as repo
 
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
-        analyses_list: list[SceneAnalysis] = []
-        vision_path = ctx.jobs_dir / ctx.job_id / "vision" / "vision.json"
-        if vision_path.is_file():
-            import json
-
-            with vision_path.open() as f:
-                vision_data = json.load(f)
-                analyses_list = [
-                    SceneAnalysis.model_validate(a)
-                    for a in vision_data.get("analyses", [])
-                    if "scene_id" in a
-                ]
+        # From the database rather than by reopening vision.json. The file
+        # stays the artifact of record; this is the queryable copy, and it is
+        # why the analyses survive a moved or pruned artifact tree.
+        analyses_list = repo.list_scene_analyses(ctx.conn, ctx.job_id)
 
         scene_spans = {scene.scene_id: (scene.start, scene.end) for scene in scenes}
         segments = repo.list_transcript_segments(ctx.conn, ctx.job_id)
@@ -308,24 +454,11 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         return result
 
     def locations_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import SceneAnalysis
         from movie_review.knowledge.locations import extract_locations, scene_locations
         from movie_review.storage import repositories as repo
 
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
-        vision_path = Path(ctx.jobs_dir) / ctx.job_id / "vision" / "vision.json"
-        analyses_list = []
-        if vision_path.is_file():
-            import json
-
-            with vision_path.open() as f:
-                vision_data = json.load(f)
-                analyses_list = vision_data.get("analyses", [])
-
-        analyses = {
-            a["scene_id"]: SceneAnalysis.model_validate(a) for a in analyses_list if "scene_id" in a
-        }
-        analyses_list = list(analyses.values())
+        analyses_list = repo.list_scene_analyses(ctx.conn, ctx.job_id)
 
         scene_spans = scene_locations(scenes)
         locations = extract_locations(analyses_list, scene_spans)
@@ -335,23 +468,11 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         return locations
 
     def events_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import SceneAnalysis
         from movie_review.storage import repositories as repo
         from movie_review.story.events import run_event_extraction
 
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
-        analyses_list = []
-        vision_path = Path(ctx.jobs_dir) / ctx.job_id / "vision" / "vision.json"
-        if vision_path.is_file():
-            import json
-
-            with vision_path.open() as f:
-                vision_data = json.load(f)
-                analyses_list = vision_data.get("analyses", [])
-
-        analyses = {
-            a["scene_id"]: SceneAnalysis.model_validate(a) for a in analyses_list if "scene_id" in a
-        }
+        analyses = {a.scene_id: a for a in repo.list_scene_analyses(ctx.conn, ctx.job_id)}
 
         characters = repo.list_characters(ctx.conn, ctx.job_id)
         segments = repo.list_transcript_segments(ctx.conn, ctx.job_id)
@@ -386,7 +507,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             jobs_dir=ctx.jobs_dir,
             conn=ctx.conn,
             cache=ctx.cache,
-            model=ctx.settings.models.reasoning.model,
+            spec=ctx.settings.models.reasoning,
         )
 
     def themes_fn(ctx: PipelineContext) -> Any:
@@ -404,7 +525,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             jobs_dir=ctx.jobs_dir,
             conn=ctx.conn,
             cache=ctx.cache,
-            model=ctx.settings.models.reasoning.model,
+            spec=ctx.settings.models.reasoning,
         )
 
     def twists_fn(ctx: PipelineContext) -> Any:
@@ -422,7 +543,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             jobs_dir=ctx.jobs_dir,
             conn=ctx.conn,
             cache=ctx.cache,
-            model=ctx.settings.models.reasoning.model,
+            spec=ctx.settings.models.reasoning,
         )
 
     def story_fn(ctx: PipelineContext) -> Any:
@@ -472,43 +593,101 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
                 cache=ctx.cache,
                 settings=ctx.settings,
             ),
-            model=ctx.settings.models.reasoning.model,
+            spec=ctx.settings.models.reasoning,
         )
 
+    def review_translate_fn(ctx: PipelineContext) -> Any:
+        from movie_review.review.translate import (
+            load_script,
+            source_script_path,
+            translate_script,
+        )
+
+        source_path = source_script_path(ctx.jobs_dir, ctx.job_id)
+        script = load_script(source_path)
+
+        try:
+            result = translate_script(
+                script,
+                StageContext(
+                    job_id=ctx.job_id,
+                    jobs_dir=ctx.jobs_dir,
+                    conn=ctx.conn,
+                    manager=ctx.manager,
+                    cache=ctx.cache,
+                    settings=ctx.settings,
+                ),
+                source_language=ctx.source_language,
+                target_language=ctx.target_language,
+                # The dedicated translation slot, which falls back to reasoning
+                # when a profile does not declare one.
+                spec=ctx.settings.models.effective_translation,
+                on_progress=_sub_step(ctx),
+            )
+        except Exception as exc:
+            # Recorded so `retry --stage review-translate` knows where to resume,
+            # the same way the transcript stage reports its own failures.
+            if ctx.manager.get(ctx.job_id).status is not JobStatus.FAILED:
+                ctx.manager.fail(ctx.job_id, "review-translate", str(exc))
+            raise
+
+        if result.skipped:
+            # Same language in and out: no artifact, no model call, and the
+            # source script stays the effective one.
+            return result
+        return result
+
     def tts_chunks_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import ReviewScript
-        from movie_review.tts.chunks import plan_chunks, synthesize_chunks
-        from movie_review.tts.qwen_tts import QwenTTSAdapter
+        from movie_review.tts.chunks import (
+            DEFAULT_VOICE,
+            plan_chunks,
+            synthesize_chunks,
+        )
+        from movie_review.tts.factory import build_tts_adapter
 
-        script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
-        import json
+        script = load_effective_script(ctx)
 
-        with script_path.open() as f:
-            script_data = json.load(f)
-
-        script = ReviewScript.model_validate(script_data["script"])
-
-        port = QwenTTSAdapter(ctx.settings.models.tts.model)
-        chunks = plan_chunks(script, voice="default")
-        return synthesize_chunks(chunks, port, ctx.jobs_dir, ctx.job_id)
+        # build_tts_adapter honours ModelSpec.backend; constructing QwenTTSAdapter
+        # directly ignored it and required MLX on every host.
+        port = build_tts_adapter(ctx.settings.models.tts)
+        # Same voice constant the concat stage re-plans with, so the narration
+        # metadata names the voice that actually synthesised the audio.
+        chunks = plan_chunks(script, voice=DEFAULT_VOICE)
+        return synthesize_chunks(
+            chunks,
+            port,
+            ctx.jobs_dir,
+            ctx.job_id,
+            on_progress=_sub_step(ctx),
+        )
 
     def tts_concat_fn(ctx: PipelineContext) -> Any:
+        from movie_review.tts.chunks import (
+            DEFAULT_VOICE,
+            collect_chunk_results,
+            plan_chunks,
+        )
+        from movie_review.tts.concat import NARRATION_FILENAME, concatenate
 
-        # Load chunk results from artifacts
-        # This is simplified - in practice would load from chunk metadata
-        pass
+        script = load_effective_script(ctx)
+
+        # Re-planned rather than carried in memory: concatenation is its own
+        # retryable stage, and chunk IDs are positional, so the same script and
+        # voice reproduce the same plan. Durations are measured from the files.
+        planned = plan_chunks(script, voice=DEFAULT_VOICE)
+        chunks = collect_chunk_results(planned, ctx.jobs_dir, ctx.job_id)
+
+        # Deliberately no cache lookup: joining WAVs is pure local I/O and
+        # redoing it costs a second, while a stale narration.wav would be worse.
+        return concatenate(
+            chunks,
+            artifacts_manager.artifact_path(ctx.jobs_dir, ctx.job_id, "tts", NARRATION_FILENAME),
+        )
 
     def tts_reconcile_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import ReviewScript
         from movie_review.tts.reconcile import run_reconciliation
 
-        script_path = Path(ctx.jobs_dir) / ctx.job_id / "review" / "review-script.json"
-        import json
-
-        with script_path.open() as f:
-            script_data = json.load(f)
-
-        script = ReviewScript.model_validate(script_data["script"])
+        script = load_effective_script(ctx)
         narration_path = Path(ctx.jobs_dir) / ctx.job_id / "tts" / "narration.wav"
         target_seconds = ctx.settings.pipeline.review.target_duration_minutes * 60
         wpm = ctx.settings.pipeline.review.target_wpm
@@ -529,34 +708,16 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         )
 
     def render_manifest_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import ReviewScript, SceneAnalysis
         from movie_review.rendering.clips import select_clips
         from movie_review.rendering.manifest import assemble_manifest
         from movie_review.rendering.planner import plan_visuals
         from movie_review.storage import repositories as repo
 
-        script_path = ctx.jobs_dir / ctx.job_id / "review" / "review-script.json"
-        import json
-
-        with script_path.open() as f:
-            script_data = json.load(f)
-
-        script = ReviewScript.model_validate(script_data["script"])
+        script = load_effective_script(ctx)
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
         paragraphs = [p for s in script.sections for p in s.paragraphs]
 
-        # Load analyses
-        vision_path = ctx.jobs_dir / ctx.job_id / "vision" / "vision.json"
-        analyses_list: list[SceneAnalysis] = []
-        if vision_path.is_file():
-            with vision_path.open() as f:
-                vision_data = json.load(f)
-                analyses_list = [
-                    SceneAnalysis.model_validate(a)
-                    for a in vision_data.get("analyses", [])
-                    if "scene_id" in a
-                ]
-        analyses = {a.scene_id: a for a in analyses_list}
+        analyses = {a.scene_id: a for a in repo.list_scene_analyses(ctx.conn, ctx.job_id)}
 
         events = repo.list_events(ctx.conn, ctx.job_id)
 
@@ -647,6 +808,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         "twists": twists_fn,
         "story": story_fn,
         "review": review_fn,
+        "review-translate": review_translate_fn,
         "tts-chunks": tts_chunks_fn,
         "tts-concat": tts_concat_fn,
         "tts-reconcile": tts_reconcile_fn,
@@ -660,10 +822,17 @@ def resume_job(
     job_id: str,
     db_path: str | None = None,
     on_progress: Callable[[str, StageResult | None], None] | None = None,
+    profile: str | None = None,
+    on_work: Callable[[str, WorkProgress], None] | None = None,
+    source_language: str | None = None,
+    target_language: str | None = None,
 ) -> list[StageResult]:
     """Resume a job from its recovery point.
 
     ``on_progress`` is forwarded to :func:`run_pipeline`; see there.
+    ``on_work`` likewise receives in-stage steps.
+    ``profile`` selects a ``models.yaml`` profile for this resume only, and the
+    languages behave as they do for a fresh run.
     """
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
@@ -689,11 +858,29 @@ def resume_job(
         db_path,
         start_stage=plan.resume_stage,
         on_progress=on_progress,
+        profile=profile,
+        on_work=on_work,
+        source_language=source_language,
+        target_language=target_language,
     )
 
 
-def validate_job(job_id: str, db_path: str | None = None) -> bool:
-    """Validate a job record and its artifacts."""
+def validate_job(job_id: str, db_path: str | None = None) -> IntegrityReport:
+    """Check that every artifact a job recorded is present and unmodified.
+
+    The records come from the artifacts table, which is the only place that knows
+    what was written and what it hashed to. Deriving them from the job status
+    instead -- which is what this did -- meant guessing filenames that were wrong
+    three different ways: the stage name is not the directory several stages write
+    into, the hash was left empty, and the jobs directory was off by one level. A
+    job with its media.json sitting on disk and its hash in the database was
+    reported invalid.
+
+    Returns:
+        An :class:`IntegrityReport`; ``passed`` is False when anything is missing,
+        corrupt or names an unsafe path.
+    """
+    from movie_review.artifacts import scan_job_integrity
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
 
@@ -702,50 +889,40 @@ def validate_job(job_id: str, db_path: str | None = None) -> bool:
     conn = sqlite3.connect(str(bootstrap(resolved_db)))
     conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
-    manager = JobManager(conn)
 
-    job = manager.get(job_id)
+    # Raises JobNotFoundError for an unknown id, which the CLI reports as a
+    # usage error rather than a traceback.
+    JobManager(conn).get(job_id)
 
-    # Run integrity check
-    from movie_review.artifacts import scan_job_integrity
-
-    # Build artifact records based on job status
-    records = _build_artifact_records(job, settings.paths.data_dir)
-    report = scan_job_integrity(settings.paths.data_dir, job_id, records)
-
-    return report.passed
+    jobs_dir = Path(settings.paths.data_dir) / "jobs"
+    records, unlocated = _records_for(conn, job_id)
+    report = scan_job_integrity(jobs_dir, job_id, records)
+    if unlocated:
+        report = replace(report, unlocated=unlocated)
+    return report
 
 
-def _build_artifact_records(job: Any, jobs_dir: str) -> list[ArtifactRecord]:
-    """Build artifact records for integrity check based on job status."""
-    from movie_review.artifacts import ArtifactRecord
-    from movie_review.domain import JobStatus
+def _records_for(conn: sqlite3.Connection, job_id: str) -> tuple[list[ArtifactRecord], list[str]]:
+    """Records for a job's artifacts, plus the ones that name no file.
+
+    A row without a ``relative_path`` predates schema 9. It cannot be located, and
+    guessing a path for it is exactly what made validation wrong before -- so it
+    is reported instead. A row without an ``output_hash`` is passed through as
+    None, which checks the file exists without claiming a comparison that was
+    never recorded; an empty string would instead mismatch every file.
+    """
+    from movie_review.storage.repositories import list_artifacts
 
     records: list[ArtifactRecord] = []
-
-    # Map job status to expected artifacts
-    if job.status in (
-        JobStatus.MEDIA_READY,
-        JobStatus.SCENES_READY,
-        JobStatus.TRANSCRIPT_READY,
-        JobStatus.VISUAL_ANALYSIS_READY,
-        JobStatus.CHARACTERS_READY,
-        JobStatus.EVENTS_READY,
-        JobStatus.STORY_READY,
-        JobStatus.REVIEW_PLAN_READY,
-        JobStatus.SCRIPT_READY,
-        JobStatus.SCRIPT_VERIFIED,
-        JobStatus.AUDIO_READY,
-        JobStatus.EDIT_PLAN_READY,
-        JobStatus.RENDERED,
-        JobStatus.QUALITY_CHECKED,
-        JobStatus.COMPLETED,
-    ):
-        records.append(ArtifactRecord(stage="media", filename="media.json", expected_hash=""))
-        records.append(ArtifactRecord(stage="scenes", filename="scenes.json", expected_hash=""))
+    unlocated: list[str] = []
+    for artifact in list_artifacts(conn, job_id):
+        if not artifact.relative_path:
+            unlocated.append(artifact.artifact_id)
+            continue
         records.append(
-            ArtifactRecord(stage="transcript", filename="transcript.json", expected_hash="")
+            ArtifactRecord(
+                relative_path=artifact.relative_path,
+                expected_hash=artifact.output_hash,
+            )
         )
-
-    # Add more based on status...
-    return records
+    return records, unlocated

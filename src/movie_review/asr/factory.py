@@ -19,5 +19,8 @@ def build_asr_adapter(spec: ModelSpec) -> ASRPort:
             spec.base_url,
             api_key=spec.resolved_api_key(),
             timeout_seconds=spec.timeout_seconds,
+            # Servers whose ASR route is not the OpenAI one (whisper.cpp serves
+            # /inference) name it here; unset keeps the OpenAI default.
+            endpoint_path=spec.endpoint_path,
         )
     return WhisperMLXAdapter(spec.model)
