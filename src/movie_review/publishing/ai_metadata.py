@@ -194,7 +194,7 @@ def generate_publishing_metadata(
         raise PublishingMetadataError(f"Unknown job: {ctx.job_id}") from exc
 
     prompt = load_prompt("publishing_metadata", prompt_version)
-    version = f"{prompt.name}:{prompt.version}"
+    version = prompt.cache_version
     excerpt = narration_excerpt(script)
     text = render(
         prompt,

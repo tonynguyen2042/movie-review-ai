@@ -118,7 +118,7 @@ def run_event_extraction(
                 stage_version=STAGE_VERSION,
                 input_hash=_scene_input_hash(scene, dialogue, prior),
                 model_id=model,
-                prompt_version=f"{prompt.name}:{prompt.version}",
+                prompt_version=prompt.cache_version,
             )
             key = cache_key(spec)
             cached = ctx.cache.lookup_json(key)
@@ -167,7 +167,7 @@ def run_event_extraction(
         "job_id": ctx.job_id,
         "stage": STAGE_NAME,
         "stage_version": STAGE_VERSION,
-        "prompt": f"{prompt.name}:{prompt.version}",
+        "prompt": prompt.cache_version,
         "model": model,
         "events": [event.model_dump(mode="json") for event in events],
     }
@@ -183,7 +183,7 @@ def run_event_extraction(
             input_hash=_run_input_hash(scenes),
             output_hash=output_hash,
             model=model,
-            prompt_version=f"{prompt.name}:{prompt.version}",
+            prompt_version=prompt.cache_version,
         ),
     )
     duration_ms = int((time.perf_counter() - started) * 1000)
