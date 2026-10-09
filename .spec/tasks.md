@@ -376,6 +376,103 @@ the original behaviour, so nothing changes for existing users.
 - Stop on Windows is `taskkill /T /F`, because `SIGINT` cannot reach a spawned
   child with no console. The job stays resumable. Documented.
 
+# Phase 14 - Cache Integrity
+
+- [x] **T112** Prompt-Content Cache Identity
+
+## T112 - Prompt-Content Cache Identity
+
+**Objective**
+
+Make a prompt's cache identity follow its content, so "prompt changes invalidate
+dependent AI artifacts" is actually true rather than conditional on remembering
+to bump a version number.
+
+**Depends on**: T002 (prompts), T008 (cache keys), T025 (vision stage).
+
+**The defect**
+
+Every AI stage bound its cache key with `f"{prompt.name}:{prompt.version}"`. A
+prompt is a file. Editing `config/prompts/scene_analysis_v1.md` without bumping
+its frontmatter `version` leaves that string unchanged, so the edited run served
+the earlier scenes from cache - analysed under the old text - while analysing the
+later scenes under the new one. The output is one corpus produced by two
+prompts, and nothing in the artifact, the cache key or the log records it.
+
+`config/prompts.py` already computed a `sha256` of every prompt file. It was
+never used: `git grep prompt.sha256` found exactly one hit, the assignment that
+produced it.
+
+**The fix**
+
+`Prompt.cache_version` - `name:version:<first 16 hex of sha256>` - used by every
+stage that keys on a prompt: vision, the review writer, the four story stages,
+publishing metadata, and translation. Sixteen hex characters rather than the bare
+version, and short enough to stay readable in a log line.
+
+**Files**
+
+```text
+src/movie_review/config/prompts.py            + Prompt.cache_version
+src/movie_review/vision/analysis.py           3 sites
+src/movie_review/review/writer.py             3 sites
+src/movie_review/review/translate.py          1 site (shared `version` variable)
+src/movie_review/story/{arcs,events,themes,twists}.py   3 sites each
+src/movie_review/publishing/ai_metadata.py    1 site (shared `version` variable)
+tests/unit/test_prompt_cache_identity.py      9 tests
+config/models.yaml                            operator change, not part of the fix
+```
+
+**Acceptance criteria**
+
+- [x] `Prompt.cache_version` is `name:version:<16 hex>` and is stable for
+      identical content.
+- [x] Editing only a prompt's body changes `cache_version`, with name and version
+      held constant.
+- [x] A vision cache key computed from an edited prompt does not match one
+      computed before the edit, and `CacheManager.lookup_json` reports a miss.
+- [x] An unedited prompt still hits its cache entry - the fix must not turn every
+      run into a miss.
+- [x] All eight stage modules use `cache_version`; no
+      `f"{prompt.name}:{prompt.version}"` remains.
+- [x] `pytest -q` - 1189 passed.
+- [x] `ruff check .`, `ruff format --check .`, `mypy src` pass.
+
+**Risks**
+
+- **Every AI cache entry written before this change becomes unreachable.** The
+  keys move. This is the intended direction - the old keys could serve analyses
+  made from a prompt nobody could identify - but it means the first run after
+  this lands re-runs any AI stage whose results were cached. Frame sampling and
+  scene detection are unaffected: they do not key on a prompt.
+- `ai_metadata.py` and `translate.py` share one `version` variable between the
+  cache key and the artifact record, so their recorded `prompt_version` now
+  carries the digest too. That is more provenance, not less, but it is a visible
+  change to the stored value.
+
+**Measured on job_20261007_006 (read-only, before this fix)**
+
+| Question | Answer |
+|---|---|
+| Frames reusable on retry? | **Yes** - 179/179 scenes adoptable, 0 to re-extract |
+| Vision analyses reusable? | **No** - 0/179 hits |
+
+The 283 stored vision entries cover scenes 1-137 contiguously, but none is
+reachable now. Their `input_hash` includes each frame's sha256 and the scene's
+dialogue; both were verified stable (`ffmpeg` reproduces a frame bit-for-bit, and
+`transcript.json` and the `transcript_segments` table agree), and neither
+`_scene_input_hash` nor `STAGE_VERSION` has changed since 2026-10-04. A 480-way
+sweep over stage version, model id and prompt version found no match. The entries
+therefore describe an earlier state of that job's inputs. The cache is behaving
+correctly - refusing to reuse an analysis whose inputs moved - but a retry of
+that job pays for all 179 VLM calls.
+
+Related gap, not addressed here: a failed vision run stores per-scene results
+only in the cache. `save_scene_analysis` and `vision.json` are written when the
+stage completes, so those 137 analyses left no row in the database and would be
+lost with the cache directory. Frames already solve this by persisting after
+each scene; the vision stage does not.
+
 ---
 
 # Task Execution Rules
