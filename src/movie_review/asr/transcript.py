@@ -17,6 +17,7 @@ from pathlib import Path
 from movie_review.artifacts import manager as artifacts
 from movie_review.asr.factory import build_asr_adapter
 from movie_review.asr.port import ASRPort
+from movie_review.asr.subtitles import write_sidecars
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.domain import Artifact, JobStatus, TranscriptSegment
 from movie_review.jobs.state_machine import JobNotFoundError
@@ -45,6 +46,8 @@ class TranscriptResult:
     segments: list[TranscriptSegment]
     transcript_path: Path
     audio_path: Path
+    srt_path: Path
+    vtt_path: Path
     cache_hit: bool
     duration_ms: int
 
@@ -137,6 +140,11 @@ def run_transcript(
         ctx.jobs_dir, ctx.job_id, STAGE_NAME, TRANSCRIPT_FILENAME
     )
     output_hash = artifacts.write_json(transcript_path, document)
+    # Subtitle sidecars for downstream consumers (Qwen3-VL) and debugging.
+    # Always regenerated — even on cache hit — so a rerun never leaves a
+    # stale .srt/.vtt next to a fresh transcript.json. Same segments in give
+    # byte-identical files out, keeping the stage idempotent.
+    srt_path, vtt_path = write_sidecars(transcript_path.parent, segments)
     if not cache_hit:
         ctx.cache.store_json(key, document)
     repo.save_artifact(
@@ -153,6 +161,22 @@ def run_transcript(
             model=model,
         ),
     )
+    for artifact_id, sidecar in (
+        (f"{ctx.job_id}-transcript-srt", srt_path),
+        (f"{ctx.job_id}-transcript-vtt", vtt_path),
+    ):
+        repo.save_artifact(
+            ctx.conn,
+            Artifact(
+                artifact_id=artifact_id,
+                job_id=ctx.job_id,
+                stage=STAGE_NAME,
+                relative_path=artifacts.relative_artifact_path(ctx.jobs_dir, ctx.job_id, sidecar),
+                input_hash=file_hash,
+                output_hash=artifacts.sha256_file(sidecar),
+                model=model,
+            ),
+        )
 
     duration_ms = int((time.perf_counter() - started) * 1000)
     with ulog.logging_context(job_id=ctx.job_id, stage=STAGE_NAME):
@@ -170,6 +194,8 @@ def run_transcript(
         segments=segments,
         transcript_path=transcript_path,
         audio_path=audio_path,
+        srt_path=srt_path,
+        vtt_path=vtt_path,
         cache_hit=cache_hit,
         duration_ms=duration_ms,
     )
