@@ -34,7 +34,11 @@ from movie_review.domain import (
 )
 from movie_review.jobs.manager import JobManager
 from movie_review.pipeline.context import StageContext
-from movie_review.pipeline.orchestrator import PipelineContext, _get_stage_function
+from movie_review.pipeline.orchestrator import (
+    PipelineContext,
+    _get_stage_function,
+    review_target_words,
+)
 from movie_review.rendering.clips import SelectedClip
 from movie_review.rendering.manifest import (
     ManifestError,
@@ -313,3 +317,42 @@ def test_the_render_manifest_fails_loudly_without_measured_narration(
     with pytest.raises(Exception) as excinfo:
         stage(ctx)
     assert "tts_002" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# The writer's word target must follow the configured speech rate
+# ---------------------------------------------------------------------------
+
+
+def test_the_word_target_follows_the_configured_wpm() -> None:
+    """Regression: the writer was asked for 150-WPM word counts whatever was set.
+
+    A hard-coded 150 contradicted `settings.pipeline.review.target_wpm`,
+    which the reconciliation stage two stages later does use. With a
+    different rate the script came out systematically short and never
+    stopped asking to be expanded.
+    """
+    settings = load_settings()
+    default_words = review_target_words(settings)
+
+    faster = settings.model_copy(
+        update={
+            "pipeline": settings.pipeline.model_copy(
+                update={"review": settings.pipeline.review.model_copy(update={"target_wpm": 180})}
+            )
+        }
+    )
+    assert review_target_words(faster) > default_words
+
+    shorter = settings.model_copy(
+        update={
+            "pipeline": settings.pipeline.model_copy(
+                update={
+                    "review": settings.pipeline.review.model_copy(
+                        update={"target_duration_minutes": 10}
+                    )
+                }
+            )
+        }
+    )
+    assert review_target_words(shorter) < default_words
