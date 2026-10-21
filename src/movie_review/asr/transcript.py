@@ -23,6 +23,7 @@ from movie_review.domain import Artifact, JobStatus, TranscriptSegment
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.media.audio import CHANNELS as AUDIO_CHANNELS
 from movie_review.media.audio import SAMPLE_RATE, AudioExtractionError, extract_dialogue_audio
+from movie_review.models.resources import run_with_oom_recovery
 from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
@@ -121,7 +122,12 @@ def run_transcript(
                     ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
                 raise TranscriptError(str(exc)) from exc
             try:
-                segments = active.transcribe(audio_path, language=language)
+                segments = run_with_oom_recovery(
+                    lambda: active.transcribe(audio_path, language=language),
+                    active.unload,
+                    attempts=2,
+                    stage=STAGE_NAME,
+                )
             except Exception as exc:  # Backend errors vary; classify with chaining (cf. T013).
                 if owns_completion:
                     ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))

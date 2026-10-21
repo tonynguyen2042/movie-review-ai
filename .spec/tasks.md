@@ -1693,10 +1693,10 @@ tests/unit/test_oom.py
 
 **Acceptance criteria**
 
-- [ ] an OOM during a stage releases the model and retries
-- [ ] a successful retry continues the stage
-- [ ] a persistent OOM fails the stage with a classified error
-- [ ] `pytest -q` passes
+- [x] an OOM during a stage releases the model and retries
+- [x] a successful retry continues the stage
+- [x] a persistent OOM fails the stage with a classified error
+- [x] `pytest -q` passes
 
 ---
 

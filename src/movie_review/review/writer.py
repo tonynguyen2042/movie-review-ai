@@ -20,6 +20,7 @@ from movie_review.config.prompts import load_prompt, render
 from movie_review.config.settings import ModelSpec
 from movie_review.domain import Artifact, JobStatus, ReviewPlan, ReviewScript, ReviewSection
 from movie_review.jobs.state_machine import JobNotFoundError
+from movie_review.models.resources import run_with_oom_recovery
 from movie_review.pipeline.context import StageContext
 from movie_review.reasoning.factory import build_reasoning_adapter
 from movie_review.reasoning.port import ReasoningPort
@@ -195,8 +196,17 @@ def write_script(
                     raise ScriptWriterError(f"Cached script corrupt for {section.id}") from exc
                 cache_hits += 1
             else:
+
+                def _complete(prompt: str = text) -> Any:
+                    return active.complete_json(prompt)
+
                 try:
-                    raw = active.complete_json(text)
+                    raw = run_with_oom_recovery(
+                        _complete,
+                        active.unload,
+                        attempts=2,
+                        stage=STAGE_NAME,
+                    )
                 except Exception as exc:
                     if owns_completion:
                         ctx.manager.fail(ctx.job_id, STAGE_NAME, f"{section.id}: {exc}")
