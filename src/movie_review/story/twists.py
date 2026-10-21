@@ -90,23 +90,30 @@ def extract_twists(
         prompt_version=prompt.cache_version,
     )
     key = cache_key(cache_spec)
-    cached = cache.lookup_json(key)
-    if cached is not None:
-        if not isinstance(cached, list):
-            raise TwistExtractionError("Cached twists are corrupt")
-        raw = cached
-        cache_hit = True
-    else:
-        try:
-            raw = active.complete_json(text)
-        except Exception as exc:
-            raise TwistExtractionError(f"Cannot detect twists: {exc}") from exc
-        finally:
-            active.unload()
-        if not isinstance(raw, list):
-            raise TwistExtractionError("Expected twist array")
-        cache.store_json(key, raw)
-        cache_hit = False
+    try:
+        cached = cache.lookup_json(key)
+        if cached is not None:
+            if not isinstance(cached, list):
+                raise TwistExtractionError("Cached twists are corrupt")
+            raw = cached
+            cache_hit = True
+        else:
+            try:
+                raw = active.complete_json(text)
+            except Exception as exc:
+                raise TwistExtractionError(f"Cannot detect twists: {exc}") from exc
+            if not isinstance(raw, list):
+                raise TwistExtractionError("Expected twist array")
+            cache.store_json(key, raw)
+            cache_hit = False
+    finally:
+        # The adapter owns the weights, so it is released whether the work
+        # came from the cache or from the model. The unload used to sit in
+        # the cache-miss branch: a cache hit skipped the model call and also
+        # skipped the release, so the weights stayed resident for the rest of
+        # the process -- and for the MLX backends, `unload` is what clears
+        # the cache.
+        active.unload()
 
     twists = []
     for index, entry in enumerate(raw, start=1):

@@ -220,22 +220,31 @@ def generate_publishing_metadata(
     )
     key = cache_key(cache_spec)
 
-    cached = ctx.cache.lookup_json(key)
-    if cached is not None:
-        if not isinstance(cached, dict) or "title" not in cached:
-            raise PublishingMetadataError("Cached publishing metadata is corrupt")
-        fields = cached
-        cache_hit = True
-    else:
-        try:
-            raw = active.complete_json(text)
-        except Exception as exc:
-            raise PublishingMetadataError(f"Cannot generate publishing metadata: {exc}") from exc
-        finally:
-            active.unload()
-        fields = parse_metadata(raw)
-        ctx.cache.store_json(key, fields)
-        cache_hit = False
+    try:
+        cached = ctx.cache.lookup_json(key)
+        if cached is not None:
+            if not isinstance(cached, dict) or "title" not in cached:
+                raise PublishingMetadataError("Cached publishing metadata is corrupt")
+            fields = cached
+            cache_hit = True
+        else:
+            try:
+                raw = active.complete_json(text)
+            except Exception as exc:
+                raise PublishingMetadataError(
+                    f"Cannot generate publishing metadata: {exc}"
+                ) from exc
+            fields = parse_metadata(raw)
+            ctx.cache.store_json(key, fields)
+            cache_hit = False
+    finally:
+        # The adapter owns the weights, so it is released whether the work
+        # came from the cache or from the model. The unload used to sit in
+        # the cache-miss branch: a cache hit skipped the model call and also
+        # skipped the release, so the weights stayed resident for the rest of
+        # the process -- and for the MLX backends, `unload` is what clears
+        # the cache.
+        active.unload()
 
     metadata = VideoMetadata(
         title=fields["title"],

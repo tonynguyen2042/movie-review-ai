@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T11:42:11.618751+00:00",
+  "updated_at": "2026-10-21T11:47:46.162973+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1396,12 +1396,14 @@
       "title": "unload adapters on cache hits",
       "type": "fix",
       "branch": "T125-unload-on-cache-hit",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T11:47:46.162973+00:00",
+      "updated_at": "2026-10-21T11:47:46.162973+00:00"
     },
     "T126": {
       "title": "language reaches local Whisper",
