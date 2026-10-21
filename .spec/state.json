@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T18:24:17.942385+00:00",
+  "updated_at": "2026-10-21T18:36:41.574441+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1760,12 +1760,14 @@
       "title": "CLI read-only commands",
       "type": "feat",
       "branch": "T153-cli-read-commands",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T18:36:41.574441+00:00",
+      "updated_at": "2026-10-21T18:36:41.574441+00:00"
     },
     "T154": {
       "title": "CLI benchmark command",

@@ -1815,10 +1815,10 @@ tests/docs/test_getting_started.py
 
 **Acceptance criteria**
 
-- [ ] each documented command exists and is reachable
-- [ ] `inspect` accepts a movie path and a job id
-- [ ] the guide and the CLI agree
-- [ ] `pytest -q` passes
+- [x] each documented command exists and is reachable
+- [x] `inspect` accepts a movie path and a job id
+- [x] the guide and the CLI agree
+- [x] `pytest -q` passes
 
 ---
 
