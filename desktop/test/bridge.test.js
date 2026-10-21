@@ -52,7 +52,10 @@ test('stages returns the full pipeline sequence', { timeout: 240000 }, () => {
   assert.equal(run.status, 0, run.stderr);
   const payload = parsed(run);
   assert.equal(payload.ok, true);
-  assert.equal(payload.stages.length, 19);
+  // The ends are pinned; the count is not. The exact sequence is pinned by
+  // tests/unit/test_desktop_bridge.py, next to the code that defines it, so
+  // a new stage does not break a test in another language.
+  assert.ok(payload.stages.length >= 19, `too few stages: ${payload.stages.length}`);
   assert.equal(payload.stages[0][0], 'ingest');
   assert.equal(payload.stages.at(-1)[0], 'quality');
 });
