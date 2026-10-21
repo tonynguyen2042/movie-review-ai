@@ -40,7 +40,6 @@ from movie_review.pipeline.orchestrator import (
     _get_stage_function,
     review_target_words,
 )
-from movie_review.rendering.clips import SelectedClip
 from movie_review.rendering.manifest import (
     ManifestError,
     assemble_manifest,
@@ -51,16 +50,15 @@ from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 from movie_review.tts.chunks import plan_chunks
 from movie_review.ui.timeline_editor import VisualTimelineEditor
+from tests.helpers import (
+    _clip,
+)
 
 
-def _paragraph(paragraph_id: str) -> ReviewParagraph:
+def _paragraph__orchestrator_stage_wiring(paragraph_id: str) -> ReviewParagraph:
     return ReviewParagraph(
         id=paragraph_id, text="Narration.", target_seconds=12, claims=[], visual_intent="s"
     )
-
-
-def _clip(paragraph_id: str, start: float, end: float) -> SelectedClip:
-    return SelectedClip(paragraph_id, "scene_000001", start, end)
 
 
 @dataclass
@@ -69,7 +67,7 @@ class Harness:
     ctx: StageContext
 
 
-def _harness(tmp_path: Path) -> Harness:
+def _harness__orchestrator_stage_wiring(tmp_path: Path) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -101,9 +99,9 @@ def _harness(tmp_path: Path) -> Harness:
 
 def _write_a_real_manifest(tmp_path: Path) -> Path:
     """Assemble a manifest the way the pipeline does, and return its path."""
-    harness = _harness(tmp_path)
+    harness = _harness__orchestrator_stage_wiring(tmp_path)
     result = assemble_manifest(
-        [_paragraph("p1")],
+        [_paragraph__orchestrator_stage_wiring("p1")],
         {"p1": _clip("p1", 0.0, 5.0)},
         {"p1": 10.0},
         100.0,
@@ -184,7 +182,7 @@ def test_an_invalid_manifest_is_reported_as_a_manifest_error(tmp_path: Path) -> 
 # ---------------------------------------------------------------------------
 
 
-def _script(paragraph_ids: list[str]) -> ReviewScript:
+def _script__orchestrator_stage_wiring(paragraph_ids: list[str]) -> ReviewScript:
     return ReviewScript(
         sections=[
             ReviewSection(
@@ -205,7 +203,7 @@ def _script(paragraph_ids: list[str]) -> ReviewScript:
     )
 
 
-def _write_wav(path: Path, seconds: float, rate: int = 8000) -> None:
+def _write_wav__orchestrator_stage_wiring(path: Path, seconds: float, rate: int = 8000) -> None:
     """A silent mono WAV of the given length."""
     import wave
 
@@ -239,7 +237,7 @@ def _render_manifest_harness(tmp_path: Path) -> tuple[PipelineContext, list[str]
         manager.transition("job_1", state)
 
     paragraph_ids = ["p1", "p2"]
-    script = _script(paragraph_ids)
+    script = _script__orchestrator_stage_wiring(paragraph_ids)
     jobs_dir = tmp_path / "jobs"
     artifacts.write_json(
         jobs_dir / "job_1" / "review" / "review-script.json",
@@ -270,7 +268,7 @@ def _render_manifest_harness(tmp_path: Path) -> tuple[PipelineContext, list[str]
 
     # One chunk per paragraph, each with a known length.
     for chunk in plan_chunks(script, voice="default"):
-        _write_wav(
+        _write_wav__orchestrator_stage_wiring(
             jobs_dir / "job_1" / "tts" / f"{chunk.chunk_id}.wav",
             3.0 if chunk.paragraph_id == "p1" else 7.0,
         )
@@ -380,10 +378,10 @@ def test_a_manifest_failure_records_the_render_manifest_stage(tmp_path: Path) ->
     failed on a manifest file that had never been written -- so the job could
     not be recovered through the documented path.
     """
-    harness = _harness(tmp_path)
+    harness = _harness__orchestrator_stage_wiring(tmp_path)
     with pytest.raises(ManifestError):
         assemble_manifest(
-            [_paragraph("p1")],
+            [_paragraph__orchestrator_stage_wiring("p1")],
             {"p1": _clip("p1", 0.0, 5.0)},
             {"p1": 10.0},
             100.0,
@@ -397,10 +395,10 @@ def test_a_manifest_failure_records_the_render_manifest_stage(tmp_path: Path) ->
 
 def test_resume_after_a_manifest_failure_reruns_the_manifest_stage(tmp_path: Path) -> None:
     """The recorded stage has to be one the pipeline can actually resume."""
-    harness = _harness(tmp_path)
+    harness = _harness__orchestrator_stage_wiring(tmp_path)
     with pytest.raises(ManifestError):
         assemble_manifest(
-            [_paragraph("p1")],
+            [_paragraph__orchestrator_stage_wiring("p1")],
             {"p1": _clip("p1", 0.0, 5.0)},
             {"p1": 10.0},
             100.0,
@@ -418,9 +416,9 @@ def test_resume_after_a_manifest_failure_reruns_the_manifest_stage(tmp_path: Pat
 
 def test_the_manifest_still_lands_in_the_render_directory(tmp_path: Path) -> None:
     """The stage name and the directory it writes into are different things."""
-    harness = _harness(tmp_path)
+    harness = _harness__orchestrator_stage_wiring(tmp_path)
     result = assemble_manifest(
-        [_paragraph("p1")],
+        [_paragraph__orchestrator_stage_wiring("p1")],
         {"p1": _clip("p1", 0.0, 5.0)},
         {"p1": 10.0},
         100.0,

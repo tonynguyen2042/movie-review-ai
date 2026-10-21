@@ -14,7 +14,6 @@ The port already exposed ``.model``; these stages reached around it.
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -23,11 +22,14 @@ import pytest
 
 from movie_review.cache.manager import CacheManager
 from movie_review.config.settings import ModelSpec, load_settings
-from movie_review.domain import Event, EventType, Job
+from movie_review.domain import Event, EventType
 from movie_review.jobs.manager import JobManager
 from movie_review.reasoning.port import ReasoningPort
 from movie_review.storage import repositories as repo
-from movie_review.storage.database import bootstrap, connect
+from movie_review.storage.database import connect
+from tests.helpers import (
+    _conn,
+)
 
 # (stage, module path, entry point, artifact id, a valid model response)
 STAGES = {
@@ -100,7 +102,7 @@ class _RecordingReasoner(ReasoningPort):
         return None
 
 
-def _remote_spec(model: str = "qwen3.5-27b") -> ModelSpec:
+def _remote_spec__reasoning_stage_wiring(model: str = "qwen3.5-27b") -> ModelSpec:
     return ModelSpec(
         model=model,
         backend="openai_compatible",
@@ -108,13 +110,7 @@ def _remote_spec(model: str = "qwen3.5-27b") -> ModelSpec:
     )
 
 
-def _conn(tmp_path: Path) -> sqlite3.Connection:
-    conn = connect(bootstrap(tmp_path / "jobs.db"))
-    repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
-    return conn
-
-
-def _events() -> list[Event]:
+def _events__reasoning_stage_wiring() -> list[Event]:
     return [
         Event(
             id="event_00001",
@@ -142,7 +138,7 @@ def _import(target: str) -> Any:
     return getattr(module, attribute) if attribute else module
 
 
-def _run(
+def _run__reasoning_stage_wiring(
     stage: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -170,7 +166,7 @@ def _run(
 
     conn = _conn(tmp_path)
     result = _import(target)(
-        _events(),
+        _events__reasoning_stage_wiring(),
         "char_001: John",
         job_id="job_1",
         jobs_dir=tmp_path / "jobs",
@@ -199,9 +195,9 @@ def test_a_remote_backend_builds_a_remote_adapter(
     ``backend: openai_compatible`` was never consulted and the run demanded mlx-lm
     on a host with no Apple GPU.
     """
-    spec = _remote_spec()
+    spec = _remote_spec__reasoning_stage_wiring()
 
-    _, built, _ = _run(stage, tmp_path, monkeypatch, spec)
+    _, built, _ = _run__reasoning_stage_wiring(stage, tmp_path, monkeypatch, spec)
 
     assert len(built) == 1
     assert built[0].backend == "openai_compatible"
@@ -214,7 +210,9 @@ def test_a_local_backend_is_still_honoured(
     stage: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Apple Silicon hosts keep working: the default spec still reaches the factory."""
-    _, built, _ = _run(stage, tmp_path, monkeypatch, ModelSpec(model="Qwen3.5-27B"))
+    _, built, _ = _run__reasoning_stage_wiring(
+        stage, tmp_path, monkeypatch, ModelSpec(model="Qwen3.5-27B")
+    )
 
     assert built[0].model == "Qwen3.5-27B"
     assert built[0].is_remote is False
@@ -230,7 +228,9 @@ def test_the_artifact_records_the_configured_model(
     stage: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Reproducibility needs the checkpoint that actually produced the output."""
-    _, _, recorded = _run(stage, tmp_path, monkeypatch, _remote_spec())
+    _, _, recorded = _run__reasoning_stage_wiring(
+        stage, tmp_path, monkeypatch, _remote_spec__reasoning_stage_wiring()
+    )
 
     assert recorded == "qwen3.5-27b"
 
@@ -246,8 +246,12 @@ def test_different_models_record_different_model_ids(
     previous model's output already cached. That is precisely what the cache
     identity rules in AGENTS.md exist to prevent.
     """
-    first = _run(stage, tmp_path / "a", monkeypatch, _remote_spec("qwen3.5-27b"))
-    second = _run(stage, tmp_path / "b", monkeypatch, _remote_spec("llama-3.3-70b"))
+    first = _run__reasoning_stage_wiring(
+        stage, tmp_path / "a", monkeypatch, _remote_spec__reasoning_stage_wiring("qwen3.5-27b")
+    )
+    second = _run__reasoning_stage_wiring(
+        stage, tmp_path / "b", monkeypatch, _remote_spec__reasoning_stage_wiring("llama-3.3-70b")
+    )
 
     assert first[2] == "qwen3.5-27b"
     assert second[2] == "llama-3.3-70b"
@@ -259,7 +263,9 @@ def test_a_different_model_does_not_hit_the_cache(
     stage: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Same job, same cache directory, a different model: the stage must run."""
-    _run(stage, tmp_path, monkeypatch, _remote_spec("qwen3.5-27b"))
+    _run__reasoning_stage_wiring(
+        stage, tmp_path, monkeypatch, _remote_spec__reasoning_stage_wiring("qwen3.5-27b")
+    )
 
     output = STAGES[stage][3]
     monkey_reasoner = _RecordingReasoner("llama-3.3-70b", [output])
@@ -270,13 +276,13 @@ def test_a_different_model_does_not_hit_the_cache(
 
     monkeypatch.setattr(f"{module}.build_reasoning_adapter", fake_build)
     result = _import(target)(
-        _events(),
+        _events__reasoning_stage_wiring(),
         "char_001: John",
         job_id="job_1",
         jobs_dir=tmp_path / "jobs",
         conn=connect(tmp_path / "jobs.db"),
         cache=CacheManager(tmp_path / "cache"),
-        spec=_remote_spec("llama-3.3-70b"),
+        spec=_remote_spec__reasoning_stage_wiring("llama-3.3-70b"),
     )
 
     assert result.cache_hit is False
@@ -295,7 +301,9 @@ def test_an_injected_reasoner_is_not_overridden(
     monkeypatch.setattr(f"{module}.build_reasoning_adapter", must_not_be_called)
 
     reasoner = _RecordingReasoner("injected-model", [STAGES[stage][3]])
-    _, built, recorded = _run(stage, tmp_path, monkeypatch, _remote_spec(), reasoner)
+    _, built, recorded = _run__reasoning_stage_wiring(
+        stage, tmp_path, monkeypatch, _remote_spec__reasoning_stage_wiring(), reasoner
+    )
 
     assert built == []
     assert recorded == "injected-model"
@@ -318,7 +326,7 @@ def test_event_extraction_honours_the_configured_backend(
     from movie_review.pipeline.context import StageContext
     from movie_review.story import events as events_module
 
-    spec = _remote_spec()
+    spec = _remote_spec__reasoning_stage_wiring()
     built: list[ModelSpec] = []
 
     def fake_build(given: ModelSpec) -> ReasoningPort:
@@ -385,7 +393,7 @@ def test_event_extraction_records_the_model_not_the_class_name(
     monkeypatch.setattr("movie_review.story.events.build_reasoning_adapter", fake_build)
 
     base = load_settings()
-    spec = _remote_spec()
+    spec = _remote_spec__reasoning_stage_wiring()
     settings = base.model_copy(
         update={"models": base.models.model_copy(update={"reasoning": spec})}
     )
@@ -437,7 +445,7 @@ def test_review_writer_honours_the_configured_backend(
     from movie_review.review.styles import load_style
     from movie_review.review.writer import write_script
 
-    spec = _remote_spec()
+    spec = _remote_spec__reasoning_stage_wiring()
     built: list[ModelSpec] = []
 
     def fake_build(given: ModelSpec) -> ReasoningPort:

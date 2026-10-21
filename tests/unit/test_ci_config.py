@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 
-def _config() -> dict[str, Any]:
+def _config__ci_config() -> dict[str, Any]:
     with (ROOT / "pyproject.toml").open("rb") as handle:
         loaded: dict[str, Any] = tomllib.load(handle)
         return loaded
@@ -79,19 +79,19 @@ def test_the_workflow_runs_on_the_target_platform() -> None:
 
 def test_the_coverage_tool_is_a_declared_dependency() -> None:
     """A CI that installs the tool by hand is a CI that breaks."""
-    dev = _config()["project"]["optional-dependencies"]["dev"]
+    dev = _config__ci_config()["project"]["optional-dependencies"]["dev"]
     assert any("pytest-cov" in requirement for requirement in dev)
 
 
 def test_the_coverage_is_configured() -> None:
-    coverage = _config()["tool"]["coverage"]
+    coverage = _config__ci_config()["tool"]["coverage"]
     assert coverage["run"]["source"] == ["src/movie_review"]
     assert coverage["run"]["branch"] is True
 
 
 def test_the_coverage_gate_is_set_and_reachable() -> None:
     """The gate has to be a number the suite can actually clear."""
-    threshold = _config()["tool"]["coverage"]["report"]["fail_under"]
+    threshold = _config__ci_config()["tool"]["coverage"]["report"]["fail_under"]
     assert isinstance(threshold, (int, float))
     assert 0 < threshold < 100
     # The suite measured 89.57% with branch coverage; the floor has to be

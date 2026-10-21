@@ -47,7 +47,7 @@ class Harness:
         return build_movie_analysis(self.ctx)
 
 
-def _harness(tmp_path: Path) -> Harness:
+def _harness__movie_analysis(tmp_path: Path) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -137,7 +137,7 @@ def _harness(tmp_path: Path) -> Harness:
 
 
 def test_happy_path(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__movie_analysis(tmp_path)
     result = harness.build()
     assert REQUIRED_KEYS <= result.document.keys()
     assert result.document["movie"]["id"] == "movie-job_1"
@@ -154,7 +154,7 @@ def test_happy_path(tmp_path: Path) -> None:
 
 
 def test_scene_carries_its_analysis(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__movie_analysis(tmp_path)
     result = harness.build()
     [scene] = result.document["scenes"]
     assert scene["scene_id"] == "scene_000001"
@@ -162,14 +162,14 @@ def test_scene_carries_its_analysis(tmp_path: Path) -> None:
 
 
 def test_second_run_hits_cache(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__movie_analysis(tmp_path)
     harness.build()
     result = harness.build()
     assert result.cache_hit is True
 
 
 def test_missing_movie_rejected(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__movie_analysis(tmp_path)
     with harness.conn:
         harness.conn.execute("DELETE FROM movies WHERE job_id = 'job_1'")
     with pytest.raises(AnalysisError, match="No ingested movie"):
@@ -177,7 +177,7 @@ def test_missing_movie_rejected(tmp_path: Path) -> None:
 
 
 def test_failed_job_rejected(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__movie_analysis(tmp_path)
     harness.ctx.manager.fail("job_1", "events", "earlier")
     with pytest.raises(AnalysisError, match="failed"):
         harness.build()
@@ -192,7 +192,7 @@ def test_analysis_is_read_from_the_database_not_the_artifact(tmp_path: Path) -> 
     artifact is a copy rather than the source. Artifact integrity is still
     checked by `movie-review validate`.
     """
-    harness = _harness(tmp_path)
+    harness = _harness__movie_analysis(tmp_path)
     (tmp_path / "jobs" / "job_1" / "vision").mkdir(parents=True, exist_ok=True)
     (tmp_path / "jobs" / "job_1" / "vision" / "vision.json").write_text("nope", encoding="utf-8")
 
@@ -204,7 +204,7 @@ def test_analysis_is_read_from_the_database_not_the_artifact(tmp_path: Path) -> 
 
 def test_scene_without_an_analysis_gets_none(tmp_path: Path) -> None:
     """Missing analyses are absent, not fatal: a scene may have none."""
-    harness = _harness(tmp_path)
+    harness = _harness__movie_analysis(tmp_path)
     with harness.conn:
         harness.conn.execute("DELETE FROM scene_analyses WHERE job_id = 'job_1'")
 

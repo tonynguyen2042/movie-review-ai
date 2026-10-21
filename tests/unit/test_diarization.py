@@ -19,7 +19,7 @@ from movie_review.media import ffmpeg as ff
 RATE = 16000
 
 
-def _write_wav(path: Path, parts: list[tuple[float, bool]], rate: int = RATE) -> Path:
+def _write_wav__diarization(path: Path, parts: list[tuple[float, bool]], rate: int = RATE) -> Path:
     """Write mono 16-bit WAV; each part is (seconds, tone-or-silence)."""
     frames = bytearray()
     for seconds, tone in parts:
@@ -36,7 +36,9 @@ def _write_wav(path: Path, parts: list[tuple[float, bool]], rate: int = RATE) ->
 
 
 def test_two_bursts_two_spans(tmp_path: Path) -> None:
-    wav = _write_wav(tmp_path / "s.wav", [(0.5, False), (1.0, True), (0.6, False), (1.0, True)])
+    wav = _write_wav__diarization(
+        tmp_path / "s.wav", [(0.5, False), (1.0, True), (0.6, False), (1.0, True)]
+    )
     segments = EnergyDiarizer().diarize(wav)
     assert [s.speaker for s in segments] == ["SPEAKER_00", "SPEAKER_00"]
     assert segments[0].start == pytest.approx(0.5, abs=0.2)
@@ -46,17 +48,17 @@ def test_two_bursts_two_spans(tmp_path: Path) -> None:
 
 
 def test_silence_is_empty(tmp_path: Path) -> None:
-    wav = _write_wav(tmp_path / "s.wav", [(2.0, False)])
+    wav = _write_wav__diarization(tmp_path / "s.wav", [(2.0, False)])
     assert EnergyDiarizer().diarize(wav) == []
 
 
 def test_short_blip_dropped(tmp_path: Path) -> None:
-    wav = _write_wav(tmp_path / "s.wav", [(0.1, True)])
+    wav = _write_wav__diarization(tmp_path / "s.wav", [(0.1, True)])
     assert EnergyDiarizer().diarize(wav) == []
 
 
 def test_brief_gap_merged(tmp_path: Path) -> None:
-    wav = _write_wav(tmp_path / "s.wav", [(1.0, True), (0.2, False), (1.0, True)])
+    wav = _write_wav__diarization(tmp_path / "s.wav", [(1.0, True), (0.2, False), (1.0, True)])
     assert len(EnergyDiarizer().diarize(wav)) == 1
 
 
@@ -77,13 +79,13 @@ def test_unsupported_width_rejected(tmp_path: Path) -> None:
 
 
 def test_wrong_rate_rejected(tmp_path: Path) -> None:
-    wav = _write_wav(tmp_path / "s.wav", [(0.5, True)], rate=8000)
+    wav = _write_wav__diarization(tmp_path / "s.wav", [(0.5, True)], rate=8000)
     with pytest.raises(DiarizationError, match="8000 Hz"):
         EnergyDiarizer().diarize(wav)
 
 
 def test_threshold_configurable(tmp_path: Path) -> None:
-    wav = _write_wav(tmp_path / "s.wav", [(1.0, True)])
+    wav = _write_wav__diarization(tmp_path / "s.wav", [(1.0, True)])
     strict = VadConfig(silence_threshold=100000.0)
     assert EnergyDiarizer(strict).diarize(wav) == []
     assert len(EnergyDiarizer().diarize(wav)) == 1
@@ -104,7 +106,7 @@ def test_port_contract(tmp_path: Path) -> None:
     diarizer = EnergyDiarizer()
     assert isinstance(diarizer, DiarizationPort)
     diarizer.unload()
-    wav = _write_wav(tmp_path / "s.wav", [(0.5, True)])
+    wav = _write_wav__diarization(tmp_path / "s.wav", [(0.5, True)])
     assert len(diarizer.diarize(wav)) == 1
 
 

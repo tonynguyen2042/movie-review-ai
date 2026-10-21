@@ -14,6 +14,9 @@ from movie_review.jobs.state_machine import (
 )
 from movie_review.storage import connect
 from movie_review.storage.database import bootstrap
+from tests.helpers import (
+    _manager,
+)
 
 
 def test_full_pipeline_chain_walks() -> None:
@@ -67,11 +70,6 @@ def test_completed_is_terminal() -> None:
     job = Job(job_id="j", input_file="m.mp4", status=JobStatus.COMPLETED)
     with pytest.raises(InvalidTransitionError):
         transition(job, JobStatus.FAILED)
-
-
-def _manager(tmp_path: Path) -> JobManager:
-    conn = connect(bootstrap(tmp_path / "jobs.db"))
-    return JobManager(conn)
 
 
 def test_manager_create_persists(tmp_path: Path) -> None:

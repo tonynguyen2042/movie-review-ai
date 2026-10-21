@@ -14,7 +14,7 @@ def _plan() -> VisualPlan:
     )
 
 
-def _manifest(*scenes: tuple[str, str]) -> RenderManifest:
+def _manifest__visual_metric(*scenes: tuple[str, str]) -> RenderManifest:
     segments = [
         ManifestSegment(
             paragraph_id=paragraph,
@@ -32,13 +32,13 @@ def _manifest(*scenes: tuple[str, str]) -> RenderManifest:
 
 
 def test_aligned_scores_100() -> None:
-    metric = visual_alignment(_plan(), _manifest(("p1", "s1"), ("p2", "s2")))
+    metric = visual_alignment(_plan(), _manifest__visual_metric(("p1", "s1"), ("p2", "s2")))
     assert metric.name == "visual_alignment"
     assert metric.score == 100.0
 
 
 def test_misaligned_penalized() -> None:
-    metric = visual_alignment(_plan(), _manifest(("p1", "s9"), ("p2", "s2")))
+    metric = visual_alignment(_plan(), _manifest__visual_metric(("p1", "s9"), ("p2", "s2")))
     assert metric.score == 50.0
     assert "p1" in metric.detail
 
@@ -46,7 +46,7 @@ def test_misaligned_penalized() -> None:
 def test_missing_plan_entry_misaligned() -> None:
     metric = visual_alignment(
         _plan(),
-        _manifest(
+        _manifest__visual_metric(
             ("p3", "s1"),
         ),
     )

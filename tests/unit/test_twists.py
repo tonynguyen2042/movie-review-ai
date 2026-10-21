@@ -30,7 +30,7 @@ class _FakeReasoner(ReasoningPort):
         pass
 
 
-def _events() -> list[Event]:
+def _events__twists() -> list[Event]:
     return [
         Event(id="event_00001", type=EventType.INTRODUCTION, timestamp=5.0, description="Arrival."),
         Event(
@@ -43,11 +43,13 @@ def _events() -> list[Event]:
     ]
 
 
-def _run(tmp_path: Path, reasoner: _FakeReasoner) -> tuple[sqlite3.Connection, TwistsResult]:
+def _run__twists(
+    tmp_path: Path, reasoner: _FakeReasoner
+) -> tuple[sqlite3.Connection, TwistsResult]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     repo.save_job(conn, Job(job_id="job_1", input_file="m"))
     result: TwistsResult = extract_twists(
-        _events(),
+        _events__twists(),
         "char_001: John",
         job_id="job_1",
         jobs_dir=tmp_path / "jobs",
@@ -73,7 +75,7 @@ def _twist(description: str, refs: list[str]) -> list[object]:
 
 
 def test_happy_path(tmp_path: Path) -> None:
-    conn, result = _run(
+    conn, result = _run__twists(
         tmp_path, _FakeReasoner(_twist("He was dead.", ["event_00001", "event_00002"]))
     )
     assert [t.id for t in result.twists] == ["twist_001"]
@@ -84,11 +86,11 @@ def test_happy_path(tmp_path: Path) -> None:
 
 
 def test_second_run_hits_cache(tmp_path: Path) -> None:
-    conn, _ = _run(tmp_path, _FakeReasoner(_twist("x", ["event_00001", "event_00002"])))
+    conn, _ = _run__twists(tmp_path, _FakeReasoner(_twist("x", ["event_00001", "event_00002"])))
     conn.close()
     reasoner = _FakeReasoner([])
     reasoner.fail_on_call = True
-    conn2, result = _run(tmp_path, reasoner)
+    conn2, result = _run__twists(tmp_path, reasoner)
     assert result.cache_hit is True
     conn2.close()
 
@@ -97,7 +99,7 @@ def test_unknown_foreshadowing_rejected(tmp_path: Path) -> None:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     with pytest.raises(TwistExtractionError, match="unknown events"):
         extract_twists(
-            _events(),
+            _events__twists(),
             "none",
             job_id="job_1",
             jobs_dir=tmp_path / "jobs",
@@ -113,7 +115,7 @@ def test_single_foreshadowing_rejected(tmp_path: Path) -> None:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     with pytest.raises(TwistExtractionError, match="at least 2"):
         extract_twists(
-            _events(),
+            _events__twists(),
             "none",
             job_id="job_1",
             jobs_dir=tmp_path / "jobs",

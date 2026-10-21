@@ -25,7 +25,7 @@ from movie_review.tts.factory import build_tts_adapter
 from movie_review.vision.factory import build_vlm_adapter
 
 
-def _remote_spec() -> ModelSpec:
+def _remote_spec__privacy_gate() -> ModelSpec:
     return ModelSpec(
         model="qwen3.5-27b",
         backend="openai_compatible",
@@ -39,7 +39,7 @@ def _local_spec() -> ModelSpec:
 
 def test_a_remote_spec_is_refused_when_cloud_ai_is_off() -> None:
     """A remote slot must not be used while the flag is off."""
-    spec = _remote_spec().model_copy(update={"cloud_ai": False})
+    spec = _remote_spec__privacy_gate().model_copy(update={"cloud_ai": False})
     for build in (build_asr_adapter, build_vlm_adapter, build_reasoning_adapter, build_tts_adapter):
         with pytest.raises(CloudAIDisabledError) as excinfo:
             build(spec)
@@ -50,7 +50,7 @@ def test_a_remote_spec_is_refused_when_cloud_ai_is_off() -> None:
 
 def test_a_remote_spec_is_allowed_when_cloud_ai_is_on() -> None:
     """The opt-in has to work, or the flag is just a lock."""
-    spec = _remote_spec().model_copy(update={"cloud_ai": True})
+    spec = _remote_spec__privacy_gate().model_copy(update={"cloud_ai": True})
     assert build_reasoning_adapter(spec) is not None
     assert build_asr_adapter(spec) is not None
     assert build_vlm_adapter(spec) is not None

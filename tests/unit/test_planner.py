@@ -7,7 +7,7 @@ from movie_review.review.planner import plan_review
 from movie_review.review.styles import load_style
 
 
-def _events() -> list[Event]:
+def _events__planner() -> list[Event]:
     return [
         Event(
             id="e1",
@@ -51,7 +51,7 @@ def _events() -> list[Event]:
 
 
 def test_totals_match_target() -> None:
-    plan = plan_review(_events(), load_style("youtube"))
+    plan = plan_review(_events__planner(), load_style("youtube"))
     assert plan.total_seconds == 1200
     assert [s.type for s in plan.sections] == [
         "hook",
@@ -63,12 +63,12 @@ def test_totals_match_target() -> None:
         "climax",
         "ending",
     ]
-    short = plan_review(_events(), load_style("funny"), target_seconds=600)
+    short = plan_review(_events__planner(), load_style("funny"), target_seconds=600)
     assert short.total_seconds == 600
 
 
 def test_hook_and_climax_reference_top_events() -> None:
-    plan = plan_review(_events(), load_style("youtube"))
+    plan = plan_review(_events__planner(), load_style("youtube"))
     by_type = {s.type: s for s in plan.sections}
     assert by_type["hook"].event_ids == ["e4"]
     assert by_type["climax"].event_ids == ["e4"]
@@ -84,9 +84,9 @@ def test_empty_events_still_structured() -> None:
 
 def test_bad_target_rejected() -> None:
     with pytest.raises(ValueError, match="positive"):
-        plan_review(_events(), load_style("youtube"), target_seconds=0)
+        plan_review(_events__planner(), load_style("youtube"), target_seconds=0)
 
 
 def test_deterministic() -> None:
     style = load_style("youtube")
-    assert plan_review(_events(), style) == plan_review(_events(), style)
+    assert plan_review(_events__planner(), style) == plan_review(_events__planner(), style)

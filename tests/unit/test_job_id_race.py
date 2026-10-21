@@ -23,12 +23,12 @@ from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 
 
-def _db(tmp_path: Path) -> sqlite3.Connection:
+def _db__job_id_race(tmp_path: Path) -> sqlite3.Connection:
     return connect(bootstrap(tmp_path / "jobs.db"))
 
 
 def test_inserting_the_same_id_twice_reports_the_conflict(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__job_id_race(tmp_path)
     try:
         job = Job(job_id="job_1", input_file="first.mkv")
         assert repo.insert_job(conn, job) is True
@@ -39,7 +39,7 @@ def test_inserting_the_same_id_twice_reports_the_conflict(tmp_path: Path) -> Non
 
 def test_a_conflicting_insert_leaves_the_first_job_alone(tmp_path: Path) -> None:
     """The second insert must not touch the first job's row."""
-    conn = _db(tmp_path)
+    conn = _db__job_id_race(tmp_path)
     try:
         repo.insert_job(conn, Job(job_id="job_1", input_file="first.mkv"))
         repo.insert_job(conn, Job(job_id="job_1", input_file="second.mkv"))
@@ -52,7 +52,7 @@ def test_a_conflicting_insert_leaves_the_first_job_alone(tmp_path: Path) -> None
 
 
 def test_the_manager_allocates_distinct_ids(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__job_id_race(tmp_path)
     try:
         manager = JobManager(conn)
         first = manager.create("first.mkv")
@@ -64,7 +64,7 @@ def test_the_manager_allocates_distinct_ids(tmp_path: Path) -> None:
 
 def test_the_manager_does_not_overwrite_an_existing_job(tmp_path: Path) -> None:
     """A taken id must move on to the next one, not replace the row."""
-    conn = _db(tmp_path)
+    conn = _db__job_id_race(tmp_path)
     try:
         manager = JobManager(conn)
         # A concurrent run already holds the first id of the day.

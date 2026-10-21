@@ -44,6 +44,10 @@ from movie_review.publishing.port import (
 from movie_review.reasoning.port import ReasoningPort
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
+from tests.helpers import (
+    _request,
+    _video,
+)
 
 
 class _FakeReasoner(ReasoningPort):
@@ -70,7 +74,7 @@ class _FakeReasoner(ReasoningPort):
         return None
 
 
-def _script() -> ReviewScript:
+def _script__publishing_metadata() -> ReviewScript:
     return ReviewScript.model_validate(
         {
             "sections": [
@@ -95,7 +99,7 @@ def _script() -> ReviewScript:
     )
 
 
-def _ctx(tmp_path: Path) -> StageContext:
+def _ctx__publishing_metadata(tmp_path: Path) -> StageContext:
     conn = connect(bootstrap(tmp_path / "data" / "jobs.db"))
     manager = JobManager(conn)
     manager.create(str(tmp_path / "m.mp4"))
@@ -114,7 +118,7 @@ def _job_ids(conn: sqlite3.Connection) -> list[str]:
     return [row["job_id"] for row in conn.execute("SELECT job_id FROM jobs")]
 
 
-def _remote_spec() -> ModelSpec:
+def _remote_spec__publishing_metadata() -> ModelSpec:
     return ModelSpec(
         model="qwen3.5-27b",
         backend="openai_compatible",
@@ -140,14 +144,16 @@ def _generate(
     # A reasoner is always supplied. Without one the stage builds the adapter
     # from the spec, which for a remote profile means a real HTTP call to the
     # configured endpoint -- a test suite must never do that.
-    active = reasoner or _FakeReasoner(output, model=(spec or _remote_spec()).model)
+    active = reasoner or _FakeReasoner(
+        output, model=(spec or _remote_spec__publishing_metadata()).model
+    )
     return aim.generate_publishing_metadata(
-        _script(),
+        _script__publishing_metadata(),
         ctx,
         movie_title="The Letter",
         platform=platform,
         target_language="en",
-        spec=spec or _remote_spec(),
+        spec=spec or _remote_spec__publishing_metadata(),
         reasoner=active,
     )
 
@@ -158,7 +164,7 @@ def _generate(
 
 
 def test_a_valid_reply_becomes_metadata(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
 
     result = _generate(ctx)
 
@@ -170,7 +176,7 @@ def test_a_valid_reply_becomes_metadata(tmp_path: Path) -> None:
 
 def test_the_output_is_persisted_as_an_artifact(tmp_path: Path) -> None:
     """Provenance: the packaging has to be reproducible like any other output."""
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
 
     result = _generate(ctx)
 
@@ -182,7 +188,7 @@ def test_the_output_is_persisted_as_an_artifact(tmp_path: Path) -> None:
 
 
 def test_metadata_round_trips_through_disk(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
     result = _generate(ctx)
 
     loaded = aim.load_metadata(result.metadata_path)
@@ -192,7 +198,7 @@ def test_metadata_round_trips_through_disk(tmp_path: Path) -> None:
 
 
 def test_a_title_longer_than_the_limit_is_truncated(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
     long_title = "word " * 60
 
     result = _generate(ctx, {**GOOD_OUTPUT, "title": long_title})
@@ -201,7 +207,7 @@ def test_a_title_longer_than_the_limit_is_truncated(tmp_path: Path) -> None:
 
 
 def test_hashtags_in_tags_are_normalized(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
 
     result = _generate(ctx, {**GOOD_OUTPUT, "tags": ["#Movie", "movie", " drama "]})
 
@@ -219,7 +225,7 @@ def test_insufficient_evidence_in_a_title_fails_the_run(tmp_path: Path) -> None:
     Publishing it would tell an audience the packaging is unverified; hiding it
     would publish the claim. The run fails so a human decides.
     """
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
 
     with pytest.raises(aim.UnsupportedClaimError):
         _generate(
@@ -229,14 +235,14 @@ def test_insufficient_evidence_in_a_title_fails_the_run(tmp_path: Path) -> None:
 
 
 def test_insufficient_evidence_in_a_description_fails_the_run(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
 
     with pytest.raises(aim.UnsupportedClaimError):
         _generate(ctx, {**GOOD_OUTPUT, "description": f"{aim.EVIDENCE_MARKER} everywhere"})
 
 
 def test_insufficient_evidence_in_a_tag_fails_the_run(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
 
     with pytest.raises(aim.UnsupportedClaimError):
         _generate(ctx, {**GOOD_OUTPUT, "tags": ["drama", aim.EVIDENCE_MARKER]})
@@ -305,8 +311,8 @@ def test_a_json_string_reply_is_still_parsed() -> None:
 
 def test_a_second_run_hits_the_cache(tmp_path: Path) -> None:
     """Same script, same model, same prompt: the second run must not re-ask."""
-    ctx = _ctx(tmp_path)
-    spec = _remote_spec()
+    ctx = _ctx__publishing_metadata(tmp_path)
+    spec = _remote_spec__publishing_metadata()
     _generate(ctx, reasoner=_FakeReasoner(GOOD_OUTPUT, model=spec.model))
 
     # A reasoner that would raise if called, proving the cache answered instead.
@@ -335,7 +341,7 @@ def test_a_second_run_hits_the_cache(tmp_path: Path) -> None:
 
 def test_a_different_model_does_not_reuse_the_cache(tmp_path: Path) -> None:
     """A class-name or empty model key would let one model's output serve another."""
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
     _generate(ctx, reasoner=_FakeReasoner(GOOD_OUTPUT, model="qwen3.5-27b"))
 
     other = {**GOOD_OUTPUT, "title": "a different model wrote this"}
@@ -347,7 +353,7 @@ def test_a_different_model_does_not_reuse_the_cache(tmp_path: Path) -> None:
 
 def test_a_different_platform_does_not_reuse_the_cache(tmp_path: Path) -> None:
     """Packaging for TikTok is not packaging for YouTube; the prompt is told which."""
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
     _generate(ctx, platform="youtube")
 
     result = _generate(ctx, platform="tiktok")
@@ -361,8 +367,8 @@ def test_a_tampered_cache_payload_is_treated_as_a_miss(tmp_path: Path) -> None:
     Worth pinning: the alternative -- trusting the payload -- would publish
     whatever bytes survived in the cache directory.
     """
-    ctx = _ctx(tmp_path)
-    spec = _remote_spec()
+    ctx = _ctx__publishing_metadata(tmp_path)
+    spec = _remote_spec__publishing_metadata()
     reasoner = _FakeReasoner(GOOD_OUTPUT, model=spec.model)
     _generate(ctx, spec=spec, reasoner=reasoner)
 
@@ -384,8 +390,8 @@ def test_a_valid_hash_wrong_shape_is_reported(tmp_path: Path) -> None:
     usable fields. Reusing it would publish an empty title, so the stage refuses
     instead of silently regenerating and hiding the drift.
     """
-    ctx = _ctx(tmp_path)
-    spec = _remote_spec()
+    ctx = _ctx__publishing_metadata(tmp_path)
+    spec = _remote_spec__publishing_metadata()
     reasoner = _FakeReasoner(GOOD_OUTPUT, model=spec.model)
     _generate(ctx, spec=spec, reasoner=reasoner)
 
@@ -443,7 +449,7 @@ def test_a_script_with_no_sections_cannot_be_built() -> None:
 
 
 def test_an_unknown_job_is_reported(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
+    ctx = _ctx__publishing_metadata(tmp_path)
     ctx.job_id = "job_does_not_exist"
 
     with pytest.raises(aim.PublishingMetadataError):
@@ -466,20 +472,6 @@ class _RecordingBackend:
     def __call__(self, payload: Any) -> tuple[str, str]:
         self.payloads.append(payload)
         return self._video_id, self._url
-
-
-def _video(tmp_path: Path) -> Path:
-    video = tmp_path / "review.mp4"
-    video.write_bytes(b"fake-mp4")
-    return video
-
-
-def _request(video: Path, **kwargs: Any) -> UploadRequest:
-    return UploadRequest(
-        video_path=video,
-        metadata=VideoMetadata(title="A title", description="A description", tags=["t"]),
-        **kwargs,
-    )
 
 
 def _valid_privacy(adapter: Any) -> str:

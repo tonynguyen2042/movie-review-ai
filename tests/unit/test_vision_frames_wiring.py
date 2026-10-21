@@ -44,7 +44,7 @@ MINIMAL_PNG = bytes.fromhex(
 _real_extract_frame = frames_module.extract_frame
 
 
-def _fake_run(binary: str, args: list[str]) -> str:
+def _fake_run__vision_frames_wiring(binary: str, args: list[str]) -> str:
     """Stand in for ffmpeg: write something at the output path."""
     dest = Path(args[-1])
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -101,7 +101,9 @@ def ctx(tmp_path: Path) -> PipelineContext:
     )
 
 
-def _scenes(ctx: PipelineContext, spans: list[tuple[str, float, float]]) -> None:
+def _scenes__vision_frames_wiring(
+    ctx: PipelineContext, spans: list[tuple[str, float, float]]
+) -> None:
     for scene_id, start, end in spans:
         repo.save_scene(
             ctx.conn,
@@ -110,7 +112,7 @@ def _scenes(ctx: PipelineContext, spans: list[tuple[str, float, float]]) -> None
         )
 
 
-def _vision_stage() -> Callable[[PipelineContext], Any]:
+def _vision_stage__vision_frames_wiring() -> Callable[[PipelineContext], Any]:
     stage = _get_stage_function("vision")
     assert stage is not None, "vision stage is missing from the orchestrator"
     return stage
@@ -119,7 +121,9 @@ def _vision_stage() -> Callable[[PipelineContext], Any]:
 @pytest.fixture
 def stub_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace extract_frame's ffmpeg call so no test shells out to the binary."""
-    monkeypatch.setattr(frames_module, "extract_frame", _extract_with(_fake_run))
+    monkeypatch.setattr(
+        frames_module, "extract_frame", _extract_with(_fake_run__vision_frames_wiring)
+    )
 
 
 @pytest.fixture
@@ -128,7 +132,9 @@ def captured_frames(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, list[Path
     seen: list[dict[str, list[Path]]] = []
     work: list[Any] = []
 
-    monkeypatch.setattr(frames_module, "extract_frame", _extract_with(_fake_run))
+    monkeypatch.setattr(
+        frames_module, "extract_frame", _extract_with(_fake_run__vision_frames_wiring)
+    )
 
     def fake_run_visual_analysis(
         scenes: Any,
@@ -158,9 +164,9 @@ def test_vision_stage_samples_frames(
     ctx: PipelineContext, captured_frames: list[Any], stub_analysis_proxy: None
 ) -> None:
     """The stage that failed on its first scene must now supply frames."""
-    _scenes(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 5.0, 35.0)])
+    _scenes__vision_frames_wiring(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 5.0, 35.0)])
 
-    _vision_stage()(ctx)
+    _vision_stage__vision_frames_wiring()(ctx)
 
     assert len(captured_frames) == 1
     frames: dict[str, list[Path]] = captured_frames[0]
@@ -173,9 +179,9 @@ def test_frames_are_ordered_within_a_scene(
     ctx: PipelineContext, captured_frames: list[Any], stub_analysis_proxy: None
 ) -> None:
     """The VLM reads frames as a sequence; timestamp order is the sequence."""
-    _scenes(ctx, [("scene_000001", 0.0, 30.0)])
+    _scenes__vision_frames_wiring(ctx, [("scene_000001", 0.0, 30.0)])
 
-    _vision_stage()(ctx)
+    _vision_stage__vision_frames_wiring()(ctx)
 
     frames: dict[str, list[Path]] = captured_frames[0]
     names = [p.name for p in frames["scene_000001"]]
@@ -188,7 +194,7 @@ def test_frame_counts_follow_the_configured_buckets(
 ) -> None:
     """Short/medium/long buckets must reach the stage, not just the module."""
     # default.yaml: short_threshold 10, medium_threshold 60, 3/6/12 frames
-    _scenes(
+    _scenes__vision_frames_wiring(
         ctx,
         [
             ("scene_000001", 0.0, 5.0),  # short  -> 3
@@ -197,7 +203,7 @@ def test_frame_counts_follow_the_configured_buckets(
         ],
     )
 
-    _vision_stage()(ctx)
+    _vision_stage__vision_frames_wiring()(ctx)
 
     frames: dict[str, list[Path]] = captured_frames[0]
     assert len(frames["scene_000001"]) == 3
@@ -209,7 +215,7 @@ def test_no_scenes_yields_no_frames(
     ctx: PipelineContext, captured_frames: list[Any], stub_analysis_proxy: None
 ) -> None:
     """Degenerate input must not raise from the sampler."""
-    _vision_stage()(ctx)
+    _vision_stage__vision_frames_wiring()(ctx)
 
     assert captured_frames == [{}]
 
@@ -226,7 +232,7 @@ def test_vision_stage_reports_frame_progress(
     stub_analysis_proxy: None,
 ) -> None:
     """Sampling knows its frame total up front, so it must report it."""
-    _scenes(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 10.0, 40.0)])
+    _scenes__vision_frames_wiring(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 10.0, 40.0)])
 
     from movie_review.pipeline.orchestrator import run_stage
     from movie_review.pipeline.progress import WorkProgress
@@ -239,7 +245,7 @@ def test_vision_stage_reports_frame_progress(
     def _on_work(stage: str, progress: WorkProgress) -> None:
         seen.append(progress)
 
-    result = run_stage("vision", _vision_stage(), ctx, on_work=_on_work)
+    result = run_stage("vision", _vision_stage__vision_frames_wiring(), ctx, on_work=_on_work)
 
     assert result.success is True, result.error
     # 3 frames for the 5s scene, 6 for the 30s scene.
@@ -261,7 +267,7 @@ def test_vision_stage_reports_scene_progress(
     stub_analysis_proxy: None,
 ) -> None:
     """One VLM call per scene is the long pole; the bar must move per scene."""
-    _scenes(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 10.0, 40.0)])
+    _scenes__vision_frames_wiring(ctx, [("scene_000001", 0.0, 5.0), ("scene_000002", 10.0, 40.0)])
 
     from movie_review.pipeline.orchestrator import run_stage
     from movie_review.pipeline.progress import WorkProgress
@@ -289,7 +295,7 @@ def test_vision_stage_reports_scene_progress(
     seen: list[tuple[str, int, int]] = []
     result = run_stage(
         "vision",
-        _vision_stage(),
+        _vision_stage__vision_frames_wiring(),
         ctx,
         on_work=lambda stage, progress: seen.append((stage, progress.done, progress.total)),
     )
@@ -317,9 +323,9 @@ def test_second_vision_run_reuses_cached_frames(
     over hundreds of scenes to reach the same result is the difference between
     seconds and many minutes.
     """
-    _scenes(ctx, [("scene_000001", 0.0, 5.0)])
+    _scenes__vision_frames_wiring(ctx, [("scene_000001", 0.0, 5.0)])
 
-    stage = _vision_stage()
+    stage = _vision_stage__vision_frames_wiring()
     stage(ctx)
     first = [p.name for p in captured_frames[0]["scene_000001"]]
 
@@ -327,7 +333,7 @@ def test_second_vision_run_reuses_cached_frames(
 
     def _counting(binary: str, args: list[str]) -> str:
         calls.append(1)
-        return _fake_run(binary, args)
+        return _fake_run__vision_frames_wiring(binary, args)
 
     monkeypatch.setattr(frames_module, "extract_frame", _extract_with(_counting))
     stage(ctx)
@@ -348,7 +354,7 @@ def test_frame_extraction_failure_fails_the_stage(
     from movie_review.media import ffmpeg as ff
     from movie_review.media.frames import FrameSamplingError
 
-    _scenes(ctx, [("scene_000001", 0.0, 5.0)])
+    _scenes__vision_frames_wiring(ctx, [("scene_000001", 0.0, 5.0)])
 
     def _boom(binary: str, args: list[str]) -> str:
         raise ff.ProcessError(binary, args, "boom")
@@ -356,4 +362,4 @@ def test_frame_extraction_failure_fails_the_stage(
     monkeypatch.setattr(frames_module, "extract_frame", _extract_with(_boom))
 
     with pytest.raises(FrameSamplingError, match="Cannot extract frame"):
-        _vision_stage()(ctx)
+        _vision_stage__vision_frames_wiring()(ctx)

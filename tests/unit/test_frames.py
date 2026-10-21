@@ -24,6 +24,9 @@ from movie_review.media.frames import (
 )
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
+from tests.helpers import (
+    _fake_run,
+)
 
 
 def test_plan_count_buckets() -> None:
@@ -69,13 +72,6 @@ def test_frame_filename_deterministic() -> None:
     assert frame_filename("scene_000001", 1.5) == frame_filename("scene_000001", 1.5)
 
 
-def _fake_run(binary: str, args: list[str]) -> str:
-    dest = Path(args[-1])
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(b"frame-bytes")
-    return ""
-
-
 @dataclass
 class Harness:
     conn: sqlite3.Connection
@@ -95,7 +91,7 @@ class Harness:
         )
 
 
-def _harness(tmp_path: Path) -> Harness:
+def _harness__frames(tmp_path: Path) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
     source = tmp_path / "m.mp4"
@@ -130,7 +126,7 @@ def test_extract_frame_missing_output(tmp_path: Path) -> None:
 
 
 def test_sample_movie_writes_frames(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__frames(tmp_path)
     result = harness.sample()
     assert result.cache_hit is False
     assert len(result.frames) == 3 + 6
@@ -140,7 +136,7 @@ def test_sample_movie_writes_frames(tmp_path: Path) -> None:
 
 
 def test_sample_movie_second_run_hits_cache(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__frames(tmp_path)
     first = harness.sample()
 
     def _boom(binary: str, args: list[str]) -> str:
@@ -153,7 +149,7 @@ def test_sample_movie_second_run_hits_cache(tmp_path: Path) -> None:
 
 
 def test_sample_movie_tampered_frame_regenerates(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__frames(tmp_path)
     first = harness.sample()
     first.frames[0].path.write_bytes(b"tampered")
     calls: list[int] = []
@@ -168,7 +164,7 @@ def test_sample_movie_tampered_frame_regenerates(tmp_path: Path) -> None:
 
 
 def test_sample_movie_missing_source(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__frames(tmp_path)
     harness.source.unlink()
     with pytest.raises(FrameSamplingError, match="not found"):
         harness.sample()

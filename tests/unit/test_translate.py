@@ -60,7 +60,7 @@ SOURCE = "vi"
 TARGET = "en"
 
 
-def _script(paragraphs: int = 2) -> ReviewScript:
+def _script__translate(paragraphs: int = 2) -> ReviewScript:
     return ReviewScript.model_validate(
         {
             "sections": [
@@ -130,7 +130,7 @@ def ctx(tmp_path: Path) -> _Ctx:
     ):
         manager.transition("job_t", state)
 
-    script = _script()
+    script = _script__translate()
     script_path = source_script_path(tmp_path / "jobs", "job_t")
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(
@@ -199,7 +199,7 @@ def test_different_languages_need_translation() -> None:
 
 def test_omitted_target_is_a_no_op(ctx: _Ctx) -> None:
     """The requested default: target comes from language, so nothing is translated."""
-    result = _translate(ctx, _script(), target_language=SOURCE)
+    result = _translate(ctx, _script__translate(), target_language=SOURCE)
 
     assert result.skipped is True
     assert result.script_path is None
@@ -208,7 +208,7 @@ def test_omitted_target_is_a_no_op(ctx: _Ctx) -> None:
 
 
 def test_no_op_leaves_the_source_as_the_effective_script(ctx: _Ctx) -> None:
-    _translate(ctx, _script(), target_language=SOURCE)
+    _translate(ctx, _script__translate(), target_language=SOURCE)
 
     assert effective_script_path(ctx.ctx.jobs_dir, "job_t", SOURCE).name == "review-script.json"
 
@@ -219,7 +219,7 @@ def test_no_op_leaves_the_source_as_the_effective_script(ctx: _Ctx) -> None:
 
 
 def test_translation_replaces_paragraph_text(ctx: _Ctx) -> None:
-    result = _translate(ctx, _script())
+    result = _translate(ctx, _script__translate())
 
     assert result.skipped is False
     assert result.script_path is not None and result.script_path.is_file()
@@ -230,7 +230,7 @@ def test_translation_replaces_paragraph_text(ctx: _Ctx) -> None:
 
 def test_structure_is_preserved(ctx: _Ctx) -> None:
     """IDs and order are how subtitles and clips line up with the script."""
-    result = _translate(ctx, _script(paragraphs=3))
+    result = _translate(ctx, _script__translate(paragraphs=3))
 
     assert [s.id for s in result.script.sections] == ["sec_000"]
     assert [p.id for p in result.script.sections[0].paragraphs] == ["par_000", "par_001", "par_002"]
@@ -238,22 +238,22 @@ def test_structure_is_preserved(ctx: _Ctx) -> None:
 
 def test_source_script_is_left_intact(ctx: _Ctx) -> None:
     """The point of a separate file: the source stays translatable again."""
-    original = [p.text for s in _script().sections for p in s.paragraphs]
-    _translate(ctx, _script())
+    original = [p.text for s in _script__translate().sections for p in s.paragraphs]
+    _translate(ctx, _script__translate())
 
     reloaded = load_script(source_script_path(ctx.ctx.jobs_dir, "job_t"))
     assert [p.text for s in reloaded.sections for p in s.paragraphs] == original
 
 
 def test_translated_file_is_named_for_the_language(ctx: _Ctx) -> None:
-    result = _translate(ctx, _script())
+    result = _translate(ctx, _script__translate())
 
     assert result.script_path is not None
     assert result.script_path.name == f"review-script.{TARGET}.json"
 
 
 def test_effective_script_prefers_the_translation(ctx: _Ctx) -> None:
-    _translate(ctx, _script())
+    _translate(ctx, _script__translate())
 
     chosen = effective_script_path(ctx.ctx.jobs_dir, "job_t", TARGET)
     assert chosen.name == f"review-script.{TARGET}.json"
@@ -265,7 +265,7 @@ def test_effective_script_falls_back_when_absent(ctx: _Ctx) -> None:
 
 
 def test_document_records_both_languages(ctx: _Ctx) -> None:
-    result = _translate(ctx, _script())
+    result = _translate(ctx, _script__translate())
 
     assert result.script_path is not None
     document = json.loads(result.script_path.read_text(encoding="utf-8"))
@@ -274,7 +274,7 @@ def test_document_records_both_languages(ctx: _Ctx) -> None:
 
 
 def test_artifact_is_recorded(ctx: _Ctx) -> None:
-    _translate(ctx, _script())
+    _translate(ctx, _script__translate())
 
     stored = repo.get_artifact(ctx.conn, f"job_t-review-script-{TARGET}")
     assert stored is not None
@@ -287,10 +287,10 @@ def test_artifact_is_recorded(ctx: _Ctx) -> None:
 
 
 def test_second_run_hits_the_cache(ctx: _Ctx) -> None:
-    _translate(ctx, _script())
+    _translate(ctx, _script__translate())
     calls_after_first = ctx.reasoner.calls
 
-    second = _translate(ctx, _script())
+    second = _translate(ctx, _script__translate())
 
     assert ctx.reasoner.calls == calls_after_first, "re-translated from scratch"
     assert second.cache_hits == 2
@@ -299,10 +299,10 @@ def test_second_run_hits_the_cache(ctx: _Ctx) -> None:
 
 def test_cache_is_keyed_on_the_target_language(ctx: _Ctx) -> None:
     """A different target must not reuse another target's text."""
-    _translate(ctx, _script())
+    _translate(ctx, _script__translate())
     calls = ctx.reasoner.calls
 
-    _translate(ctx, _script(), target_language="fr")
+    _translate(ctx, _script__translate(), target_language="fr")
 
     assert ctx.reasoner.calls == calls + 2
 
@@ -368,14 +368,14 @@ def test_empty_translation_is_rejected(ctx: _Ctx) -> None:
     ctx.reasoner = _RecordingReasoner(reply=json.dumps({"text": "   "}))
 
     with pytest.raises(TranslationError, match="empty"):
-        _translate(ctx, _script())
+        _translate(ctx, _script__translate())
 
 
 def test_reply_without_a_text_field_is_rejected(ctx: _Ctx) -> None:
     ctx.reasoner = _RecordingReasoner(reply=json.dumps({"translated": "x"}))
 
     with pytest.raises(TranslationError, match="no text field"):
-        _translate(ctx, _script())
+        _translate(ctx, _script__translate())
 
 
 def test_model_failure_is_classified(ctx: _Ctx) -> None:
@@ -391,7 +391,7 @@ def test_model_failure_is_classified(ctx: _Ctx) -> None:
             return None
 
     with pytest.raises(TranslationError, match="Translation call failed"):
-        _translate(ctx, _script(), reasoner=_Boom())
+        _translate(ctx, _script__translate(), reasoner=_Boom())
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +415,7 @@ def _pipeline_ctx(tmp_path: Path, target: str) -> PipelineContext:
     script_path = source_script_path(tmp_path / "jobs", "job_w")
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(
-        json.dumps({"script": _script().model_dump(mode="json")}), encoding="utf-8"
+        json.dumps({"script": _script__translate().model_dump(mode="json")}), encoding="utf-8"
     )
     return PipelineContext(
         job_id="job_w",
@@ -567,12 +567,12 @@ def test_translation_model_identity_enters_the_cache_key(ctx: _Ctx) -> None:
     models.yaml and every paragraph is translated again, rather than the new
     model silently inheriting the old model's cached prose.
     """
-    _translate(ctx, _script())
+    _translate(ctx, _script__translate())
     first_calls = ctx.reasoner.calls
 
     # A different adapter identity, same cache directory.
     ctx.reasoner = _RecordingReasoner(model_name="translator-b")
-    second = _translate(ctx, _script())
+    second = _translate(ctx, _script__translate())
 
     assert first_calls == 2
     assert second.cache_hits == 0, "reused another model's cached text"
@@ -582,10 +582,10 @@ def test_translation_model_identity_enters_the_cache_key(ctx: _Ctx) -> None:
 
 def test_same_model_reuses_the_cache(ctx: _Ctx) -> None:
     """The control: an unchanged configuration must still hit the cache."""
-    _translate(ctx, _script())
+    _translate(ctx, _script__translate())
     calls = ctx.reasoner.calls
 
-    second = _translate(ctx, _script())
+    second = _translate(ctx, _script__translate())
 
     assert second.cache_hits == 2
     assert ctx.reasoner.calls == calls

@@ -9,11 +9,15 @@ import pytest
 
 from movie_review.cache.manager import CacheManager
 from movie_review.config.settings import ModelSpec
-from movie_review.domain import Event, EventType, Job, StoryElement
+from movie_review.domain import Job, StoryElement
 from movie_review.reasoning.port import ReasoningPort
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 from movie_review.story.arcs import ArcsResult, StoryArcError, extract_story_arcs
+from tests.helpers import (
+    _events,
+    _outputs,
+)
 
 
 class _FakeReasoner(ReasoningPort):
@@ -31,48 +35,7 @@ class _FakeReasoner(ReasoningPort):
         self.unloaded = True
 
 
-def _events() -> list[Event]:
-    return [
-        Event(id="event_00001", type=EventType.INTRODUCTION, timestamp=5.0, description="Setup."),
-        Event(
-            id="event_00002",
-            type=EventType.CLIMAX,
-            timestamp=90.0,
-            description="Showdown.",
-            importance=0.95,
-        ),
-    ]
-
-
-def _outputs() -> list[object]:
-    return [
-        [
-            {
-                "element": "SETUP",
-                "applicable": True,
-                "description": "Intro.",
-                "event_ids": ["event_00001"],
-                "confidence": 0.9,
-            },
-            {
-                "element": "CLIMAX",
-                "applicable": True,
-                "description": "Showdown.",
-                "event_ids": ["event_00002"],
-                "confidence": 0.95,
-            },
-            {
-                "element": "RESOLUTION",
-                "applicable": False,
-                "description": "",
-                "event_ids": [],
-                "confidence": 0.4,
-            },
-        ]
-    ]
-
-
-def _run(tmp_path: Path, reasoner: _FakeReasoner) -> tuple[sqlite3.Connection, ArcsResult]:
+def _run__arcs(tmp_path: Path, reasoner: _FakeReasoner) -> tuple[sqlite3.Connection, ArcsResult]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     repo.save_job(conn, Job(job_id="job_1", input_file="m"))
     result = extract_story_arcs(
@@ -94,7 +57,7 @@ def test_elements_complete() -> None:
 
 
 def test_happy_path(tmp_path: Path) -> None:
-    conn, result = _run(tmp_path, _FakeReasoner(_outputs()))
+    conn, result = _run__arcs(tmp_path, _FakeReasoner(_outputs()))
     assert [a.element.value for a in result.arcs] == ["SETUP", "CLIMAX", "RESOLUTION"]
     assert result.arcs[2].applicable is False
     assert result.cache_hit is False
@@ -104,7 +67,7 @@ def test_happy_path(tmp_path: Path) -> None:
 
 
 def test_second_run_hits_cache(tmp_path: Path) -> None:
-    conn, _ = _run(tmp_path, _FakeReasoner(_outputs()))
+    conn, _ = _run__arcs(tmp_path, _FakeReasoner(_outputs()))
     reasoner = _FakeReasoner([])
     reasoner.fail_on_call = True
     result = extract_story_arcs(

@@ -30,7 +30,7 @@ class _FakeReasoner(ReasoningPort):
         pass
 
 
-def _events() -> list[Event]:
+def _events__themes() -> list[Event]:
     return [
         Event(
             id="event_00001",
@@ -42,11 +42,13 @@ def _events() -> list[Event]:
     ]
 
 
-def _run(tmp_path: Path, reasoner: _FakeReasoner) -> tuple[sqlite3.Connection, ThemesResult]:
+def _run__themes(
+    tmp_path: Path, reasoner: _FakeReasoner
+) -> tuple[sqlite3.Connection, ThemesResult]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     repo.save_job(conn, Job(job_id="job_1", input_file="m"))
     result = extract_themes(
-        _events(),
+        _events__themes(),
         "char_001: John",
         job_id="job_1",
         jobs_dir=tmp_path / "jobs",
@@ -58,7 +60,7 @@ def _run(tmp_path: Path, reasoner: _FakeReasoner) -> tuple[sqlite3.Connection, T
     return conn, result
 
 
-def _outputs() -> list[object]:
+def _outputs__themes() -> list[object]:
     return [
         [
             {"theme": "betrayal", "evidence": ["event_00001"], "confidence": 0.85},
@@ -68,7 +70,7 @@ def _outputs() -> list[object]:
 
 
 def test_happy_path(tmp_path: Path) -> None:
-    conn, result = _run(tmp_path, _FakeReasoner(_outputs()))
+    conn, result = _run__themes(tmp_path, _FakeReasoner(_outputs__themes()))
     assert [t.theme for t in result.themes] == ["betrayal", "trust"]
     assert result.cache_hit is False
     assert result.themes_path.is_file()
@@ -77,11 +79,11 @@ def test_happy_path(tmp_path: Path) -> None:
 
 
 def test_second_run_hits_cache(tmp_path: Path) -> None:
-    conn, _ = _run(tmp_path, _FakeReasoner(_outputs()))
+    conn, _ = _run__themes(tmp_path, _FakeReasoner(_outputs__themes()))
     conn.close()
     reasoner = _FakeReasoner([])
     reasoner.fail_on_call = True
-    conn2, result = _run(tmp_path, reasoner)
+    conn2, result = _run__themes(tmp_path, reasoner)
     assert result.cache_hit is True
     conn2.close()
 
@@ -107,7 +109,7 @@ def test_unevidenced_theme_rejected(tmp_path: Path) -> None:
     bad = [[{"theme": "love", "evidence": [], "confidence": 0.9}]]
     with pytest.raises(ThemeExtractionError, match="cites no evidence"):
         extract_themes(
-            _events(),
+            _events__themes(),
             "none",
             job_id="job_1",
             jobs_dir=tmp_path / "jobs",

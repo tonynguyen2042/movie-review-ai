@@ -1,7 +1,6 @@
 """T005 acceptance: schema bootstrap, migrations, repository round-trips."""
 
 import sqlite3
-from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -22,15 +21,6 @@ from movie_review.domain import (
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect, get_schema_version, migrate
 from movie_review.storage.schema import SCHEMA_VERSION
-
-
-@pytest.fixture()
-def db(tmp_path: Path) -> Generator[sqlite3.Connection]:
-    path = bootstrap(tmp_path / "jobs" / "test.db")
-    assert path.is_file()
-    conn = connect(path)
-    yield conn
-    conn.close()
 
 
 @pytest.fixture()

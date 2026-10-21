@@ -33,6 +33,9 @@ from movie_review.vision.openai_compat import (
     OpenAICompatVLMAdapter,
 )
 from movie_review.vision.port import AnalysisInput, VLMError, VLMUnavailableError
+from tests.helpers import (
+    _frame,
+)
 
 # A real reply, truncated the way max_tokens cuts one: no closing brace.
 TRUNCATED = '{\n  "location": "Fury cargo hold",\n  "characters": ["a man"],\n  "actions": ['
@@ -64,16 +67,6 @@ class FakeResponse:
         return None
 
 
-def _frame(tmp_path: Path) -> Path:
-    png = bytes.fromhex(
-        "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
-        "1f15c4890000000a49444154789c6360000002000154a24f5f0000000049454e44ae426082"
-    )
-    path = tmp_path / "frame.png"
-    path.write_bytes(png)
-    return path
-
-
 def _chat(content: str, finish_reason: str = "stop") -> bytes:
     return json.dumps(
         {
@@ -87,7 +80,7 @@ def _chat(content: str, finish_reason: str = "stop") -> bytes:
     ).encode()
 
 
-def _input(tmp_path: Path) -> AnalysisInput:
+def _input__vlm_truncation(tmp_path: Path) -> AnalysisInput:
     return AnalysisInput(
         scene_id="scene_000089", frames=[_frame(tmp_path)], dialogue="", previous_summary=None
     )
@@ -114,7 +107,7 @@ def test_truncated_reply_is_retried_with_a_bigger_budget(tmp_path: Path) -> None
     seen: list[dict[str, Any]] = []
     adapter = _adapter(tmp_path, [_chat(TRUNCATED, "length"), _chat(GOOD)], seen, max_tokens=2048)
 
-    analysis = adapter.analyze(_input(tmp_path), "prompt")
+    analysis = adapter.analyze(_input__vlm_truncation(tmp_path), "prompt")
 
     assert analysis.location == "Fury cargo hold"
     assert len(seen) == 2
@@ -127,7 +120,7 @@ def test_retry_asks_for_json_only(tmp_path: Path) -> None:
     seen: list[dict[str, Any]] = []
     adapter = _adapter(tmp_path, [_chat(TRUNCATED, "length"), _chat(GOOD)], seen)
 
-    adapter.analyze(_input(tmp_path), "ORIGINAL PROMPT")
+    adapter.analyze(_input__vlm_truncation(tmp_path), "ORIGINAL PROMPT")
 
     first_text = seen[0]["messages"][0]["content"][-1]["text"]
     second_text = seen[1]["messages"][0]["content"][-1]["text"]
@@ -141,7 +134,7 @@ def test_frames_are_not_resent_differently_on_retry(tmp_path: Path) -> None:
     seen: list[dict[str, Any]] = []
     adapter = _adapter(tmp_path, [_chat(TRUNCATED, "length"), _chat(GOOD)], seen)
 
-    adapter.analyze(_input(tmp_path), "prompt")
+    adapter.analyze(_input__vlm_truncation(tmp_path), "prompt")
 
     first_images = seen[0]["messages"][0]["content"][:-1]
     second_images = seen[1]["messages"][0]["content"][:-1]
@@ -155,7 +148,7 @@ def test_complete_but_unparseable_reply_keeps_the_budget(tmp_path: Path) -> None
         tmp_path, [_chat("I cannot help with that."), _chat(GOOD)], seen, max_tokens=2048
     )
 
-    adapter.analyze(_input(tmp_path), "prompt")
+    adapter.analyze(_input__vlm_truncation(tmp_path), "prompt")
 
     assert seen[1]["max_tokens"] == 2048
 
@@ -165,7 +158,7 @@ def test_empty_reply_is_retried(tmp_path: Path) -> None:
     seen: list[dict[str, Any]] = []
     adapter = _adapter(tmp_path, [_chat("", "stop"), _chat(GOOD)], seen)
 
-    analysis = adapter.analyze(_input(tmp_path), "prompt")
+    analysis = adapter.analyze(_input__vlm_truncation(tmp_path), "prompt")
 
     assert analysis.scene_id == "scene_000089"
     assert len(seen) == 2
@@ -182,7 +175,7 @@ def test_persistent_truncation_reports_the_budget_and_the_reply(tmp_path: Path) 
     adapter = _adapter(tmp_path, [_chat(TRUNCATED, "length")], seen, max_tokens=2048)
 
     with pytest.raises(VLMError) as excinfo:
-        adapter.analyze(_input(tmp_path), "prompt")
+        adapter.analyze(_input__vlm_truncation(tmp_path), "prompt")
 
     message = str(excinfo.value)
     assert "scene_000089" in message
@@ -199,7 +192,7 @@ def test_refusal_is_reported_as_such_not_as_a_format_error(tmp_path: Path) -> No
     adapter = _adapter(tmp_path, [_chat("I cannot help with that.", "stop")], seen)
 
     with pytest.raises(VLMError) as excinfo:
-        adapter.analyze(_input(tmp_path), "prompt")
+        adapter.analyze(_input__vlm_truncation(tmp_path), "prompt")
 
     assert "cannot help with that" in str(excinfo.value)
 
@@ -210,7 +203,7 @@ def test_excerpt_is_bounded(tmp_path: Path) -> None:
     adapter = _adapter(tmp_path, [_chat("no " * 5000, "stop")], seen)
 
     with pytest.raises(VLMError) as excinfo:
-        adapter.analyze(_input(tmp_path), "prompt")
+        adapter.analyze(_input__vlm_truncation(tmp_path), "prompt")
 
     assert len(str(excinfo.value)) < 600
 
@@ -233,7 +226,7 @@ def test_transport_failure_is_not_retried(tmp_path: Path) -> None:
     adapter = OpenAICompatVLMAdapter("Qwen3-VL", "http://gpu:8000/v1", transport=transport)
 
     with pytest.raises(VLMUnavailableError):
-        adapter.analyze(_input(tmp_path), "prompt")
+        adapter.analyze(_input__vlm_truncation(tmp_path), "prompt")
 
     assert len(calls) == 1
 

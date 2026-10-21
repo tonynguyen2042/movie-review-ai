@@ -53,7 +53,7 @@ class _CountingAdapter(ASRPort):
         return True
 
 
-def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
+def _ctx__adapter_unload(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
     movie = tmp_path / "movie.mp4"
     movie.write_bytes(b"\x00")
     conn = connect(bootstrap(tmp_path / "jobs.db"))
@@ -81,7 +81,7 @@ def _extract(source: Path, dest: Path, ffmpeg: str) -> Path:
 
 
 def test_the_transcript_adapter_is_unloaded_on_a_cache_miss(tmp_path: Path) -> None:
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__adapter_unload(tmp_path)
     movie = tmp_path / "movie.mp4"
     adapter = _CountingAdapter()
     try:
@@ -100,7 +100,7 @@ def test_the_transcript_adapter_is_unloaded_on_a_cache_miss(tmp_path: Path) -> N
 
 def test_the_transcript_adapter_is_unloaded_on_a_cache_hit(tmp_path: Path) -> None:
     """The regression: a cache hit skipped the model call and the release."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__adapter_unload(tmp_path)
     movie = tmp_path / "movie.mp4"
     adapter = _CountingAdapter()
     try:
@@ -157,7 +157,7 @@ class _CountingReasoner(ReasoningPort):
         return True
 
 
-def _story_stages() -> list[tuple[str, Any]]:
+def _story_stages__adapter_unload() -> list[tuple[str, Any]]:
     from movie_review.story.arcs import extract_story_arcs
     from movie_review.story.themes import extract_themes
     from movie_review.story.twists import extract_twists
@@ -183,7 +183,7 @@ def test_the_story_stages_unload_on_a_cache_hit(tmp_path: Path) -> None:
             description="Someone finds something.",
         )
     ]
-    for name, stage in _story_stages():
+    for name, stage in _story_stages__adapter_unload():
         reasoner = _CountingReasoner()
         kwargs = {
             "job_id": "job_1",

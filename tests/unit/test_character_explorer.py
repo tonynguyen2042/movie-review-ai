@@ -10,51 +10,14 @@ from typing import Any
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.ui.character import CharacterExplorer
+from tests.helpers import (
+    _analysis,
+)
 
 
-def _analysis() -> dict[str, Any]:
-    return {
-        "movie": {"id": "movie_x"},
-        "scenes": [
-            {"scene_id": "s1", "analysis": {"characters": ["Marina Vane"]}},
-            {"scene_id": "s2", "analysis": {"characters": ["Marina"]}},
-        ],
-        "characters": [
-            {
-                "id": "char_000001",
-                "name": "Marina Vane",
-                "aliases": ["Marina"],
-                "gender": "female",
-                "first_seen": 12.0,
-                "last_seen": 900.0,
-                "confidence": 0.94,
-            },
-            {
-                "id": "char_000002",
-                "name": "The Captain",
-                "aliases": [],
-                "gender": "male",
-                "first_seen": 300.0,
-                "last_seen": 1200.0,
-                "confidence": 0.5,
-            },
-        ],
-        "events": [
-            {"id": "ev1", "type": "DISCOVERY", "characters": ["char_000001"]},
-        ],
-        "relationships": [
-            {
-                "subject": "char_000001",
-                "relation": "KNOWS",
-                "object": "char_000002",
-                "evidence": ["evidence_1"],
-                "confidence": 0.8,
-            },
-        ],
-    }
-
-
-def _seed(tmp_path: Path, job_id: str = "job_x", doc: dict[str, Any] | None = None) -> Path:
+def _seed__character_explorer(
+    tmp_path: Path, job_id: str = "job_x", doc: dict[str, Any] | None = None
+) -> Path:
     jobs_dir = tmp_path / "jobs"
     job_dir = jobs_dir / job_id
     job_dir.mkdir(parents=True)
@@ -64,7 +27,7 @@ def _seed(tmp_path: Path, job_id: str = "job_x", doc: dict[str, Any] | None = No
 
 def test_character_explorer_from_movie_analysis(tmp_path: Path) -> None:
     """Characters, scenes, events, and relationships are assembled."""
-    jobs_dir = _seed(tmp_path)
+    jobs_dir = _seed__character_explorer(tmp_path)
     data = CharacterExplorer(jobs_dir, "job_x").load()
 
     assert data["job_id"] == "job_x"
@@ -90,7 +53,7 @@ def test_character_explorer_from_movie_analysis(tmp_path: Path) -> None:
 
 def test_character_explorer_relationships(tmp_path: Path) -> None:
     """Relationships are attached to both endpoints with evidence."""
-    jobs_dir = _seed(tmp_path)
+    jobs_dir = _seed__character_explorer(tmp_path)
     data = CharacterExplorer(jobs_dir, "job_x").load()
 
     marina = next(c for c in data["characters"] if c["id"] == "char_000001")
@@ -109,7 +72,7 @@ def test_character_explorer_relationships(tmp_path: Path) -> None:
 
 def test_character_explorer_json_export(tmp_path: Path) -> None:
     """JSON export round-trips the loaded structure."""
-    jobs_dir = _seed(tmp_path)
+    jobs_dir = _seed__character_explorer(tmp_path)
     payload = json.loads(CharacterExplorer(jobs_dir, "job_x").to_json())
     assert payload["job_id"] == "job_x"
     assert payload["total"] == 2
@@ -121,7 +84,7 @@ def test_character_explorer_html_export(tmp_path: Path) -> None:
     This is the regression test for the missing ``_render_char_list``
     method, which made ``to_html()`` raise AttributeError.
     """
-    jobs_dir = _seed(tmp_path)
+    jobs_dir = _seed__character_explorer(tmp_path)
     html = CharacterExplorer(jobs_dir, "job_x").to_html()
 
     assert "Character Explorer" in html
@@ -136,7 +99,7 @@ def test_character_explorer_html_export(tmp_path: Path) -> None:
 
 def test_character_explorer_html_renders_aliases_and_confidence(tmp_path: Path) -> None:
     """Aliases and the percentage confidence appear in the sidebar."""
-    jobs_dir = _seed(tmp_path)
+    jobs_dir = _seed__character_explorer(tmp_path)
     html = CharacterExplorer(jobs_dir, "job_x").to_html()
 
     assert "(Marina)" in html
@@ -149,7 +112,7 @@ def test_character_explorer_html_escapes_content(tmp_path: Path) -> None:
     doc = _analysis()
     doc["characters"][0]["name"] = '<img src=x onerror="alert(1)">'
     doc["characters"][0]["aliases"] = ["<b>bad</b>"]
-    jobs_dir = _seed(tmp_path, doc=doc)
+    jobs_dir = _seed__character_explorer(tmp_path, doc=doc)
 
     html = CharacterExplorer(jobs_dir, "job_x").to_html()
     rendered = _rendered_list(html)
@@ -201,7 +164,7 @@ def test_character_explorer_script_payload_cannot_break_out(tmp_path: Path) -> N
     """
     doc = _analysis()
     doc["characters"][0]["name"] = "</script><script>alert(1)</script>"
-    jobs_dir = _seed(tmp_path, doc=doc)
+    jobs_dir = _seed__character_explorer(tmp_path, doc=doc)
 
     html = CharacterExplorer(jobs_dir, "job_x").to_html()
 
@@ -215,7 +178,7 @@ def test_character_explorer_script_payload_cannot_break_out(tmp_path: Path) -> N
 
 def test_character_explorer_empty_character_list(tmp_path: Path) -> None:
     """A document with no characters renders the empty state."""
-    jobs_dir = _seed(tmp_path, doc={"movie": {"id": "m"}, "characters": []})
+    jobs_dir = _seed__character_explorer(tmp_path, doc={"movie": {"id": "m"}, "characters": []})
     html = CharacterExplorer(jobs_dir, "job_x").to_html()
     assert "No characters found" in html
     assert "0 characters" in html

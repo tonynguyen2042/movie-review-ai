@@ -34,7 +34,7 @@ SECTION_7_SCRIPTS = (
 )
 
 
-def _load(name: str) -> Any:
+def _load__scripts(name: str) -> Any:
     """Load a script as a module, the way a caller would run it."""
     path = SCRIPTS / name
     spec = importlib.util.spec_from_file_location(f"_script_{path.stem}", path)
@@ -104,7 +104,7 @@ def test_the_prune_of_an_empty_cache_is_harmless(tmp_path: Path) -> None:
 
 def test_the_age_is_read_in_the_units_a_person_would_use() -> None:
     """``7d`` is what a person writes; seconds is what the code wants."""
-    module = _load("cleanup_cache.py")
+    module = _load__scripts("cleanup_cache.py")
     assert module._seconds("30m") == 1800
     assert module._seconds("2h") == 7200
     assert module._seconds("7d") == 604800
@@ -112,14 +112,14 @@ def test_the_age_is_read_in_the_units_a_person_would_use() -> None:
 
 
 def test_an_unreadable_age_is_reported() -> None:
-    module = _load("cleanup_cache.py")
+    module = _load__scripts("cleanup_cache.py")
     with pytest.raises(ValueError, match="Cannot read"):
         module._seconds("soon")
 
 
 def test_the_cleanup_reports_without_removing(tmp_path: Path, monkeypatch) -> None:
     """A dry run has to promise what a real run would do."""
-    module = _load("cleanup_cache.py")
+    module = _load__scripts("cleanup_cache.py")
     cache = CacheManager(tmp_path / "cache")
     cache.store("entry", b"payload")
 
@@ -130,7 +130,7 @@ def test_the_cleanup_reports_without_removing(tmp_path: Path, monkeypatch) -> No
 
 
 def test_the_cleanup_removes_what_it_reports(tmp_path: Path) -> None:
-    module = _load("cleanup_cache.py")
+    module = _load__scripts("cleanup_cache.py")
     cache = CacheManager(tmp_path / "cache")
     cache.store("entry", b"payload")
 
@@ -142,7 +142,7 @@ def test_the_cleanup_removes_what_it_reports(tmp_path: Path) -> None:
 
 def test_the_frames_are_dropped_but_the_manifest_stays(tmp_path: Path) -> None:
     """The manifest is the record of what was sampled; the images are the bulk."""
-    module = _load("cleanup_cache.py")
+    module = _load__scripts("cleanup_cache.py")
     job_dir = tmp_path / "jobs" / "job_1"
     frames = job_dir / "frames" / "scene_000001"
     frames.mkdir(parents=True)

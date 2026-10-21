@@ -17,7 +17,7 @@ from movie_review.rendering.subtitles import (
 )
 
 
-def _manifest() -> RenderManifest:
+def _manifest__subtitles() -> RenderManifest:
     return RenderManifest(
         segments=[
             ManifestSegment(
@@ -61,14 +61,14 @@ def test_split_text() -> None:
 
 
 def test_build_cues_tiles_spans() -> None:
-    cues = build_cues(_manifest(), {"p1": "Short text here.", "p2": "Other words here."})
+    cues = build_cues(_manifest__subtitles(), {"p1": "Short text here.", "p2": "Other words here."})
     assert [(c.start, c.end) for c in cues] == [(0.0, 10.0), (10.0, 30.0)]
     assert [c.index for c in cues] == [1, 2]
 
 
 def test_build_cues_splits_long_text() -> None:
     long_text = " ".join(f"word{n}" for n in range(60))
-    cues = build_cues(_manifest(), {"p1": long_text, "p2": ""})
+    cues = build_cues(_manifest__subtitles(), {"p1": long_text, "p2": ""})
     assert len(cues) > 1
     assert cues[0].start == 0.0
     assert cues[-1].end == pytest.approx(10.0)
@@ -76,7 +76,7 @@ def test_build_cues_splits_long_text() -> None:
 
 
 def test_srt_round_trip() -> None:
-    cues = build_cues(_manifest(), {"p1": "Hello.", "p2": "World."})
+    cues = build_cues(_manifest__subtitles(), {"p1": "Hello.", "p2": "World."})
     text = format_srt(cues)
     assert text.startswith("1\n00:00:00,000 --> 00:00:10,000\nHello.")
     assert parse_srt(text) == cues
@@ -91,7 +91,7 @@ def test_parse_malformed() -> None:
 
 
 def test_write_srt(tmp_path: Path) -> None:
-    cues = build_cues(_manifest(), {"p1": "Hello."})
+    cues = build_cues(_manifest__subtitles(), {"p1": "Hello."})
     path = write_srt(tmp_path / "sub" / "review.srt", cues)
     assert path.is_file()
     assert parse_srt(path.read_text(encoding="utf-8")) == cues

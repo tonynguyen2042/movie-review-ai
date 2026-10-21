@@ -19,7 +19,7 @@ from movie_review.storage.schema import (
 )
 
 
-def _event() -> Event:
+def _event__events() -> Event:
     return Event(
         id="event_00031",
         type=EventType.DISCOVERY,
@@ -39,7 +39,7 @@ def test_event_types_complete() -> None:
 
 
 def test_event_validation() -> None:
-    assert Event.model_validate(_event().model_dump()) == _event()
+    assert Event.model_validate(_event__events().model_dump()) == _event__events()
     with pytest.raises(ValidationError):
         Event(id="e", type="NAP", timestamp=1.0, description="x")  # type: ignore[arg-type]
     with pytest.raises(ValidationError):
@@ -51,8 +51,8 @@ def test_event_validation() -> None:
 def test_event_round_trip(tmp_path: Path) -> None:
     conn = connect(bootstrap(tmp_path / "e.db"))
     repo.save_job(conn, Job(job_id="job_1", input_file="m"))
-    repo.save_event(conn, "job_1", _event())
-    assert repo.get_event(conn, "job_1", "event_00031") == _event()
+    repo.save_event(conn, "job_1", _event__events())
+    assert repo.get_event(conn, "job_1", "event_00031") == _event__events()
     assert repo.get_event(conn, "job_1", "missing") is None
     earlier = Event(
         id="event_00001",
@@ -63,7 +63,7 @@ def test_event_round_trip(tmp_path: Path) -> None:
     repo.save_event(conn, "job_1", earlier)
     assert [e.id for e in repo.list_events(conn, "job_1")] == ["event_00001", "event_00031"]
     with pytest.raises(sqlite3.IntegrityError):
-        repo.save_event(conn, "missing", _event())
+        repo.save_event(conn, "missing", _event__events())
     conn.close()
 
 

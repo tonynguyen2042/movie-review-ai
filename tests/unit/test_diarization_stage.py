@@ -8,28 +8,23 @@ table was always empty, the transcript carried no attribution, and
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 import pytest
 
-from movie_review.cache.manager import CacheManager
-from movie_review.config.settings import load_settings
 from movie_review.diarization.port import DiarizationPort
 from movie_review.domain import (
     Character,
     DiarizedSegment,
-    Job,
-    JobStatus,
     Scene,
     SceneAnalysis,
     TranscriptSegment,
 )
-from movie_review.jobs.manager import JobManager
-from movie_review.pipeline.context import StageContext
 from movie_review.pipeline.diarization import DiarizationStageError, run_diarization
 from movie_review.storage import repositories as repo
-from movie_review.storage.database import bootstrap, connect
+from tests.helpers import (
+    _ctx,
+)
 
 
 class _FakeDiarizer(DiarizationPort):
@@ -48,38 +43,14 @@ class _FakeDiarizer(DiarizationPort):
         return True
 
 
-def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
-    conn = connect(bootstrap(tmp_path / "jobs.db"))
-    manager = JobManager(conn)
-    repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
-    for state in (
-        JobStatus.INGESTING,
-        JobStatus.MEDIA_READY,
-        JobStatus.SCENES_READY,
-        JobStatus.TRANSCRIPT_READY,
-        JobStatus.VISUAL_ANALYSIS_READY,
-        JobStatus.CHARACTERS_READY,
-    ):
-        manager.transition("job_1", state)
-    ctx = StageContext(
-        job_id="job_1",
-        jobs_dir=tmp_path / "jobs",
-        conn=conn,
-        manager=manager,
-        cache=CacheManager(tmp_path / "cache"),
-        settings=load_settings(),
-    )
-    return ctx, conn
-
-
-def _audio(tmp_path: Path) -> Path:
+def _audio__diarization_stage(tmp_path: Path) -> Path:
     path = tmp_path / "jobs" / "job_1" / "tts" / "dialogue.wav"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"\x00")
     return path
 
 
-def _segments() -> list[TranscriptSegment]:
+def _segments__diarization_stage() -> list[TranscriptSegment]:
     return [
         TranscriptSegment(segment_id="seg_1", start=0.0, end=2.0, text="Hello there."),
         TranscriptSegment(segment_id="seg_2", start=2.0, end=4.0, text="General Kenobi."),
@@ -90,12 +61,14 @@ def test_the_lines_are_attributed_to_their_speaker(tmp_path: Path) -> None:
     """The transcript carried no attribution before this stage existed."""
     ctx, conn = _ctx(tmp_path)
     try:
-        repo.save_transcript_segments(conn, "job_1", _segments())
+        repo.save_transcript_segments(conn, "job_1", _segments__diarization_stage())
         turns = [
             DiarizedSegment(speaker="SPEAKER_00", start=0.0, end=2.0),
             DiarizedSegment(speaker="SPEAKER_01", start=2.0, end=4.0),
         ]
-        result = run_diarization(_audio(tmp_path), ctx, port=_FakeDiarizer(turns))
+        result = run_diarization(
+            _audio__diarization_stage(tmp_path), ctx, port=_FakeDiarizer(turns)
+        )
 
         assert result.attributed == 2
         stored = {s.segment_id: s.speaker for s in repo.list_transcript_segments(conn, "job_1")}
@@ -108,7 +81,7 @@ def test_the_speakers_are_linked_to_the_characters(tmp_path: Path) -> None:
     """A speaker alone with a character in a scene is that character."""
     ctx, conn = _ctx(tmp_path)
     try:
-        repo.save_transcript_segments(conn, "job_1", _segments())
+        repo.save_transcript_segments(conn, "job_1", _segments__diarization_stage())
         repo.save_scene(
             conn, "job_1", Scene(scene_id="scene_000001", start=0.0, end=10.0, duration=10.0)
         )
@@ -138,7 +111,9 @@ def test_the_speakers_are_linked_to_the_characters(tmp_path: Path) -> None:
             ),
         )
         turns = [DiarizedSegment(speaker="SPEAKER_00", start=0.0, end=4.0)]
-        result = run_diarization(_audio(tmp_path), ctx, port=_FakeDiarizer(turns))
+        result = run_diarization(
+            _audio__diarization_stage(tmp_path), ctx, port=_FakeDiarizer(turns)
+        )
 
         assert result.linked == 1
         links = repo.list_speaker_links(conn, "job_1")
@@ -152,7 +127,7 @@ def test_an_ambiguous_speaker_keeps_no_character(tmp_path: Path) -> None:
     """The linking abstains rather than guessing."""
     ctx, conn = _ctx(tmp_path)
     try:
-        repo.save_transcript_segments(conn, "job_1", _segments())
+        repo.save_transcript_segments(conn, "job_1", _segments__diarization_stage())
         repo.save_scene(
             conn, "job_1", Scene(scene_id="scene_000001", start=0.0, end=10.0, duration=10.0)
         )
@@ -183,7 +158,7 @@ def test_an_ambiguous_speaker_keeps_no_character(tmp_path: Path) -> None:
                 ),
             )
         turns = [DiarizedSegment(speaker="SPEAKER_00", start=0.0, end=4.0)]
-        run_diarization(_audio(tmp_path), ctx, port=_FakeDiarizer(turns))
+        run_diarization(_audio__diarization_stage(tmp_path), ctx, port=_FakeDiarizer(turns))
 
         links = repo.list_speaker_links(conn, "job_1")
         assert links[0][1] is None

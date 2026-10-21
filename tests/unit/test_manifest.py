@@ -11,7 +11,6 @@ from movie_review.config.settings import load_settings
 from movie_review.domain import Job, JobStatus, ReviewParagraph
 from movie_review.jobs.manager import JobManager
 from movie_review.pipeline.context import StageContext
-from movie_review.rendering.clips import SelectedClip
 from movie_review.rendering.manifest import (
     ManifestError,
     ManifestResult,
@@ -20,21 +19,20 @@ from movie_review.rendering.manifest import (
 )
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
+from tests.helpers import (
+    _clip,
+)
 
 
-def _paragraph(paragraph_id: str) -> ReviewParagraph:
+def _paragraph__manifest(paragraph_id: str) -> ReviewParagraph:
     return ReviewParagraph(
         id=paragraph_id, text="Narration.", target_seconds=12, claims=[], visual_intent="s"
     )
 
 
-def _clip(paragraph_id: str, start: float, end: float) -> SelectedClip:
-    return SelectedClip(paragraph_id, "scene_000001", start, end)
-
-
 def test_build_timeline_and_loop_flags() -> None:
     manifest = build_manifest(
-        [_paragraph("p1"), _paragraph("p2")],
+        [_paragraph__manifest("p1"), _paragraph__manifest("p2")],
         {"p1": _clip("p1", 0.0, 5.0), "p2": _clip("p2", 0.0, 4.0)},
         {"p1": 10.0, "p2": 2.0},
         movie_duration_seconds=100.0,
@@ -49,13 +47,15 @@ def test_build_timeline_and_loop_flags() -> None:
 
 def test_build_missing_inputs_rejected() -> None:
     with pytest.raises(ManifestError, match="No clip"):
-        build_manifest([_paragraph("p1")], {}, {"p1": 5.0}, 100.0, 420.0, 0.35)
+        build_manifest([_paragraph__manifest("p1")], {}, {"p1": 5.0}, 100.0, 420.0, 0.35)
     with pytest.raises(ManifestError, match="No narration"):
-        build_manifest([_paragraph("p1")], {"p1": _clip("p1", 0.0, 5.0)}, {}, 100.0, 420.0, 0.35)
+        build_manifest(
+            [_paragraph__manifest("p1")], {"p1": _clip("p1", 0.0, 5.0)}, {}, 100.0, 420.0, 0.35
+        )
 
 
 def test_build_limits_enforced() -> None:
-    paragraphs = [_paragraph("p1")]
+    paragraphs = [_paragraph__manifest("p1")]
     clips = {"p1": _clip("p1", 0.0, 5.0)}
     with pytest.raises(ManifestError, match="exceeds limit"):
         build_manifest(paragraphs, clips, {"p1": 10.0}, 100.0, 4.0, 0.35)
@@ -70,7 +70,7 @@ class Harness:
 
     def assemble(self) -> ManifestResult:
         return assemble_manifest(
-            [_paragraph("p1")],
+            [_paragraph__manifest("p1")],
             {"p1": _clip("p1", 0.0, 5.0)},
             {"p1": 10.0},
             100.0,
@@ -78,7 +78,7 @@ class Harness:
         )
 
 
-def _harness(tmp_path: Path) -> Harness:
+def _harness__manifest(tmp_path: Path) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -109,7 +109,7 @@ def _harness(tmp_path: Path) -> Harness:
 
 
 def test_assemble_advances_lifecycle(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__manifest(tmp_path)
     result = harness.assemble()
     assert result.cache_hit is False
     assert result.manifest_path.is_file()
@@ -120,17 +120,17 @@ def test_assemble_advances_lifecycle(tmp_path: Path) -> None:
 
 
 def test_assemble_unknown_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__manifest(tmp_path)
     harness.ctx.job_id = "job_2"
     with pytest.raises(ManifestError, match="Unknown job"):
         harness.assemble()
 
 
 def test_changed_clips_miss_cache(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__manifest(tmp_path)
     harness.assemble()
     result = assemble_manifest(
-        [_paragraph("p1")],
+        [_paragraph__manifest("p1")],
         {"p1": _clip("p1", 1.0, 4.0)},
         {"p1": 10.0},
         100.0,

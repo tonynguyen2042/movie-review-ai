@@ -38,7 +38,7 @@ from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 
 
-def _paragraph(
+def _paragraph__verify_stage(
     paragraph_id: str, text: str, claim_text: str, evidence: list[str]
 ) -> ReviewParagraph:
     return ReviewParagraph(
@@ -58,14 +58,16 @@ def _paragraph(
     )
 
 
-def _script(paragraph_id: str = "p1", evidence: list[str] | None = None) -> ReviewScript:
+def _script__verify_stage(
+    paragraph_id: str = "p1", evidence: list[str] | None = None
+) -> ReviewScript:
     return ReviewScript(
         sections=[
             ReviewSection(
                 id="sec_001",
                 type="hook",
                 paragraphs=[
-                    _paragraph(
+                    _paragraph__verify_stage(
                         paragraph_id,
                         "The hero walks in.",
                         "The hero finds the photograph.",
@@ -77,7 +79,7 @@ def _script(paragraph_id: str = "p1", evidence: list[str] | None = None) -> Revi
     )
 
 
-def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
+def _ctx__verify_stage(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -129,10 +131,10 @@ def _seed_evidence(conn: sqlite3.Connection) -> None:
 
 def test_the_claims_are_extracted_and_stored(tmp_path: Path) -> None:
     """The claims table was always empty before this stage existed."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__verify_stage(tmp_path)
     try:
         _seed_evidence(conn)
-        path = _script_path(tmp_path, _script())
+        path = _script_path(tmp_path, _script__verify_stage())
         result = run_verification(path, ctx)
 
         assert len(result.claims) == 1
@@ -145,10 +147,10 @@ def test_the_claims_are_extracted_and_stored(tmp_path: Path) -> None:
 
 def test_a_supported_claim_is_kept_and_the_job_is_verified(tmp_path: Path) -> None:
     """A claim the evidence supports stays, and the job moves on."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__verify_stage(tmp_path)
     try:
         _seed_evidence(conn)
-        path = _script_path(tmp_path, _script())
+        path = _script_path(tmp_path, _script__verify_stage())
         result = run_verification(path, ctx)
 
         assert result.removed == 0
@@ -160,11 +162,11 @@ def test_a_supported_claim_is_kept_and_the_job_is_verified(tmp_path: Path) -> No
 
 def test_an_unsupported_claim_is_converted_to_an_interpretation(tmp_path: Path) -> None:
     """A factual claim with no evidence must not stay a fact."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__verify_stage(tmp_path)
     try:
         _seed_evidence(conn)
         # The claim cites an event that does not exist.
-        path = _script_path(tmp_path, _script(evidence=["event_does_not_exist"]))
+        path = _script_path(tmp_path, _script__verify_stage(evidence=["event_does_not_exist"]))
         result = run_verification(path, ctx)
 
         assert result.converted == 1
@@ -180,10 +182,10 @@ def test_an_unsupported_claim_is_converted_to_an_interpretation(tmp_path: Path) 
 
 def test_the_verdicts_are_recorded_on_the_job(tmp_path: Path) -> None:
     """The database must say what was decided, not only the report."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__verify_stage(tmp_path)
     try:
         _seed_evidence(conn)
-        path = _script_path(tmp_path, _script(evidence=["event_does_not_exist"]))
+        path = _script_path(tmp_path, _script__verify_stage(evidence=["event_does_not_exist"]))
         run_verification(path, ctx)
 
         stored = repo.list_claims(conn, "job_1")
@@ -194,10 +196,10 @@ def test_the_verdicts_are_recorded_on_the_job(tmp_path: Path) -> None:
 
 def test_the_verdicts_are_written_to_a_report(tmp_path: Path) -> None:
     """The report is the artifact of record for the stage."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__verify_stage(tmp_path)
     try:
         _seed_evidence(conn)
-        path = _script_path(tmp_path, _script())
+        path = _script_path(tmp_path, _script__verify_stage())
         result = run_verification(path, ctx)
 
         assert result.verdicts_path is not None
@@ -213,10 +215,10 @@ def test_the_verdicts_are_written_to_a_report(tmp_path: Path) -> None:
 
 def test_the_continuity_checker_runs(tmp_path: Path) -> None:
     """The continuity findings reach the report."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__verify_stage(tmp_path)
     try:
         _seed_evidence(conn)
-        path = _script_path(tmp_path, _script())
+        path = _script_path(tmp_path, _script__verify_stage())
         result = run_verification(path, ctx)
         assert result.continuity_issues == 0
         assert result.verdicts_path is not None

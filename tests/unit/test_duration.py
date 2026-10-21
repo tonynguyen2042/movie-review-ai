@@ -11,7 +11,7 @@ from movie_review.review.duration import (
 )
 
 
-def _paragraph(paragraph_id: str, words: int, claims: int = 1) -> ReviewParagraph:
+def _paragraph__duration(paragraph_id: str, words: int, claims: int = 1) -> ReviewParagraph:
     return ReviewParagraph(
         id=paragraph_id,
         text=" ".join(f"word{n}" for n in range(words)),
@@ -29,15 +29,17 @@ def _paragraph(paragraph_id: str, words: int, claims: int = 1) -> ReviewParagrap
     )
 
 
-def _script() -> ReviewScript:
+def _script__duration() -> ReviewScript:
     return ReviewScript(
         sections=[
             ReviewSection(
                 id="sec_01",
                 type="hook",
-                paragraphs=[_paragraph("p1", 100, 2), _paragraph("p2", 100, 0)],
+                paragraphs=[_paragraph__duration("p1", 100, 2), _paragraph__duration("p2", 100, 0)],
             ),
-            ReviewSection(id="sec_02", type="climax", paragraphs=[_paragraph("p3", 100, 1)]),
+            ReviewSection(
+                id="sec_02", type="climax", paragraphs=[_paragraph__duration("p3", 100, 1)]
+            ),
         ]
     )
 
@@ -52,14 +54,14 @@ def test_word_math() -> None:
 
 
 def test_fit_ok_within_tolerance() -> None:
-    result = fit_script(_script(), 300)
+    result = fit_script(_script__duration(), 300)
     assert result.action == "ok"
     assert result.word_count == 300
     assert result.removed == []
 
 
 def test_compress_drops_lowest_value() -> None:
-    result = fit_script(_script(), 150)
+    result = fit_script(_script__duration(), 150)
     assert result.action == "compressed"
     assert result.removed == ["p2"]
     assert result.word_count == 200
@@ -68,7 +70,7 @@ def test_compress_drops_lowest_value() -> None:
 
 
 def test_compress_protects_last_paragraph() -> None:
-    script = _script()
+    script = _script__duration()
     result = fit_script(script, 50)
     ids = [p.id for s in result.script.sections for p in s.paragraphs]
     assert "p1" in ids and "p3" in ids
@@ -76,7 +78,7 @@ def test_compress_protects_last_paragraph() -> None:
 
 
 def test_short_requests_expansion() -> None:
-    result = fit_script(_script(), 1000)
+    result = fit_script(_script__duration(), 1000)
     assert result.action == "expand-required"
     assert result.word_count == 300
     assert result.removed == []
@@ -84,8 +86,8 @@ def test_short_requests_expansion() -> None:
 
 def test_bad_target_rejected() -> None:
     with pytest.raises(ValueError, match="positive"):
-        fit_script(_script(), 0)
+        fit_script(_script__duration(), 0)
 
 
 def test_script_words() -> None:
-    assert script_words(_script()) == 300
+    assert script_words(_script__duration()) == 300

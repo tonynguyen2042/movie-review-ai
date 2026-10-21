@@ -12,20 +12,17 @@ built in the events stage and persisted there.
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
-from movie_review.cache.manager import CacheManager
-from movie_review.config.settings import load_settings
-from movie_review.domain import Event, EventType, Job, JobStatus
-from movie_review.jobs.manager import JobManager
+from movie_review.domain import Event, EventType
 from movie_review.knowledge.graph import build_graph
-from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
-from movie_review.storage.database import bootstrap, connect
+from tests.helpers import (
+    _ctx,
+)
 
 
-def _events() -> list[Event]:
+def _events__story_graph_wiring() -> list[Event]:
     return [
         Event(
             id="event_00001",
@@ -50,7 +47,7 @@ def _events() -> list[Event]:
 
 def test_the_graph_is_built_from_the_events() -> None:
     """The builder was complete and nothing called it."""
-    graph = build_graph(_events())
+    graph = build_graph(_events__story_graph_wiring())
     subjects = {(edge.subject, edge.relation.value, edge.object) for edge in graph.relationships}
 
     assert ("char_001", "PARTICIPATES_IN", "event_00001") in subjects
@@ -60,7 +57,7 @@ def test_the_graph_is_built_from_the_events() -> None:
 
 def test_a_discovery_is_a_discovery_by_whoever_is_in_it() -> None:
     """A discovery is grounded in the event's own type."""
-    graph = build_graph(_events())
+    graph = build_graph(_events__story_graph_wiring())
     subjects = {(edge.subject, edge.relation.value, edge.object) for edge in graph.relationships}
     assert ("char_001", "DISCOVERS", "event_00001") in subjects
     # The conflict is not a discovery, so nobody discovers it.
@@ -69,40 +66,16 @@ def test_a_discovery_is_a_discovery_by_whoever_is_in_it() -> None:
 
 def test_every_edge_carries_its_evidence() -> None:
     """The constitution's P1: an edge has to point at what grounds it."""
-    graph = build_graph(_events())
+    graph = build_graph(_events__story_graph_wiring())
     for edge in graph.relationships:
         assert edge.evidence, f"{edge.relation} {edge.subject} -> {edge.object} has no evidence"
-
-
-def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
-    conn = connect(bootstrap(tmp_path / "jobs.db"))
-    manager = JobManager(conn)
-    repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
-    for state in (
-        JobStatus.INGESTING,
-        JobStatus.MEDIA_READY,
-        JobStatus.SCENES_READY,
-        JobStatus.TRANSCRIPT_READY,
-        JobStatus.VISUAL_ANALYSIS_READY,
-        JobStatus.CHARACTERS_READY,
-    ):
-        manager.transition("job_1", state)
-    ctx = StageContext(
-        job_id="job_1",
-        jobs_dir=tmp_path / "jobs",
-        conn=conn,
-        manager=manager,
-        cache=CacheManager(tmp_path / "cache"),
-        settings=load_settings(),
-    )
-    return ctx, conn
 
 
 def test_the_relationships_are_persisted(tmp_path: Path) -> None:
     """The relationships table was always empty."""
     ctx, conn = _ctx(tmp_path)
     try:
-        for relationship in build_graph(_events()).relationships:
+        for relationship in build_graph(_events__story_graph_wiring()).relationships:
             repo.save_relationship(conn, "job_1", relationship)
         stored = repo.list_relationships(conn, "job_1")
         assert stored

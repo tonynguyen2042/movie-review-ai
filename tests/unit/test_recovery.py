@@ -10,11 +10,9 @@ from movie_review.jobs.recovery import RecoveryPlan, recovery_plan
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
-
-
-def _manager(tmp_path: Path) -> JobManager:
-    conn = connect(bootstrap(tmp_path / "jobs.db"))
-    return JobManager(conn)
+from tests.helpers import (
+    _manager,
+)
 
 
 def _at(manager: JobManager, *states: JobStatus) -> Job:

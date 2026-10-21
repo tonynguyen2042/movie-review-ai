@@ -14,7 +14,7 @@ from movie_review.publishing.thumbnail import (
 )
 
 
-def _manifest() -> RenderManifest:
+def _manifest__thumbnail() -> RenderManifest:
     return RenderManifest(
         segments=[
             ManifestSegment(
@@ -49,7 +49,7 @@ def _manifest() -> RenderManifest:
 
 def test_plan_thumbnail_picks_middle_segment_midpoint() -> None:
     """The default ratio lands inside the middle segment at its midpoint."""
-    plan = plan_thumbnail(_manifest())
+    plan = plan_thumbnail(_manifest__thumbnail())
     assert plan.segment_id == "p2"
     assert plan.timestamp == 90.0
     assert plan.duration_seconds == 60.0
@@ -57,7 +57,7 @@ def test_plan_thumbnail_picks_middle_segment_midpoint() -> None:
 
 def test_plan_thumbnail_avoids_edges() -> None:
     """Extreme ratios are pulled inside the margin instead of the edges."""
-    manifest = _manifest()
+    manifest = _manifest__thumbnail()
     low = plan_thumbnail(manifest, position_ratio=0.0)
     high = plan_thumbnail(manifest, position_ratio=1.0)
     margin = 180.0 * 0.05  # 9 seconds
@@ -68,7 +68,7 @@ def test_plan_thumbnail_avoids_edges() -> None:
 
 def test_plan_thumbnail_honors_position_ratio() -> None:
     """Later ratios select later segments."""
-    manifest = _manifest()
+    manifest = _manifest__thumbnail()
     early = plan_thumbnail(manifest, position_ratio=0.3)
     late = plan_thumbnail(manifest, position_ratio=0.7)
     assert early.segment_id == "p1"
@@ -185,14 +185,14 @@ def test_plan_thumbnail_rejects_empty_manifest() -> None:
 def test_plan_thumbnail_rejects_bad_position_ratio(ratio: float) -> None:
     """An out-of-range position ratio is rejected."""
     with pytest.raises(ThumbnailError):
-        plan_thumbnail(_manifest(), position_ratio=ratio)
+        plan_thumbnail(_manifest__thumbnail(), position_ratio=ratio)
 
 
 @pytest.mark.parametrize("margin", [-0.1, 0.5, 0.9])
 def test_plan_thumbnail_rejects_bad_edge_margin(margin: float) -> None:
     """An out-of-range edge margin is rejected."""
     with pytest.raises(ThumbnailError):
-        plan_thumbnail(_manifest(), edge_margin_ratio=margin)
+        plan_thumbnail(_manifest__thumbnail(), edge_margin_ratio=margin)
 
 
 def test_generate_thumbnail_uses_injected_extractor(tmp_path: Path) -> None:
@@ -205,7 +205,7 @@ def test_generate_thumbnail_uses_injected_extractor(tmp_path: Path) -> None:
         calls.append((timestamp, Path(target)))
         return Path(target)
 
-    result = generate_thumbnail("movie.mp4", _manifest(), dest, extract_fn=fake_extract)
+    result = generate_thumbnail("movie.mp4", _manifest__thumbnail(), dest, extract_fn=fake_extract)
 
     assert result.path == dest
     assert result.plan.timestamp == 90.0
@@ -219,7 +219,9 @@ def test_generate_thumbnail_wraps_extraction_failure(tmp_path: Path) -> None:
         raise frame_sampler.FrameSamplingError("no frame")
 
     with pytest.raises(ThumbnailError):
-        generate_thumbnail("movie.mp4", _manifest(), tmp_path / "t.jpg", extract_fn=failing)
+        generate_thumbnail(
+            "movie.mp4", _manifest__thumbnail(), tmp_path / "t.jpg", extract_fn=failing
+        )
 
 
 def test_generate_thumbnail_rejects_missing_output(tmp_path: Path) -> None:
@@ -229,7 +231,9 @@ def test_generate_thumbnail_rejects_missing_output(tmp_path: Path) -> None:
         return Path(target)
 
     with pytest.raises(ThumbnailError):
-        generate_thumbnail("movie.mp4", _manifest(), tmp_path / "absent.jpg", extract_fn=no_output)
+        generate_thumbnail(
+            "movie.mp4", _manifest__thumbnail(), tmp_path / "absent.jpg", extract_fn=no_output
+        )
 
 
 def test_thumbnail_path_is_deterministic(tmp_path: Path) -> None:

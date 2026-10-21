@@ -32,6 +32,9 @@ from movie_review.vision import (
     VLMUnavailableError,
     build_vlm_adapter,
 )
+from tests.helpers import (
+    _frame,
+)
 
 
 class FakeResponse:
@@ -48,7 +51,9 @@ class FakeResponse:
         return None
 
 
-def _wav(frames: int = 24000, rate: int = 24000, channels: int = 1, width: int = 2) -> bytes:
+def _wav__remote_adapters(
+    frames: int = 24000, rate: int = 24000, channels: int = 1, width: int = 2
+) -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, "wb") as handle:
         handle.setnchannels(channels)
@@ -63,20 +68,9 @@ def _transcription_body(segments: list[dict[str, Any]]) -> bytes:
     return json.dumps({"text": text, "segments": segments}).encode()
 
 
-def _audio(tmp_path: Path) -> Path:
+def _audio__remote_adapters(tmp_path: Path) -> Path:
     path = tmp_path / "audio.wav"
-    path.write_bytes(_wav(frames=100))
-    return path
-
-
-def _frame(tmp_path: Path) -> Path:
-    # 1x1 PNG
-    png = bytes.fromhex(
-        "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
-        "1f15c4890000000a49444154789c6360000002000154a24f5f0000000049454e44ae426082"
-    )
-    path = tmp_path / "frame.png"
-    path.write_bytes(png)
+    path.write_bytes(_wav__remote_adapters(frames=100))
     return path
 
 
@@ -108,7 +102,7 @@ def test_asr_transcribe_uploads_multipart_and_maps_segments(tmp_path: Path) -> N
     adapter = OpenAICompatASRAdapter(
         "whisper-large-v3-turbo", "http://gpu:9000/v1", transport=transport
     )
-    segments = adapter.transcribe(_audio(tmp_path), language="en")
+    segments = adapter.transcribe(_audio__remote_adapters(tmp_path), language="en")
 
     assert seen["url"] == "http://gpu:9000/v1/audio/transcriptions"
     assert "multipart/form-data; boundary=" in seen["content_type"]
@@ -134,7 +128,9 @@ def test_asr_omits_language_when_not_requested(tmp_path: Path) -> None:
         seen["body"] = request.data
         return FakeResponse(_transcription_body([{"start": 0, "end": 1, "text": "x"}]))
 
-    OpenAICompatASRAdapter("m", "http://g/v1", transport=transport).transcribe(_audio(tmp_path))
+    OpenAICompatASRAdapter("m", "http://g/v1", transport=transport).transcribe(
+        _audio__remote_adapters(tmp_path)
+    )
     assert b'name="language"' not in seen["body"]
 
 
@@ -150,7 +146,7 @@ def test_asr_rejects_text_only_response(tmp_path: Path) -> None:
         "m", "http://g/v1", transport=lambda r, t: FakeResponse(b'{"text": "hello"}')
     )
     with pytest.raises(ASRError, match="response_format=verbose_json"):
-        adapter.transcribe(_audio(tmp_path))
+        adapter.transcribe(_audio__remote_adapters(tmp_path))
 
 
 def test_asr_rejects_empty_segments(tmp_path: Path) -> None:
@@ -160,7 +156,7 @@ def test_asr_rejects_empty_segments(tmp_path: Path) -> None:
         transport=lambda r, t: FakeResponse(b'{"text": "", "segments": []}'),
     )
     with pytest.raises(ASRError, match="without timestamps"):
-        adapter.transcribe(_audio(tmp_path))
+        adapter.transcribe(_audio__remote_adapters(tmp_path))
 
 
 def test_asr_unreachable_is_model_unavailable(tmp_path: Path) -> None:
@@ -171,7 +167,7 @@ def test_asr_unreachable_is_model_unavailable(tmp_path: Path) -> None:
 
     adapter = OpenAICompatASRAdapter("whisper", "http://g/v1", transport=transport)
     with pytest.raises(ModelUnavailableError):
-        adapter.transcribe(_audio(tmp_path))
+        adapter.transcribe(_audio__remote_adapters(tmp_path))
 
 
 def test_asr_http_error_classified_without_token(tmp_path: Path) -> None:
@@ -185,7 +181,7 @@ def test_asr_http_error_classified_without_token(tmp_path: Path) -> None:
         "whisper", "http://g/v1", api_key="s3cret", transport=transport
     )
     with pytest.raises(ASRError) as exc:
-        adapter.transcribe(_audio(tmp_path))
+        adapter.transcribe(_audio__remote_adapters(tmp_path))
     assert "503" in str(exc.value)
     assert "s3cret" not in str(exc.value)
 
@@ -213,7 +209,7 @@ def test_asr_route_can_be_overridden(tmp_path: Path) -> None:
         transport=transport,
         endpoint_path="/inference",
     )
-    segments = adapter.transcribe(_audio(tmp_path), language="en")
+    segments = adapter.transcribe(_audio__remote_adapters(tmp_path), language="en")
 
     assert seen["url"] == "http://gpu:9000/inference"
     assert [s.text for s in segments] == ["Hi."]
@@ -228,7 +224,7 @@ def test_asr_route_defaults_to_the_openai_path(tmp_path: Path) -> None:
         return FakeResponse(_transcription_body([{"start": 0.0, "end": 1.0, "text": "Hi."}]))
 
     OpenAICompatASRAdapter("m", "http://gpu:9000/v1", transport=transport).transcribe(
-        _audio(tmp_path)
+        _audio__remote_adapters(tmp_path)
     )
 
     assert seen["url"] == "http://gpu:9000/v1/audio/transcriptions"
@@ -284,7 +280,7 @@ def test_endpoint_path_is_appended_to_base_url(tmp_path: Path) -> None:
 
     OpenAICompatASRAdapter(
         "m", "http://gpu:9000/v1", transport=transport, endpoint_path="/inference"
-    ).transcribe(_audio(tmp_path))
+    ).transcribe(_audio__remote_adapters(tmp_path))
 
     assert seen["url"] == "http://gpu:9000/v1/inference"
 
@@ -473,7 +469,7 @@ def test_tts_duration_measured_from_wav_bytes() -> None:
     def transport(request: Any, timeout: float) -> FakeResponse:
         seen["url"] = request.full_url
         seen["body"] = json.loads(request.data.decode())
-        return FakeResponse(_wav(frames=48000, rate=24000))
+        return FakeResponse(_wav__remote_adapters(frames=48000, rate=24000))
 
     adapter = OpenAICompatTTSAdapter("Qwen3-TTS", "http://gpu:8000/v1", transport=transport)
     audio = adapter.synthesize(TTSRequest(text="Hello.", voice="af"))
@@ -490,8 +486,8 @@ def test_tts_duration_measured_from_wav_bytes() -> None:
 
 def test_tts_duration_scales_with_frames() -> None:
     adapter = OpenAICompatTTSAdapter("m", "http://g/v1")
-    short = adapter._measure(_wav(frames=12000, rate=24000), "u")
-    long = adapter._measure(_wav(frames=48000, rate=24000), "u")
+    short = adapter._measure(_wav__remote_adapters(frames=12000, rate=24000), "u")
+    long = adapter._measure(_wav__remote_adapters(frames=48000, rate=24000), "u")
     assert long.duration_seconds == pytest.approx(4 * short.duration_seconds)
 
 
@@ -546,14 +542,14 @@ def test_tts_requires_base_url() -> None:
 # ==========================================================================
 
 
-def _remote_spec() -> ModelSpec:
+def _remote_spec__remote_adapters() -> ModelSpec:
     return ModelSpec(model="m", backend="openai_compatible", base_url="http://gpu:8000/v1")
 
 
 def test_factories_build_remote_adapters() -> None:
-    assert isinstance(build_asr_adapter(_remote_spec()), OpenAICompatASRAdapter)
-    assert isinstance(build_vlm_adapter(_remote_spec()), OpenAICompatVLMAdapter)
-    assert isinstance(build_tts_adapter(_remote_spec()), OpenAICompatTTSAdapter)
+    assert isinstance(build_asr_adapter(_remote_spec__remote_adapters()), OpenAICompatASRAdapter)
+    assert isinstance(build_vlm_adapter(_remote_spec__remote_adapters()), OpenAICompatVLMAdapter)
+    assert isinstance(build_tts_adapter(_remote_spec__remote_adapters()), OpenAICompatTTSAdapter)
 
 
 def test_factories_default_to_local_adapters() -> None:

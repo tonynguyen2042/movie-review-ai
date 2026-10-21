@@ -23,13 +23,13 @@ from movie_review.pipeline.orchestrator import StageResult  # noqa: E402
 runner = CliRunner()
 
 
-def _movie(tmp_path: Path) -> Path:
+def _movie__cli_languages(tmp_path: Path) -> Path:
     movie = tmp_path / "m.mp4"
     movie.write_bytes(b"fake")
     return movie
 
 
-def _db(tmp_path: Path) -> str:
+def _db__cli_languages(tmp_path: Path) -> str:
     return str(tmp_path / "jobs.db")
 
 
@@ -99,9 +99,9 @@ def test_a_path_traversal_tag_is_rejected(tmp_path: Path) -> None:
         app,
         [
             "process",
-            str(_movie(tmp_path)),
+            str(_movie__cli_languages(tmp_path)),
             "--db-path",
-            _db(tmp_path),
+            _db__cli_languages(tmp_path),
             "--target-language",
             "../../etc",
         ],
@@ -129,9 +129,9 @@ def test_languages_reach_run_pipeline(tmp_path: Path, monkeypatch: pytest.Monkey
         app,
         [
             "process",
-            str(_movie(tmp_path)),
+            str(_movie__cli_languages(tmp_path)),
             "--db-path",
-            _db(tmp_path),
+            _db__cli_languages(tmp_path),
             "--language",
             "vi",
             "--target-language",
@@ -159,7 +159,15 @@ def test_omitted_target_is_passed_as_the_source(
     monkeypatch.setattr(cliapp, "run_pipeline", _fake_run)
 
     result = runner.invoke(
-        app, ["process", str(_movie(tmp_path)), "--db-path", _db(tmp_path), "--language", "vi"]
+        app,
+        [
+            "process",
+            str(_movie__cli_languages(tmp_path)),
+            "--db-path",
+            _db__cli_languages(tmp_path),
+            "--language",
+            "vi",
+        ],
     )
 
     assert result.exit_code == 0, result.output
@@ -172,9 +180,9 @@ def test_acceptance_log_records_both(tmp_path: Path) -> None:
         app,
         [
             "process",
-            str(_movie(tmp_path)),
+            str(_movie__cli_languages(tmp_path)),
             "--db-path",
-            _db(tmp_path),
+            _db__cli_languages(tmp_path),
             "--language",
             "vi",
             "--target-language",
@@ -191,10 +199,18 @@ def test_acceptance_log_records_both(tmp_path: Path) -> None:
 def test_no_job_is_created_for_a_bad_tag(tmp_path: Path) -> None:
     from movie_review.storage.database import bootstrap
 
-    db = _db(tmp_path)
+    db = _db__cli_languages(tmp_path)
     bootstrap(db)
     result = runner.invoke(
-        app, ["process", str(_movie(tmp_path)), "--db-path", db, "--target-language", "!!"]
+        app,
+        [
+            "process",
+            str(_movie__cli_languages(tmp_path)),
+            "--db-path",
+            db,
+            "--target-language",
+            "!!",
+        ],
     )
     assert result.exit_code != 0
 

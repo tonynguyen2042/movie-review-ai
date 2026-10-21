@@ -1,41 +1,31 @@
 """T027 acceptance: character persistence and schema migration V3."""
 
 import sqlite3
-from collections.abc import Generator
 from pathlib import Path
 
 import pytest
 
-from movie_review.domain import Character, CharacterMention, Job
+from movie_review.domain import CharacterMention, Job
 from movie_review.storage import repositories as repo
-from movie_review.storage.database import bootstrap, connect, get_schema_version
+from movie_review.storage.database import connect, get_schema_version
 from movie_review.storage.schema import MIGRATION_1, MIGRATION_2, SCHEMA_VERSION
+from tests.helpers import (
+    _character,
+)
 
 
 @pytest.fixture()
-def db(tmp_path: Path) -> Generator[sqlite3.Connection]:
-    conn = connect(bootstrap(tmp_path / "c.db"))
-    repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
-    yield conn
-    conn.close()
+def seeded_db(db: sqlite3.Connection) -> sqlite3.Connection:
+    """The character tests need a job for the characters to hang on."""
+    repo.save_job(db, Job(job_id="job_1", input_file="m.mp4"))
+    return db
 
 
-def _character() -> Character:
-    return Character(
-        id="char_001",
-        name="John",
-        aliases=["Johnny"],
-        first_seen=122.4,
-        last_seen=4812.3,
-        confidence=0.91,
-    )
-
-
-def test_character_round_trip(db: sqlite3.Connection) -> None:
-    repo.save_character(db, "job_1", _character())
-    assert repo.get_character(db, "job_1", "char_001") == _character()
-    assert repo.get_character(db, "job_1", "missing") is None
-    assert [c.id for c in repo.list_characters(db, "job_1")] == ["char_001"]
+def test_character_round_trip(seeded_db: sqlite3.Connection) -> None:
+    repo.save_character(seeded_db, "job_1", _character())
+    assert repo.get_character(seeded_db, "job_1", "char_001") == _character()
+    assert repo.get_character(seeded_db, "job_1", "missing") is None
+    assert [c.id for c in repo.list_characters(seeded_db, "job_1")] == ["char_001"]
 
 
 def test_character_rejects_unknown_job(db: sqlite3.Connection) -> None:
@@ -43,9 +33,9 @@ def test_character_rejects_unknown_job(db: sqlite3.Connection) -> None:
         repo.save_character(db, "missing", _character())
 
 
-def test_mentions_round_trip(db: sqlite3.Connection) -> None:
+def test_mentions_round_trip(seeded_db: sqlite3.Connection) -> None:
     repo.save_mention(
-        db,
+        seeded_db,
         "job_1",
         CharacterMention(
             mention="John",
@@ -54,7 +44,7 @@ def test_mentions_round_trip(db: sqlite3.Connection) -> None:
             character_id="char_001",
         ),
     )
-    [mention] = repo.list_mentions(db, "job_1")
+    [mention] = repo.list_mentions(seeded_db, "job_1")
     assert mention.mention == "John"
     assert mention.character_id == "char_001"
 

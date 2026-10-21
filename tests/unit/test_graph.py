@@ -32,7 +32,7 @@ def test_relationship_validation() -> None:
         Relationship(subject="", relation=RelationType.KNOWS, object="char_001")
 
 
-def _events() -> list[Event]:
+def _events__graph() -> list[Event]:
     return [
         Event(
             id="event_00002",
@@ -55,7 +55,7 @@ def _events() -> list[Event]:
 
 
 def test_build_graph_edges() -> None:
-    graph = build_graph(_events())
+    graph = build_graph(_events__graph())
     relations = {(e.subject, e.relation, e.object) for e in graph.relationships}
     assert ("char_001", RelationType.PARTICIPATES_IN, "event_00001") in relations
     assert ("char_002", RelationType.PARTICIPATES_IN, "event_00002") in relations
@@ -68,14 +68,14 @@ def test_build_graph_edges() -> None:
 
 
 def test_graph_round_trip() -> None:
-    graph = build_graph(_events())
+    graph = build_graph(_events__graph())
     assert StoryGraph.model_validate(graph.model_dump()) == graph
 
 
 def test_persistence_round_trip(tmp_path: Path) -> None:
     conn = connect(bootstrap(tmp_path / "g.db"))
     repo.save_job(conn, Job(job_id="job_1", input_file="m"))
-    graph = build_graph(_events())
+    graph = build_graph(_events__graph())
     for edge in graph.relationships:
         repo.save_relationship(conn, "job_1", edge)
     stored = repo.list_relationships(conn, "job_1")

@@ -17,16 +17,9 @@ from pathlib import Path
 from typing import Any
 
 from movie_review.asr.openai_compat import OpenAICompatASRAdapter, split_wav
-
-
-def _audio(path: Path, seconds: float, rate: int = 8000) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(path), "wb") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(rate)
-        wav.writeframes(b"\x00\x00" * int(rate * seconds))
-    return path
+from tests.helpers import (
+    _audio,
+)
 
 
 def _body(segments: list[dict[str, Any]]) -> bytes:

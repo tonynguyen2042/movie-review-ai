@@ -6,12 +6,11 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from movie_review.cli.app import app
+from tests.helpers import (
+    _db,
+)
 
 runner = CliRunner()
-
-
-def _db(tmp: Path) -> str:
-    return str(tmp / "jobs.db")
 
 
 def _mock_ffprobe(*args, **kwargs):

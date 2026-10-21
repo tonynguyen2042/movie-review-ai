@@ -25,6 +25,9 @@ from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 from movie_review.vision.analysis import run_visual_analysis
 from movie_review.vision.port import AnalysisInput, VLMPort
+from tests.helpers import (
+    _scenes,
+)
 
 
 class _SlowAdapter(VLMPort):
@@ -69,7 +72,7 @@ class _SlowAdapter(VLMPort):
         return True
 
 
-def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
+def _ctx__vision_parallel(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -91,19 +94,7 @@ def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
     return ctx, conn
 
 
-def _scenes(count: int) -> list[Scene]:
-    return [
-        Scene(
-            scene_id=f"scene_{index:06d}",
-            start=float(index * 10),
-            end=float(index * 10 + 9),
-            duration=9.0,
-        )
-        for index in range(count)
-    ]
-
-
-def _frames(tmp_path: Path, scenes: list[Scene]) -> dict[str, list[Path]]:
+def _frames__vision_parallel(tmp_path: Path, scenes: list[Scene]) -> dict[str, list[Path]]:
     frames: dict[str, list[Path]] = {}
     for scene in scenes:
         path = tmp_path / scene.scene_id / "frame.jpg"
@@ -115,13 +106,13 @@ def _frames(tmp_path: Path, scenes: list[Scene]) -> dict[str, list[Path]]:
 
 def test_the_scenes_of_a_batch_are_analysed_concurrently(tmp_path: Path) -> None:
     """More than one call must be in flight at the same time."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__vision_parallel(tmp_path)
     try:
         scenes = _scenes(8)
         adapter = _SlowAdapter()
         result = run_visual_analysis(
             scenes,
-            _frames(tmp_path, scenes),
+            _frames__vision_parallel(tmp_path, scenes),
             [],
             ctx,
             port=adapter,
@@ -135,13 +126,13 @@ def test_the_scenes_of_a_batch_are_analysed_concurrently(tmp_path: Path) -> None
 
 def test_the_results_keep_the_scene_order(tmp_path: Path) -> None:
     """Concurrency must not reorder the analyses."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__vision_parallel(tmp_path)
     try:
         scenes = _scenes(8)
         adapter = _SlowAdapter()
         result = run_visual_analysis(
             scenes,
-            _frames(tmp_path, scenes),
+            _frames__vision_parallel(tmp_path, scenes),
             [],
             ctx,
             port=adapter,
@@ -154,7 +145,7 @@ def test_the_results_keep_the_scene_order(tmp_path: Path) -> None:
 
 def test_the_continuity_context_comes_from_the_previous_batch(tmp_path: Path) -> None:
     """The scene after a batch must be told what the batch showed."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__vision_parallel(tmp_path)
     prompts: list[str] = []
 
     class _Recording(_SlowAdapter):
@@ -166,7 +157,7 @@ def test_the_continuity_context_comes_from_the_previous_batch(tmp_path: Path) ->
         scenes = _scenes(4)
         result = run_visual_analysis(
             scenes,
-            _frames(tmp_path, scenes),
+            _frames__vision_parallel(tmp_path, scenes),
             [],
             ctx,
             port=_Recording(),
@@ -184,7 +175,7 @@ def test_the_continuity_context_comes_from_the_previous_batch(tmp_path: Path) ->
 
 def test_a_failure_in_one_scene_fails_the_stage(tmp_path: Path) -> None:
     """A broken scene must fail the stage, not be skipped."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__vision_parallel(tmp_path)
     try:
         scenes = _scenes(4)
 
@@ -199,7 +190,7 @@ def test_a_failure_in_one_scene_fails_the_stage(tmp_path: Path) -> None:
         try:
             run_visual_analysis(
                 scenes,
-                _frames(tmp_path, scenes),
+                _frames__vision_parallel(tmp_path, scenes),
                 [],
                 ctx,
                 port=_Broken(),

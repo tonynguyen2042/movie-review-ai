@@ -9,7 +9,7 @@ from movie_review.media import ffmpeg as ff
 from movie_review.media.scenes import SceneDetectionError, detect_scenes
 
 
-def _segment(path: Path, pattern: str) -> Path:
+def _segment__scenes(path: Path, pattern: str) -> Path:
     ff.check(
         "ffmpeg",
         [
@@ -30,12 +30,12 @@ def _segment(path: Path, pattern: str) -> Path:
 
 
 def _continuous(path: Path) -> Path:
-    return _segment(path, "testsrc")
+    return _segment__scenes(path, "testsrc")
 
 
 def _with_cut(path: Path, tmp_path: Path) -> Path:
-    first = _segment(tmp_path / "a.mp4", "testsrc")
-    second = _segment(tmp_path / "b.mp4", "smptebars")
+    first = _segment__scenes(tmp_path / "a.mp4", "testsrc")
+    second = _segment__scenes(tmp_path / "b.mp4", "smptebars")
     listing = tmp_path / "parts.txt"
     listing.write_text(f"file '{first}'\nfile '{second}'\n", encoding="utf-8")
     ff.check(

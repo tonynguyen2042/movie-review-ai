@@ -18,12 +18,12 @@ from movie_review.domain import (
 )
 
 
-def _scene() -> Scene:
+def _scene__domain() -> Scene:
     return Scene(scene_id="scene_000123", start=1532.21, end=1549.82, duration=17.61)
 
 
 def test_scene_valid_chronology() -> None:
-    scene = _scene()
+    scene = _scene__domain()
     assert scene.duration == pytest.approx(17.61)
 
 
@@ -84,7 +84,7 @@ def test_artifact_requires_identity() -> None:
 
 
 def test_models_round_trip_json() -> None:
-    scene = _scene()
+    scene = _scene__domain()
     assert Scene.model_validate_json(scene.model_dump_json()) == scene
     claim = Claim(claim_id="c1", text="t", type=ClaimType.OPINION)
     assert Claim.model_validate(claim.model_dump()) == claim

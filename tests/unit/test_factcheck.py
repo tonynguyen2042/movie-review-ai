@@ -17,7 +17,7 @@ from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 
 
-def _db(tmp_path: Path) -> sqlite3.Connection:
+def _db__factcheck(tmp_path: Path) -> sqlite3.Connection:
     conn = connect(bootstrap(tmp_path / "f.db"))
     repo.save_job(conn, Job(job_id="job_1", input_file="m"))
     repo.save_transcript_segments(
@@ -42,23 +42,25 @@ def _db(tmp_path: Path) -> sqlite3.Connection:
     return conn
 
 
-def _claim(text: str, type: ClaimType, evidence: list[str]) -> Claim:
+def _claim__factcheck(text: str, type: ClaimType, evidence: list[str]) -> Claim:
     return Claim(claim_id="c1", text=text, type=type, evidence=evidence)
 
 
 def test_supported(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__factcheck(tmp_path)
     verdict = check_claim(
-        _claim("Sarah knew about the murder.", ClaimType.PLOT_FACT, ["event_00001"]), conn, "job_1"
+        _claim__factcheck("Sarah knew about the murder.", ClaimType.PLOT_FACT, ["event_00001"]),
+        conn,
+        "job_1",
     )
     assert verdict.status is ClaimStatus.SUPPORTED
     conn.close()
 
 
 def test_partially_supported(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__factcheck(tmp_path)
     verdict = check_claim(
-        _claim(
+        _claim__factcheck(
             "Sarah knew about the murder because the moon was bright and owls hooted loudly",
             ClaimType.PLOT_FACT,
             ["event_00001"],
@@ -71,33 +73,39 @@ def test_partially_supported(tmp_path: Path) -> None:
 
 
 def test_insufficient_no_evidence(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
-    verdict = check_claim(_claim("Sarah knew.", ClaimType.PLOT_FACT, []), conn, "job_1")
+    conn = _db__factcheck(tmp_path)
+    verdict = check_claim(_claim__factcheck("Sarah knew.", ClaimType.PLOT_FACT, []), conn, "job_1")
     assert verdict.status is ClaimStatus.INSUFFICIENT_EVIDENCE
     conn.close()
 
 
 def test_insufficient_dangling_and_zero_coverage(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
-    dangling = check_claim(_claim("Sarah knew.", ClaimType.PLOT_FACT, ["ghost"]), conn, "job_1")
+    conn = _db__factcheck(tmp_path)
+    dangling = check_claim(
+        _claim__factcheck("Sarah knew.", ClaimType.PLOT_FACT, ["ghost"]), conn, "job_1"
+    )
     assert dangling.status is ClaimStatus.INSUFFICIENT_EVIDENCE
     zero = check_claim(
-        _claim("Spaceships orbit Mars.", ClaimType.PLOT_FACT, ["event_00001"]), conn, "job_1"
+        _claim__factcheck("Spaceships orbit Mars.", ClaimType.PLOT_FACT, ["event_00001"]),
+        conn,
+        "job_1",
     )
     assert zero.status is ClaimStatus.INSUFFICIENT_EVIDENCE
     conn.close()
 
 
 def test_contradicted_misquote(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__factcheck(tmp_path)
     verdict = check_claim(
-        _claim('Sarah said "goodbye forever".', ClaimType.DIALOGUE_REFERENCE, ["seg_1"]),
+        _claim__factcheck('Sarah said "goodbye forever".', ClaimType.DIALOGUE_REFERENCE, ["seg_1"]),
         conn,
         "job_1",
     )
     assert verdict.status is ClaimStatus.CONTRADICTED
     quoted = check_claim(
-        _claim('Sarah said "knew about the murder".', ClaimType.DIALOGUE_REFERENCE, ["seg_1"]),
+        _claim__factcheck(
+            'Sarah said "knew about the murder".', ClaimType.DIALOGUE_REFERENCE, ["seg_1"]
+        ),
         conn,
         "job_1",
     )
@@ -113,9 +121,9 @@ def test_one_fabricated_quote_among_several_is_contradicted(tmp_path: Path) -> N
     meant a claim quoting two lines passed as long as one of them was real --
     which is the shape an invented line takes.
     """
-    conn = _db(tmp_path)
+    conn = _db__factcheck(tmp_path)
     verdict = check_claim(
-        _claim(
+        _claim__factcheck(
             'Sarah said "knew about the murder" and then "goodbye forever".',
             ClaimType.DIALOGUE_REFERENCE,
             ["seg_1"],
@@ -129,7 +137,7 @@ def test_one_fabricated_quote_among_several_is_contradicted(tmp_path: Path) -> N
 
 def test_several_real_quotes_are_not_contradicted(tmp_path: Path) -> None:
     """Several genuine quotations in one claim are still supported."""
-    conn = _db(tmp_path)
+    conn = _db__factcheck(tmp_path)
     repo.save_transcript_segments(
         conn,
         "job_1",
@@ -140,7 +148,7 @@ def test_several_real_quotes_are_not_contradicted(tmp_path: Path) -> None:
         ],
     )
     verdict = check_claim(
-        _claim(
+        _claim__factcheck(
             'Sarah said "knew about the murder" and "the photograph was in the drawer".',
             ClaimType.DIALOGUE_REFERENCE,
             ["seg_1", "seg_2"],
@@ -153,18 +161,20 @@ def test_several_real_quotes_are_not_contradicted(tmp_path: Path) -> None:
 
 
 def test_non_factual_supported(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
-    verdict = check_claim(_claim("This is a masterpiece.", ClaimType.OPINION, []), conn, "job_1")
+    conn = _db__factcheck(tmp_path)
+    verdict = check_claim(
+        _claim__factcheck("This is a masterpiece.", ClaimType.OPINION, []), conn, "job_1"
+    )
     assert verdict.status is ClaimStatus.SUPPORTED
     conn.close()
 
 
 def test_check_claims_order(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__factcheck(tmp_path)
     verdicts = check_claims(
         [
-            _claim("Sarah knew.", ClaimType.PLOT_FACT, ["event_00001"]),
-            _claim("Great film.", ClaimType.OPINION, []),
+            _claim__factcheck("Sarah knew.", ClaimType.PLOT_FACT, ["event_00001"]),
+            _claim__factcheck("Great film.", ClaimType.OPINION, []),
         ],
         conn,
         "job_1",

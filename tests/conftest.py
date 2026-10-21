@@ -1,19 +1,24 @@
-"""Shared unit-test fixtures.
+"""The fixtures the whole test suite shares.
 
-Only fixtures that genuinely span modules live here. The vision stage builds an
-analysis proxy before it samples frames, and generate_proxy really runs ffmpeg
-and ffprobe; a stub returning the *source* path keeps those tests exercising
-sampling behaviour rather than transcoding.
+Only fixtures that genuinely span modules live here. The vision stage
+builds an analysis proxy before it samples frames, and generate_proxy
+really runs ffmpeg and ffprobe; a stub returning the *source* path keeps
+those tests exercising sampling behaviour rather than transcoding.
+
+A fixture that one test file needs, and no other, stays in that file.
 """
 
 from __future__ import annotations
 
+import sqlite3
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from movie_review.media.proxy import ProxyResult
+from movie_review.storage.database import bootstrap, connect
 
 
 @pytest.fixture
@@ -33,3 +38,17 @@ def stub_analysis_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
     # The orchestrator imports the name inside the stage function, so the module
     # attribute is the only binding that matters at call time.
     monkeypatch.setattr("movie_review.pipeline.orchestrator.generate_proxy", _stub, raising=False)
+
+
+@pytest.fixture
+def db(tmp_path: Path) -> Generator[sqlite3.Connection]:
+    """A fresh, empty job database.
+
+    The schema is bootstrapped, so the tables exist and there are no rows.
+    A test that needs a job to hang its rows on asks for ``seeded_db``.
+    """
+    path = bootstrap(tmp_path / "jobs" / "test.db")
+    assert path.is_file()
+    conn = connect(path)
+    yield conn
+    conn.close()

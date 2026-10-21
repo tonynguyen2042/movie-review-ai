@@ -89,7 +89,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _Env:
     )
 
 
-def _write(env: _Env, relative: str, data: bytes) -> Path:
+def _write__validate_job(env: _Env, relative: str, data: bytes) -> Path:
     target = env.jobs_dir / env.job_id / relative
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
@@ -126,7 +126,7 @@ def test_a_recorded_artifact_is_found(env: _Env) -> None:
     The old check looked under <data>/<job_id>/ and reported a perfectly good
     job invalid.
     """
-    path = _write(env, "media/media.json", b'{"file": "movie.mp4"}')
+    path = _write__validate_job(env, "media/media.json", b'{"file": "movie.mp4"}')
     _record(env, "media/media.json", path, f"{env.job_id}-ingest-media")
 
     report = _report(env)
@@ -142,7 +142,7 @@ def test_an_artifact_outside_its_stage_directory_is_found(env: _Env) -> None:
     This is why the stage name cannot be used as the directory: four stages do
     not write where their name says.
     """
-    path = _write(env, "media/proxy.mp4", b"proxy-bytes")
+    path = _write__validate_job(env, "media/proxy.mp4", b"proxy-bytes")
     _record(env, "media/proxy.mp4", path, f"{env.job_id}-proxy-video", stage="proxy")
 
     report = _report(env)
@@ -153,7 +153,7 @@ def test_an_artifact_outside_its_stage_directory_is_found(env: _Env) -> None:
 
 def test_a_file_at_the_job_root_is_found(env: _Env) -> None:
     """movie-analysis.json is written at the job root, not in a stage directory."""
-    path = _write(env, "movie-analysis.json", b"{}")
+    path = _write__validate_job(env, "movie-analysis.json", b"{}")
     _record(env, "movie-analysis.json", path, f"{env.job_id}-movie-analysis", stage="story")
 
     report = _report(env)
@@ -167,7 +167,7 @@ def test_a_file_at_the_job_root_is_found(env: _Env) -> None:
 
 
 def test_a_deleted_artifact_is_reported_missing(env: _Env) -> None:
-    path = _write(env, "scenes/scenes.json", b"[]")
+    path = _write__validate_job(env, "scenes/scenes.json", b"[]")
     _record(env, "scenes/scenes.json", path, f"{env.job_id}-scenes", stage="scenes")
     path.unlink()
 
@@ -178,7 +178,7 @@ def test_a_deleted_artifact_is_reported_missing(env: _Env) -> None:
 
 
 def test_a_modified_artifact_is_reported_corrupt(env: _Env) -> None:
-    path = _write(env, "transcript/transcript.json", b'{"segments": []}')
+    path = _write__validate_job(env, "transcript/transcript.json", b'{"segments": []}')
     _record(env, "transcript/transcript.json", path, f"{env.job_id}-transcript", stage="transcript")
     path.write_bytes(b'{"segments": [{"text": "edited by hand"}]}')
 
@@ -197,7 +197,7 @@ def test_every_recorded_artifact_is_checked(env: _Env) -> None:
         ("vision/vision.json", "vision"),
         ("review/review-script.json", "review"),
     ):
-        path = _write(env, relative, b"{}")
+        path = _write__validate_job(env, relative, b"{}")
         _record(env, relative, path, f"{env.job_id}-{stage}", stage=stage)
 
     report = _report(env)
@@ -209,7 +209,7 @@ def test_every_recorded_artifact_is_checked(env: _Env) -> None:
 
 def test_only_what_ran_is_required(env: _Env) -> None:
     """A job that only ingested must not be failed for a transcript it never made."""
-    path = _write(env, "media/media.json", b"{}")
+    path = _write__validate_job(env, "media/media.json", b"{}")
     _record(env, "media/media.json", path, f"{env.job_id}-ingest-media")
 
     report = _report(env)
@@ -247,7 +247,7 @@ def test_a_row_without_a_path_is_reported_not_guessed(env: _Env) -> None:
 
 def test_a_row_without_a_hash_is_checked_for_existence(env: _Env) -> None:
     """Comparing against a hash that was never recorded would fail every file."""
-    path = _write(env, "media/media.json", b"{}")
+    path = _write__validate_job(env, "media/media.json", b"{}")
     repo.save_artifact(
         env.conn,
         Artifact(

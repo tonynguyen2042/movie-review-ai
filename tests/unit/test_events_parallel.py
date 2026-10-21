@@ -11,21 +11,18 @@ from the batch before, so it still crosses the scenes.
 
 from __future__ import annotations
 
-import sqlite3
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
-from movie_review.cache.manager import CacheManager
-from movie_review.config.settings import load_settings
-from movie_review.domain import EventType, Job, JobStatus, Scene, SceneAnalysis
-from movie_review.jobs.manager import JobManager
-from movie_review.pipeline.context import StageContext
+from movie_review.domain import EventType, Scene, SceneAnalysis
 from movie_review.reasoning.port import ReasoningPort
-from movie_review.storage import repositories as repo
-from movie_review.storage.database import bootstrap, connect
 from movie_review.story.events import run_event_extraction
+from tests.helpers import (
+    _ctx,
+    _scenes,
+)
 
 
 class _SlowReasoner(ReasoningPort):
@@ -74,43 +71,7 @@ class _SlowReasoner(ReasoningPort):
         return True
 
 
-def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
-    conn = connect(bootstrap(tmp_path / "jobs.db"))
-    manager = JobManager(conn)
-    repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
-    for state in (
-        JobStatus.INGESTING,
-        JobStatus.MEDIA_READY,
-        JobStatus.SCENES_READY,
-        JobStatus.TRANSCRIPT_READY,
-        JobStatus.VISUAL_ANALYSIS_READY,
-        JobStatus.CHARACTERS_READY,
-    ):
-        manager.transition("job_1", state)
-    ctx = StageContext(
-        job_id="job_1",
-        jobs_dir=tmp_path / "jobs",
-        conn=conn,
-        manager=manager,
-        cache=CacheManager(tmp_path / "cache"),
-        settings=load_settings(),
-    )
-    return ctx, conn
-
-
-def _scenes(count: int) -> list[Scene]:
-    return [
-        Scene(
-            scene_id=f"scene_{index:06d}",
-            start=float(index * 10),
-            end=float(index * 10 + 9),
-            duration=9.0,
-        )
-        for index in range(count)
-    ]
-
-
-def _analyses(scenes: list[Scene]) -> dict[str, SceneAnalysis]:
+def _analyses__events_parallel(scenes: list[Scene]) -> dict[str, SceneAnalysis]:
     return {
         scene.scene_id: SceneAnalysis(
             scene_id=scene.scene_id,
@@ -134,7 +95,7 @@ def test_the_scenes_of_a_batch_are_extracted_concurrently(tmp_path: Path) -> Non
         reasoner = _SlowReasoner()
         result = run_event_extraction(
             scenes,
-            _analyses(scenes),
+            _analyses__events_parallel(scenes),
             [],
             [],
             ctx,
@@ -154,7 +115,7 @@ def test_the_events_are_ordered_by_timestamp(tmp_path: Path) -> None:
         scenes = _scenes(6)
         result = run_event_extraction(
             scenes,
-            _analyses(scenes),
+            _analyses__events_parallel(scenes),
             [],
             [],
             ctx,
@@ -175,7 +136,7 @@ def test_the_prior_events_come_from_the_previous_batch(tmp_path: Path) -> None:
         reasoner = _SlowReasoner()
         run_event_extraction(
             scenes,
-            _analyses(scenes),
+            _analyses__events_parallel(scenes),
             [],
             [],
             ctx,
@@ -208,7 +169,7 @@ def test_a_failure_in_one_scene_fails_the_stage(tmp_path: Path) -> None:
         try:
             run_event_extraction(
                 scenes,
-                _analyses(scenes),
+                _analyses__events_parallel(scenes),
                 [],
                 [],
                 ctx,
