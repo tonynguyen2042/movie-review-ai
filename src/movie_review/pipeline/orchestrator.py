@@ -280,30 +280,36 @@ def run_pipeline(
         source_language=source_language,
         target_language=target_language,
     )
-    results: list[StageResult] = []
-    order = [name for name, _ in STAGE_SEQUENCE]
+    try:
+        results: list[StageResult] = []
+        order = [name for name, _ in STAGE_SEQUENCE]
 
-    if start_stage is not None and start_stage not in order:
-        raise ValueError(f"Unknown start stage {start_stage!r}; expected one of {order}")
-    if end_stage is not None and end_stage not in order:
-        raise ValueError(f"Unknown end stage {end_stage!r}; expected one of {order}")
+        if start_stage is not None and start_stage not in order:
+            raise ValueError(f"Unknown start stage {start_stage!r}; expected one of {order}")
+        if end_stage is not None and end_stage not in order:
+            raise ValueError(f"Unknown end stage {end_stage!r}; expected one of {order}")
 
-    begin = 0 if start_stage is None else order.index(start_stage)
-    stop = len(order) if end_stage is None else order.index(end_stage) + 1
-    if stop <= begin:
-        # An inverted or empty range runs nothing rather than everything.
+        begin = 0 if start_stage is None else order.index(start_stage)
+        stop = len(order) if end_stage is None else order.index(end_stage) + 1
+        if stop <= begin:
+            # An inverted or empty range runs nothing rather than everything.
+            return results
+
+        for stage_name in order[begin:stop]:
+            stage_fn = _get_stage_function(stage_name)
+            if stage_fn is None:
+                continue
+            result = run_stage(stage_name, stage_fn, ctx, on_progress=on_progress, on_work=on_work)
+            results.append(result)
+            if not result.success:
+                break
+
         return results
-
-    for stage_name in order[begin:stop]:
-        stage_fn = _get_stage_function(stage_name)
-        if stage_fn is None:
-            continue
-        result = run_stage(stage_name, stage_fn, ctx, on_progress=on_progress, on_work=on_work)
-        results.append(result)
-        if not result.success:
-            break
-
-    return results
+    finally:
+        # The context owns the connection. Closing it here releases the
+        # database file, which matters on Windows where an open handle keeps
+        # the file locked.
+        ctx.conn.close()
 
 
 def review_target_words(settings: AppSettings) -> int:
@@ -957,28 +963,35 @@ def resume_job(
     conn.row_factory = sqlite3.Row
     manager = JobManager(conn)
 
-    plan = recovery_plan(manager, job_id)
-    if plan.resume_stage in ("done", "manual"):
-        return [
-            StageResult(stage=plan.resume_stage, success=True, duration_ms=0, error=plan.reason)
-        ]
+    try:
+        plan = recovery_plan(manager, job_id)
+        if plan.resume_stage in ("done", "manual"):
+            return [
+                StageResult(stage=plan.resume_stage, success=True, duration_ms=0, error=plan.reason)
+            ]
 
-    # The stage to resume from has to be one the pipeline knows. A failed job
-    # whose `failed_stage` was never recorded -- or that names a stage this
-    # build does not have -- used to reach run_pipeline, which raised a
-    # ValueError that escaped the CLI as a raw traceback.
-    order = [name for name, _ in STAGE_SEQUENCE]
-    if plan.resume_stage not in order:
-        raise ResumeError(
-            f"Cannot resume {job_id}: {plan.resume_stage!r} is not a pipeline stage. "
-            f"Expected one of: {', '.join(order)}"
-        )
+        # The stage to resume from has to be one the pipeline knows. A failed
+        # job whose `failed_stage` was never recorded -- or that names a stage
+        # this build does not have -- used to reach run_pipeline, which raised
+        # a ValueError that escaped the CLI as a raw traceback.
+        order = [name for name, _ in STAGE_SEQUENCE]
+        if plan.resume_stage not in order:
+            raise ResumeError(
+                f"Cannot resume {job_id}: {plan.resume_stage!r} is not a pipeline stage. "
+                f"Expected one of: {', '.join(order)}"
+            )
 
-    # Get the movie path from the job
-    job = manager.get(job_id)
+        # Get the movie path from the job
+        job = manager.get(job_id)
+        input_file = job.input_file
+    finally:
+        # Released before the pipeline opens its own connection, so a resume
+        # does not hold two handles on the same database file.
+        conn.close()
+
     return run_pipeline(
         job_id,
-        job.input_file,
+        input_file,
         db_path,
         start_stage=plan.resume_stage,
         on_progress=on_progress,
@@ -1013,13 +1026,16 @@ def validate_job(job_id: str, db_path: str | None = None) -> IntegrityReport:
     conn = sqlite3.connect(str(bootstrap(resolved_db)))
     conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
+    try:
+        # Raises JobNotFoundError for an unknown id, which the CLI reports as a
+        # usage error rather than a traceback.
+        JobManager(conn).get(job_id)
 
-    # Raises JobNotFoundError for an unknown id, which the CLI reports as a
-    # usage error rather than a traceback.
-    JobManager(conn).get(job_id)
+        jobs_dir = Path(settings.paths.data_dir) / "jobs"
+        records, unlocated = _records_for(conn, job_id)
+    finally:
+        conn.close()
 
-    jobs_dir = Path(settings.paths.data_dir) / "jobs"
-    records, unlocated = _records_for(conn, job_id)
     report = scan_job_integrity(jobs_dir, job_id, records)
     if unlocated:
         report = replace(report, unlocated=unlocated)

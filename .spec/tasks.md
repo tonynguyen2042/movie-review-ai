@@ -1018,9 +1018,9 @@ src/movie_review/ui/dashboard.py
 
 **Acceptance criteria**
 
-- [ ] `bootstrap` closes the connection it opens
-- [ ] the dashboard does not grow open handles across requests
-- [ ] `pytest -q` passes
+- [x] `bootstrap` closes the connection it opens
+- [x] the dashboard does not grow open handles across requests
+- [x] `pytest -q` passes
 
 ---
 

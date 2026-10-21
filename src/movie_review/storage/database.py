@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from movie_review.storage.schema import MIGRATIONS, SCHEMA_VERSION
@@ -38,9 +39,17 @@ def migrate(conn: sqlite3.Connection) -> int:
 
 
 def bootstrap(path: str | Path) -> Path:
-    """Create parent directories and migrate a database file to current schema."""
+    """Create parent directories and migrate a database file to current schema.
+
+    The connection is closed on the way out. ``with connect(...)`` is a
+    *transaction* context manager: it commits or rolls back, but it does not
+    close. Every call therefore leaked an open handle, and the dashboard
+    calls this once per request, so the count grew without bound and the
+    database file stayed locked on Windows.
+    """
     resolved = Path(path)
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    with connect(resolved) as conn:
+    with closing(connect(resolved)) as conn:
         migrate(conn)
+        conn.commit()
     return resolved
