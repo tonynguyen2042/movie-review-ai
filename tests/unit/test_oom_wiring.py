@@ -137,11 +137,8 @@ def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
 
 def test_the_stages_call_the_recovery() -> None:
     """The recovery module was written and nothing used it."""
-    from movie_review.pipeline import orchestrator
-
-    source = Path(orchestrator.__file__).read_text(encoding="utf-8")
-    # The orchestrator reaches the stages; the stages themselves are what
-    # have to recover.
+    # The stages themselves are what have to recover; the orchestrator only
+    # reaches them.
     for module in (
         "src/movie_review/vision/analysis.py",
         "src/movie_review/asr/transcript.py",
