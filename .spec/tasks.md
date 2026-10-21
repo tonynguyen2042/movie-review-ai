@@ -692,10 +692,10 @@ tests/unit/test_orchestrator_stage_wiring.py   (new)
 
 **Acceptance criteria**
 
-- [ ] the render stage reads a manifest written by `assemble_manifest` without `KeyError`
-- [ ] the timeline editor renders the segments of a real manifest
-- [ ] a regression test fails if the writer and reader shapes diverge again
-- [ ] `pytest -q` passes
+- [x] the render stage reads a manifest written by `assemble_manifest` without `KeyError`
+- [x] the timeline editor renders the segments of a real manifest
+- [x] a regression test fails if the writer and reader shapes diverge again
+- [x] `pytest -q` passes
 
 ---
 

@@ -12,6 +12,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
@@ -37,6 +38,36 @@ MANIFEST_FILENAME = "render-manifest.json"
 
 class ManifestError(Exception):
     """Manifest assembly failed in a classified way."""
+
+
+def read_manifest_document(path: str | Path) -> dict[str, Any]:
+    """Read a render manifest file as a plain mapping.
+
+    The file holds the manifest itself: ``{"segments": [...], "total_seconds":
+    ..., "source_seconds": ...}``. The ``{"manifest": {...}}`` envelope belongs
+    to the *cache* payload, and reading it from the file is what made the
+    render stage raise ``KeyError: 'manifest'`` on every real run.
+
+    The envelope is still accepted, because a hand-written or externally
+    produced manifest may carry it and there is no reason to fail a render
+    over the shape of an envelope.
+    """
+    document = artifacts.read_json(Path(path))
+    if not isinstance(document, dict):
+        raise ManifestError(f"Render manifest is not an object: {path}")
+    nested = document.get("manifest")
+    if isinstance(nested, dict) and "segments" not in document:
+        return nested
+    return document
+
+
+def read_manifest(path: str | Path) -> RenderManifest:
+    """Read and validate a render manifest file."""
+    document = read_manifest_document(path)
+    try:
+        return RenderManifest.model_validate(document)
+    except ValueError as exc:
+        raise ManifestError(f"Invalid render manifest {path}: {exc}") from exc
 
 
 @dataclass(frozen=True)
