@@ -40,11 +40,18 @@ class FrameSamplingError(Exception):
 
 @dataclass(frozen=True)
 class Frame:
-    """One extracted analysis frame."""
+    """One extracted analysis frame.
+
+    The frame's digest is carried with it. The manifest used to re-hash
+    every frame it listed, and the manifest was written after every scene,
+    so a frame was hashed once per scene that followed it -- quadratic in the
+    number of frames, and the dominant cost of the stage.
+    """
 
     scene_id: str
     timestamp: float
     path: Path
+    sha256: str = ""
 
 
 @dataclass(frozen=True)
@@ -237,7 +244,14 @@ def sample_movie(
         for timestamp in sample_timestamps(start, end, count):
             dest = frames_dir / scene_id / frame_filename(scene_id, timestamp)
             extract_frame(src, timestamp, dest, ffmpeg, run_fn)
-            frames.append(Frame(scene_id=scene_id, timestamp=timestamp, path=dest))
+            frames.append(
+                Frame(
+                    scene_id=scene_id,
+                    timestamp=timestamp,
+                    path=dest,
+                    sha256=artifacts.sha256_file(dest),
+                )
+            )
             extracted += 1
             if on_progress is not None:
                 on_progress(
@@ -292,13 +306,18 @@ def sample_movie(
 
 
 def _manifest_entries(frames: list[Frame]) -> list[dict[str, object]]:
-    """Content-addressed description of every frame produced."""
+    """Content-addressed description of every frame produced.
+
+    The digest is the one the frame was created with, not a fresh hash: the
+    manifest is written after every scene, so hashing here meant a frame was
+    hashed once per scene that followed it.
+    """
     return [
         {
             "scene_id": frame.scene_id,
             "timestamp": frame.timestamp,
             "path": str(frame.path),
-            "sha256": artifacts.sha256_file(frame.path),
+            "sha256": frame.sha256 or artifacts.sha256_file(frame.path),
         }
         for frame in frames
     ]
@@ -354,7 +373,9 @@ def _adopt_scene(
             shutil.copyfile(source, dest)
             if artifacts.sha256_file(dest) != expected:
                 return None
-        frames.append(Frame(scene_id=scene_id, timestamp=timestamp, path=dest))
+        # The digest is already known: the entry was recorded with it, and
+        # the file was just verified against it.
+        frames.append(Frame(scene_id=scene_id, timestamp=timestamp, path=dest, sha256=expected))
     return frames
 
 
