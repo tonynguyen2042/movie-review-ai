@@ -22,6 +22,7 @@ import pytest
 from typer.testing import CliRunner
 
 from movie_review.cli.app import _resolve_profile, app
+from movie_review.pipeline.orchestrator import StageResult
 from movie_review.storage.database import bootstrap
 
 # `import movie_review.cli.app as m` binds the `app` ATTRIBUTE (a Typer
@@ -101,7 +102,7 @@ def test_profile_reaches_run_pipeline(tmp_path: Path, monkeypatch: pytest.Monkey
 
     def fake_run(*_args: object, **kwargs: object) -> list[object]:
         seen.append(kwargs.get("profile"))
-        return []
+        return [StageResult(stage="ingest", success=True, duration_ms=0)]
 
     monkeypatch.setattr(cliapp, "run_pipeline", fake_run)
 
@@ -121,7 +122,7 @@ def test_quality_alias_still_selects_the_profile(
 
     def fake_run(*_args: object, **kwargs: object) -> list[object]:
         seen.append(kwargs.get("profile"))
-        return []
+        return [StageResult(stage="ingest", success=True, duration_ms=0)]
 
     monkeypatch.setattr(cliapp, "run_pipeline", fake_run)
 

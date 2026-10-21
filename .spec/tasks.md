@@ -1133,10 +1133,10 @@ tests/unit/test_cli_progress.py
 
 **Acceptance criteria**
 
-- [ ] an inverted stage range is rejected as a usage error
-- [ ] `process` exits non-zero when the range runs nothing
-- [ ] the heartbeat timer is cancelled on every exit path
-- [ ] `pytest -q` passes
+- [x] an inverted stage range is rejected as a usage error
+- [x] `process` exits non-zero when the range runs nothing
+- [x] the heartbeat timer is cancelled on every exit path
+- [x] `pytest -q` passes
 
 ---
 
