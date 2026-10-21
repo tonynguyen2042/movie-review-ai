@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-09T04:53:00.138942+00:00",
+  "updated_at": "2026-10-21T04:23:13.047341+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1262,12 +1262,14 @@
       "title": "docs test: encoding + Rich separator",
       "type": "fix",
       "branch": "T115-docs-test-encoding",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T04:23:13.047341+00:00",
+      "updated_at": "2026-10-21T04:23:13.047341+00:00"
     },
     "T116": {
       "title": "render stage reads the flat manifest",
