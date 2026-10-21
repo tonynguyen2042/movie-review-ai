@@ -1,6 +1,5 @@
 """T061 acceptance: command construction, verification, and lifecycle."""
 
-import shutil
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -23,11 +22,6 @@ from movie_review.pipeline.context import StageContext
 from movie_review.rendering.renderer import RenderError, RenderResult, render, render_job
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
-
-NEEDS_FFMPEG = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
-    reason="ffmpeg/ffprobe binaries not installed",
-)
 
 
 def _manifest() -> RenderManifest:
@@ -235,7 +229,7 @@ def test_render_job_failure_fails_job(tmp_path: Path) -> None:
     assert job.failed_stage == "render"
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_render_real_end_to_end(tmp_path: Path) -> None:
     source = tmp_path / "src.mp4"
     ff.check(

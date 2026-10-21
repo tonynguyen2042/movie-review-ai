@@ -1,7 +1,6 @@
 """T011 acceptance: ingest follows the stage contract end to end."""
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
@@ -15,11 +14,6 @@ from movie_review.media.ingest import IngestError, ingest_movie
 from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
-
-NEEDS_FFMPEG = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
-    reason="ffmpeg/ffprobe binaries not installed",
-)
 
 
 def _fake_probe(path: str) -> MovieMetadata:
@@ -128,7 +122,7 @@ def test_context_from_settings(tmp_path: Path) -> None:
     conn.close()
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_ingest_real_fixture(tmp_path: Path) -> None:
     target = tmp_path / "t.mp4"
     ff.check(

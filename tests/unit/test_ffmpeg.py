@@ -1,6 +1,5 @@
 """T010 acceptance: FFmpeg adapter probes media and classifies failures."""
 
-import shutil
 import sys
 from pathlib import Path
 
@@ -8,11 +7,6 @@ import pytest
 
 from movie_review.config.settings import load_settings
 from movie_review.media import ffmpeg as ff
-
-NEEDS_FFMPEG = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
-    reason="ffmpeg/ffprobe binaries not installed",
-)
 
 
 def test_missing_binary_rejected() -> None:
@@ -48,7 +42,7 @@ def _make_fixture(path: Path, audio: bool = True) -> Path:
     return path
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_probe_fixture(tmp_path: Path) -> None:
     meta = ff.probe(str(_make_fixture(tmp_path / "t.mp4")))
     assert (meta.width, meta.height) == (320, 240)
@@ -61,7 +55,7 @@ def test_probe_fixture(tmp_path: Path) -> None:
     assert meta.file.endswith("t.mp4")
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_probe_audio_only_rejected(tmp_path: Path) -> None:
     target = tmp_path / "a.wav"
     ff.check(
@@ -72,13 +66,13 @@ def test_probe_audio_only_rejected(tmp_path: Path) -> None:
         ff.probe(str(target))
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_probe_missing_file_rejected(tmp_path: Path) -> None:
     with pytest.raises(ff.ProcessError):
         ff.probe(str(tmp_path / "absent.mp4"))
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_ffmpeg_version_runs() -> None:
     assert ff.ffmpeg_version().startswith("ffmpeg version")
 

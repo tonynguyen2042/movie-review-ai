@@ -19,6 +19,7 @@ dev = [
   "mypy>=1.10",
   "pytest>=8.0",
   "pytest-cov>=5.0",
+  "pytest-timeout>=2.3",
   "ruff>=0.4",
   "types-pyyaml>=6.0.12.20260906",
 ]
@@ -35,6 +36,20 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# A typo in a marker name, or a bad ini option, must fail the run rather
+# than be ignored.
+addopts = "-ra --strict-markers --strict-config"
+# An xfail that starts passing is a failure: the reason it was expected to
+# fail is no longer true.
+xfail_strict = true
+# A hanging test blocks the run indefinitely.
+timeout = 120
+markers = [
+  "ffmpeg: needs the ffmpeg and ffprobe binaries",
+  "mlx: needs the MLX runtime, which is Apple-silicon only",
+  "slow: takes a long time to run",
+  "network: performs real network I/O",
+]
 
 [tool.coverage.run]
 # The package under test. Everything else -- the tests, the desktop app -- is

@@ -2090,10 +2090,10 @@ tests/unit/test_da*.py   (MLX guards)
 
 **Acceptance criteria**
 
-- [ ] `pytest -m "not ffmpeg"` selects the subset
-- [ ] a typo in a marker name fails the run
-- [ ] a hanging test fails within the timeout
-- [ ] `pytest -q` passes
+- [x] `pytest -m "not ffmpeg"` selects the subset
+- [x] a typo in a marker name fails the run
+- [x] a hanging test fails within the timeout
+- [x] `pytest -q` passes
 
 ---
 

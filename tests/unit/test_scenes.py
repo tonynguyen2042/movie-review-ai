@@ -1,6 +1,5 @@
 """T013 acceptance: PySceneDetect adapter finds cuts and classifies failures."""
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -8,11 +7,6 @@ import pytest
 from movie_review.config.settings import load_settings
 from movie_review.media import ffmpeg as ff
 from movie_review.media.scenes import SceneDetectionError, detect_scenes
-
-NEEDS_FFMPEG = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
-    reason="ffmpeg/ffprobe binaries not installed",
-)
 
 
 def _segment(path: Path, pattern: str) -> Path:
@@ -70,7 +64,7 @@ def test_bad_min_scene_len_rejected(tmp_path: Path) -> None:
         detect_scenes(existing, min_scene_len=-5)
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_continuous_video_is_one_scene(tmp_path: Path) -> None:
     result = detect_scenes(_continuous(tmp_path / "c.mp4"))
     assert len(result.cuts) == 1
@@ -79,7 +73,7 @@ def test_continuous_video_is_one_scene(tmp_path: Path) -> None:
     assert result.fps > 0
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_hard_cut_found(tmp_path: Path) -> None:
     result = detect_scenes(_with_cut(tmp_path / "cut.mp4", tmp_path))
     assert len(result.cuts) == 2
@@ -88,7 +82,7 @@ def test_hard_cut_found(tmp_path: Path) -> None:
     assert result.cuts[1].end == pytest.approx(2.0, abs=0.15)
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_high_threshold_suppresses_cut(tmp_path: Path) -> None:
     result = detect_scenes(
         _with_cut(tmp_path / "cut.mp4", tmp_path), detector="content", threshold=100.0
