@@ -32,6 +32,14 @@ data/output/*
 data/jobs.db
 !*.gitkeep
 
+# Stray runtime output written outside the managed tree (T113).
+# A job directory created beside data/jobs/, a scratch audio file dropped at
+# the repository root, or an ad-hoc job folder: all local-only, all
+# regenerable, none of them source.
+data/job_*/
+job_*/
+AI_audio.wav
+
 # OS / editor
 .DS_Store
 Thumbs.db

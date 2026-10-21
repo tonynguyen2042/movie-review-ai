@@ -602,9 +602,9 @@ job_1/                             (deleted)
 
 **Acceptance criteria**
 
-- [ ] `.gitignore` covers `data/job_*/`, `AI_audio.wav` and `job_1/`
-- [ ] `git status --porcelain` is empty
-- [ ] `pytest -q` passes
+- [x] `.gitignore` covers `data/job_*/`, `AI_audio.wav` and `job_1/`
+- [x] `git status --porcelain` is empty
+- [x] `pytest -q` passes
 
 ---
 
