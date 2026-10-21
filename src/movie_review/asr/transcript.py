@@ -95,37 +95,46 @@ def run_transcript(
         },
     )
     key = cache_key(spec)
-    cached = ctx.cache.lookup_json(key)
-    if cached is not None:
-        try:
-            segments = [TranscriptSegment.model_validate(item) for item in cached["segments"]]
-        except (KeyError, TypeError, ValueError) as exc:
-            if owns_completion:
-                ctx.manager.fail(ctx.job_id, STAGE_NAME, f"cached transcript corrupt: {exc}")
-            raise TranscriptError(f"Cached transcript.json is corrupt for {src}") from exc
-        cache_hit = True
-        if not audio_path.is_file():
+    try:
+        cached = ctx.cache.lookup_json(key)
+        if cached is not None:
             try:
-                (extract_fn or extract_dialogue_audio)(src, audio_path, ctx.settings.media.ffmpeg)
+                segments = [TranscriptSegment.model_validate(item) for item in cached["segments"]]
+            except (KeyError, TypeError, ValueError) as exc:
+                if owns_completion:
+                    ctx.manager.fail(ctx.job_id, STAGE_NAME, f"cached transcript corrupt: {exc}")
+                raise TranscriptError(f"Cached transcript.json is corrupt for {src}") from exc
+            cache_hit = True
+            if not audio_path.is_file():
+                try:
+                    (extract_fn or extract_dialogue_audio)(
+                        src, audio_path, ctx.settings.media.ffmpeg
+                    )
+                except AudioExtractionError as exc:
+                    raise TranscriptError(str(exc)) from exc
+        else:
+            extract = extract_fn or extract_dialogue_audio
+            try:
+                extract(src, audio_path, ctx.settings.media.ffmpeg)
             except AudioExtractionError as exc:
+                if owns_completion:
+                    ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
                 raise TranscriptError(str(exc)) from exc
-    else:
-        extract = extract_fn or extract_dialogue_audio
-        try:
-            extract(src, audio_path, ctx.settings.media.ffmpeg)
-        except AudioExtractionError as exc:
-            if owns_completion:
-                ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
-            raise TranscriptError(str(exc)) from exc
-        try:
-            segments = active.transcribe(audio_path, language=language)
-        except Exception as exc:  # Backend errors vary; classify with chaining (cf. T013).
-            if owns_completion:
-                ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
-            raise TranscriptError(f"Cannot transcribe {src}: {exc}") from exc
-        finally:
-            active.unload()
-        cache_hit = False
+            try:
+                segments = active.transcribe(audio_path, language=language)
+            except Exception as exc:  # Backend errors vary; classify with chaining (cf. T013).
+                if owns_completion:
+                    ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
+                raise TranscriptError(f"Cannot transcribe {src}: {exc}") from exc
+            cache_hit = False
+    finally:
+        # The adapter owns the weights, so it is released whether the work
+        # came from the cache or from the model. The unload used to sit in
+        # the cache-miss branch: a cache hit skipped the model call and also
+        # skipped the release, so the weights stayed resident for the rest of
+        # the process -- and for the MLX backends, `unload` is what clears
+        # the cache.
+        active.unload()
 
     repo.save_transcript_segments(ctx.conn, ctx.job_id, segments)
     document = {

@@ -962,9 +962,9 @@ tests/unit/test_adapter_unload.py   (new)
 
 **Acceptance criteria**
 
-- [ ] `unload()` is called on a cache hit for every one of the five modules
-- [ ] `unload()` is still called on a cache miss
-- [ ] `pytest -q` passes
+- [x] `unload()` is called on a cache hit for every one of the five modules
+- [x] `unload()` is still called on a cache miss
+- [x] `pytest -q` passes
 
 ---
 
