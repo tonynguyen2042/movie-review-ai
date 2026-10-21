@@ -127,15 +127,15 @@ repair the gate itself; the middle waves repair the wiring.
 |---|---|---|---|
 | T142 | feat | verify stage: claims→fact-check→repair | `task/T142-verify-stage` | **DONE** |
 | T143 | feat | subtitles stage | `task/T143-subtitles-stage` | **DONE** |
-| T144 | feat | diarization + speaker linking | `task/T144-diarization-stage` |
-| T145 | feat | story graph relationships | `task/T145-story-graph` |
-| T146 | feat | adaptive frame sampling feedback | `task/T146-sampling-feedback` |
-| T147 | feat | music bed + ducking | `task/T147-music-ducking` |
-| T148 | feat | thumbnail generation | `task/T148-thumbnail-generation` |
-| T149 | feat | OOM recovery wired in | `task/T149-oom-recovery-wiring` |
+| T144 | feat | diarization + speaker linking | `task/T144-diarization-stage` | **DONE** |
+| T145 | feat | story graph relationships | `task/T145-story-graph` | **DONE** |
+| T146 | feat | adaptive frame sampling feedback | `task/T146-sampling-feedback` | **DONE** |
+| T147 | feat | music bed + ducking | `task/T147-music-ducking` | **DONE** |
+| T148 | feat | thumbnail generation | `task/T148-thumbnail-generation` | **DONE** |
+| T149 | feat | OOM recovery wired in | `task/T149-oom-recovery-wiring` | **DONE** |
 | T150 | feat | privacy.cloud_ai enforced | `task/T150-privacy-cloud-ai` | **DONE** |
 | T151 | feat | output set (md, manifest, --output) | `task/T151-output-set` | **DONE** |
-| T152 | feat | prompt registry matches reality | `task/T152-prompt-registry` |
+| T152 | feat | prompt registry matches reality | `task/T152-prompt-registry` | **DONE** |
 
 ### Wave 5 — Spec gaps (README §49/§52/§53/§56/§74/§77/§96)
 
