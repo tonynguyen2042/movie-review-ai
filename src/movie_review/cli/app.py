@@ -14,7 +14,8 @@ import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -22,7 +23,7 @@ import typer
 
 from movie_review import __version__
 from movie_review.config.settings import AppSettings, available_profiles, load_settings
-from movie_review.domain import Job
+from movie_review.domain import Job, JobStatus
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.orchestrator import (
@@ -348,6 +349,21 @@ def _manager(db_path: str | None) -> tuple[JobManager, sqlite3.Connection]:
     return JobManager(conn), conn
 
 
+@contextmanager
+def _session(db_path: str | None) -> Iterator[tuple[JobManager, sqlite3.Connection]]:
+    """A job manager and its connection, closed on the way out.
+
+    The connection used to be opened and never closed. The process exited
+    with it still open, which on Windows keeps the database file locked and
+    leaves the handle open for anything else that wants the file.
+    """
+    manager, conn = _manager(db_path)
+    try:
+        yield manager, conn
+    finally:
+        conn.close()
+
+
 def _load_job(manager: JobManager, job_id: str) -> Job:
     try:
         return manager.get(job_id)
@@ -461,9 +477,9 @@ def process(
     # acceptance log states the profile and backends that actually run.
     effective = load_settings(profile=selected_profile)
     _warn_unusable_backends(effective)
-    manager, conn = _manager(db_path)
-    with conn:
-        job = manager.create(movie)
+    with _session(db_path) as (manager, conn):
+        with conn:
+            job = manager.create(movie)
     with ulog.logging_context(job_id=job.job_id, stage="cli"):
         ulog.log_event(
             ulog.get_logger("cli"),
@@ -515,9 +531,9 @@ def inspect(
     job_id: Annotated[str, typer.Argument(help="Job ID.")], db_path: DbOption = None
 ) -> None:
     """Print a job record as JSON."""
-    manager, conn = _manager(db_path)
-    with conn:
-        job = _load_job(manager, job_id)
+    with _session(db_path) as (manager, conn):
+        with conn:
+            job = _load_job(manager, job_id)
     typer.echo(json.dumps(job.model_dump(mode="json"), indent=2, sort_keys=True))
 
 
@@ -528,9 +544,9 @@ def validate(
     """Check that a job's recorded artifacts are present and unmodified."""
     # validate_job loads the job itself, so resolve it here first to report an
     # unknown ID as a usage error instead of a traceback.
-    manager, conn = _manager(db_path)
-    with conn:
-        job = _load_job(manager, job_id)
+    with _session(db_path) as (manager, conn):
+        with conn:
+            job = _load_job(manager, job_id)
 
     report = validate_job(job_id, db_path)
 
@@ -576,9 +592,9 @@ def resume(
     # Same reasoning as process(): a resume that quietly falls back to an
     # unusable profile fails at the same stage the user is trying to escape.
     _warn_unusable_backends(load_settings(profile=selected_profile))
-    manager, conn = _manager(db_path)
-    with conn:
-        _load_job(manager, job_id)
+    with _session(db_path) as (manager, conn):
+        with conn:
+            _load_job(manager, job_id)
     reporter = _ProgressReporter(enabled=_progress_enabled())
     try:
         results = resume_job(
@@ -625,17 +641,20 @@ def retry(
     selected_profile = _resolve_profile(profile, quality)
     source_language, narration_language = _resolve_languages(language, target_language)
     _warn_unusable_backends(load_settings(profile=selected_profile))
-    manager, conn = _manager(db_path)
-    with conn:
-        job = _load_job(manager, job_id)
+    with _session(db_path) as (manager, conn):
+        with conn:
+            job = _load_job(manager, job_id)
 
-    if job.status != job.status.FAILED:
-        typer.echo(f"Job {job_id} is not in FAILED state (current: {job.status.value})", err=True)
-        raise typer.Exit(code=1)
+        if job.status != JobStatus.FAILED:
+            typer.echo(
+                f"Job {job_id} is not in FAILED state (current: {job.status.value})", err=True
+            )
+            raise typer.Exit(code=1)
 
-    # Get recovery plan to find failed stage
-    plan = recovery_plan(manager, job_id)
-    target_stage = _validate_stage(stage or plan.resume_stage)
+        # The recovery plan reads the job, so it has to be asked while the
+        # connection is still open.
+        plan = recovery_plan(manager, job_id)
+        target_stage = _validate_stage(stage or plan.resume_stage)
 
     typer.echo(f"Retrying stage: {target_stage}")
 
@@ -737,9 +756,9 @@ def publish(
     settings = load_settings(profile=selected_profile)
     _warn_unusable_backends(settings)
 
-    manager, conn = _manager(db_path)
-    with conn:
-        job = _load_job(manager, job_id)
+    with _session(db_path) as (manager, conn):
+        with conn:
+            job = _load_job(manager, job_id)
 
     from movie_review.pipeline.context import StageContext
     from movie_review.publishing.ai_metadata import (
