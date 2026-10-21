@@ -1189,10 +1189,10 @@ tests/unit/test_frames.py
 
 **Acceptance criteria**
 
-- [ ] a frame is hashed once, not once per scene
-- [ ] persisting 600 frames costs no more than a constant multiple of 600 hashes
-- [ ] an interrupted run still adopts the frames it already produced
-- [ ] `pytest -q` passes
+- [x] a frame is hashed once, not once per scene
+- [x] persisting 600 frames costs no more than a constant multiple of 600 hashes
+- [x] an interrupted run still adopts the frames it already produced
+- [x] `pytest -q` passes
 
 ---
 
