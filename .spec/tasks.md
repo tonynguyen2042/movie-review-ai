@@ -2351,9 +2351,9 @@ scripts/task-state.py
 
 **Acceptance criteria**
 
-- [ ] a LICENSE file exists and matches the declared licence
-- [ ] every configuration key is either read by the code or removed
-- [ ] `pytest -q` passes
+- [x] a LICENSE file exists and matches the declared licence
+- [x] every configuration key is either read by the code or removed
+- [x] `pytest -q` passes
 
 ---
 

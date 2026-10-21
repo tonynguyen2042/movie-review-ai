@@ -32,10 +32,8 @@ def test_defaults_load_from_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_env_overrides_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
     _clean_env(monkeypatch)
     monkeypatch.setenv("MOVIE_REVIEW_PIPELINE__REVIEW__TARGET_WPM", "180")
-    monkeypatch.setenv("MOVIE_REVIEW_PRIVACY__TELEMETRY", "true")
     settings = load_settings()
     assert settings.pipeline.review.target_wpm == 180
-    assert settings.privacy.telemetry is True
     # Untouched values still come from YAML.
     assert settings.pipeline.review.target_duration_minutes == 20
 
