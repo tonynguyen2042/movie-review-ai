@@ -26,15 +26,36 @@ def migrate(conn: sqlite3.Connection) -> int:
     """Apply pending migrations in order; returns the resulting version.
 
     Idempotent: re-running on an up-to-date database applies nothing.
+
+    The version check and the migration run under one exclusive lock. Two
+    processes that open the same database at the same time both read the old
+    version and both try to apply the same migration -- and the second one
+    fails with "duplicate column name". A job that started while another was
+    starting could not open the database at all.
     """
     current = get_schema_version(conn)
     if current > SCHEMA_VERSION:
         raise ValueError(f"Database schema v{current} is newer than supported v{SCHEMA_VERSION}")
-    for version in range(current + 1, SCHEMA_VERSION + 1):
-        with conn:
-            for statement in MIGRATIONS[version]:
-                conn.execute(statement)
-            conn.execute(f"PRAGMA user_version = {version}")
+    if current == SCHEMA_VERSION:
+        return current
+
+    # Autocommit for the duration, so the exclusive lock is explicit and
+    # spans the version check and the writes.
+    conn.isolation_level = None
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            current = get_schema_version(conn)
+            for version in range(current + 1, SCHEMA_VERSION + 1):
+                for statement in MIGRATIONS[version]:
+                    conn.execute(statement)
+                conn.execute(f"PRAGMA user_version = {version}")
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.isolation_level = "DEFERRED"
     return get_schema_version(conn)
 
 

@@ -1046,9 +1046,9 @@ tests/unit/test_job_id_race.py   (new)
 
 **Acceptance criteria**
 
-- [ ] a second job with the same id never overwrites the first
-- [ ] two concurrent creations get distinct ids
-- [ ] `pytest -q` passes
+- [x] a second job with the same id never overwrites the first
+- [x] two concurrent creations get distinct ids
+- [x] `pytest -q` passes
 
 ---
 

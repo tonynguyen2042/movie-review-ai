@@ -84,6 +84,44 @@ def save_job(conn: sqlite3.Connection, job: Job) -> None:
         )
 
 
+def insert_job(conn: sqlite3.Connection, job: Job) -> bool:
+    """Insert a job without overwriting an existing one.
+
+    Returns True when the row was inserted, False when the id was already
+    taken. Job id allocation checks for a free id and then inserts, which is
+    not atomic: two concurrent runs on the same day could pick the same id,
+    and an upsert would then overwrite the first job's input file and
+    status -- silently moving the first job's artifacts to a different
+    movie. `AGENTS.md` lists data corruption as a stop condition.
+    """
+    with conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO jobs
+                (job_id, input_file, status, failed_stage, error,
+                 retry_count, style, spoilers, target_seconds, output_dir,
+                 created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id) DO NOTHING
+            """,
+            (
+                job.job_id,
+                job.input_file,
+                job.status.value,
+                job.failed_stage,
+                job.error,
+                job.retry_count,
+                job.style,
+                job.spoilers,
+                job.target_seconds,
+                job.output_dir,
+                job.created_at.isoformat(),
+                job.updated_at.isoformat(),
+            ),
+        )
+    return cursor.rowcount > 0
+
+
 def get_job(conn: sqlite3.Connection, job_id: str) -> Job | None:
     row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
     if row is None:
