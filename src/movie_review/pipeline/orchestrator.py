@@ -174,6 +174,22 @@ class PipelineContext(StageContext):
     #: no translation runs at all.
     target_language: str = DEFAULT_LANGUAGE
 
+    def stage_context(self) -> StageContext:
+        """The plain stage context for this run.
+
+        Every stage takes a :class:`StageContext`, and this context already
+        carries every field one needs. The stage closures used to rebuild it
+        by hand, which meant a new field had to be added in eleven places.
+        """
+        return StageContext(
+            job_id=self.job_id,
+            jobs_dir=self.jobs_dir,
+            conn=self.conn,
+            manager=self.manager,
+            cache=self.cache,
+            settings=self.settings,
+        )
+
 
 def load_effective_script(ctx: PipelineContext) -> ReviewScript:
     """The review script in the language the narration must be spoken in.
@@ -511,14 +527,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         settings = ctx.settings
         return ingest_movie(
             ctx.movie_path,
-            StageContext(
-                job_id=ctx.job_id,
-                jobs_dir=ctx.jobs_dir,
-                conn=ctx.conn,
-                manager=ctx.manager,
-                cache=ctx.cache,
-                settings=settings,
-            ),
+            ctx.stage_context(),
             # The configured ffprobe is used: the setting existed, and the
             # probe ignored it.
             probe_fn=lambda path: ff.probe(path, settings.media.ffprobe),
@@ -529,14 +538,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
         return detect_scenes_stage(
             ctx.movie_path,
-            StageContext(
-                job_id=ctx.job_id,
-                jobs_dir=ctx.jobs_dir,
-                conn=ctx.conn,
-                manager=ctx.manager,
-                cache=ctx.cache,
-                settings=ctx.settings,
-            ),
+            ctx.stage_context(),
         )
 
     def transcript_fn(ctx: PipelineContext) -> Any:
@@ -544,14 +546,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
         return run_transcript(
             ctx.movie_path,
-            StageContext(
-                job_id=ctx.job_id,
-                jobs_dir=ctx.jobs_dir,
-                conn=ctx.conn,
-                manager=ctx.manager,
-                cache=ctx.cache,
-                settings=ctx.settings,
-            ),
+            ctx.stage_context(),
             # The CLI's --language used to be logged and then dropped, so ASR was
             # left to auto-detect every time. Told explicitly it skips a detection
             # pass and keeps the transcript's language column meaningful.
@@ -626,14 +621,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             scenes,
             frames,
             segments,
-            StageContext(
-                job_id=ctx.job_id,
-                jobs_dir=ctx.jobs_dir,
-                conn=ctx.conn,
-                manager=ctx.manager,
-                cache=ctx.cache,
-                settings=ctx.settings,
-            ),
+            ctx.stage_context(),
             on_progress=_sub_step(ctx),
         )
 
@@ -678,14 +666,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             scenes,
             boosted,
             segments,
-            StageContext(
-                job_id=ctx.job_id,
-                jobs_dir=ctx.jobs_dir,
-                conn=ctx.conn,
-                manager=ctx.manager,
-                cache=ctx.cache,
-                settings=ctx.settings,
-            ),
+            ctx.stage_context(),
             on_progress=_sub_step(ctx),
         )
         return result
@@ -767,14 +748,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             analyses,
             segments,
             characters,
-            StageContext(
-                job_id=ctx.job_id,
-                jobs_dir=ctx.jobs_dir,
-                conn=ctx.conn,
-                manager=ctx.manager,
-                cache=ctx.cache,
-                settings=ctx.settings,
-            ),
+            ctx.stage_context(),
         )
 
         # The story graph is derived from the events and persisted, so the
@@ -845,16 +819,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
     def story_fn(ctx: PipelineContext) -> Any:
         from movie_review.knowledge.analysis import build_movie_analysis
 
-        return build_movie_analysis(
-            StageContext(
-                job_id=ctx.job_id,
-                jobs_dir=ctx.jobs_dir,
-                conn=ctx.conn,
-                manager=ctx.manager,
-                cache=ctx.cache,
-                settings=ctx.settings,
-            )
-        )
+        return build_movie_analysis(ctx.stage_context())
 
     def review_fn(ctx: PipelineContext) -> Any:
         from movie_review.review.planner import plan_review
@@ -888,14 +853,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             analysis,
             style,
             target_words,
-            StageContext(
-                job_id=ctx.job_id,
-                jobs_dir=ctx.jobs_dir,
-                conn=ctx.conn,
-                manager=ctx.manager,
-                cache=ctx.cache,
-                settings=ctx.settings,
-            ),
+            ctx.stage_context(),
             spec=ctx.settings.models.reasoning,
             spoilers=job.spoilers,
         )
@@ -920,14 +878,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         try:
             result = translate_script(
                 script,
-                StageContext(
-                    job_id=ctx.job_id,
-                    jobs_dir=ctx.jobs_dir,
-                    conn=ctx.conn,
-                    manager=ctx.manager,
-                    cache=ctx.cache,
-                    settings=ctx.settings,
-                ),
+                ctx.stage_context(),
                 source_language=ctx.source_language,
                 target_language=ctx.target_language,
                 # The dedicated translation slot, which falls back to reasoning
@@ -1009,14 +960,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             narration_path,
             target_seconds,
             wpm,
-            StageContext(
-                job_id=ctx.job_id,
-                jobs_dir=ctx.jobs_dir,
-                conn=ctx.conn,
-                manager=ctx.manager,
-                cache=ctx.cache,
-                settings=ctx.settings,
-            ),
+            ctx.stage_context(),
         )
 
     def render_manifest_fn(ctx: PipelineContext) -> Any:
