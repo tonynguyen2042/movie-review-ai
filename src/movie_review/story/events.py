@@ -35,7 +35,7 @@ from movie_review.reasoning.factory import build_reasoning_adapter
 from movie_review.reasoning.port import ReasoningPort
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
-from movie_review.vision.analysis import scene_dialogue
+from movie_review.vision.analysis import DialogueIndex, _join_dialogue
 
 _logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ def _extract_one(
 def _extract_batch(
     batch: list[Scene],
     analyses: dict[str, SceneAnalysis],
-    segments: list[TranscriptSegment],
+    dialogue_index: DialogueIndex,
     prompt: Prompt,
     model: str,
     character_lines: str,
@@ -161,7 +161,7 @@ def _extract_batch(
         analysis = analyses.get(scene.scene_id)
         if analysis is None:
             raise EventExtractionError(f"No analysis for {scene.scene_id}")
-        dialogue = scene_dialogue(segments, scene.start, scene.end)
+        dialogue = _join_dialogue(dialogue_index.window(scene.start, scene.end))
         return _extract_one(
             scene,
             analysis,
@@ -248,12 +248,15 @@ def run_event_extraction(
     # continuity still crosses the scenes; the scene immediately before it
     # inside the same batch is not in the context, which is the trade.
     prior: list[dict[str, object]] = []
+    # The transcript is indexed once: the dialogue of every scene is found
+    # with two bisects instead of a scan of the whole transcript.
+    dialogue_index = DialogueIndex(segments)
     try:
         for batch in _batches(scenes, batch_size):
             results = _extract_batch(
                 batch,
                 analyses,
-                segments,
+                dialogue_index,
                 prompt,
                 model,
                 character_lines,

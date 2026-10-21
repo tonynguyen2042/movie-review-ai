@@ -8,6 +8,7 @@ later store starts clean. All writes are atomic (T007).
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -45,23 +46,39 @@ class CacheManager:
         Corrupt entries (unreadable sidecar, key mismatch, hash mismatch) are
         removed and reported as a miss.
         """
+        return self._verified(key)[0]
+
+    def lookup_json(self, key: str) -> Any | None:
+        """Return the parsed JSON payload on a verified hit, else ``None``.
+
+        The payload is read once. It used to be read by the verification
+        and then read again to parse it, so every cache hit read the file
+        twice.
+        """
+        payload, data = self._verified(key)
+        if payload is None or data is None:
+            return None
+        return json.loads(data)
+
+    def _verified(self, key: str) -> tuple[Path | None, bytes | None]:
+        """Read and verify a cache entry, returning the path and its bytes.
+
+        The payload is read once and the digest is taken of what was read,
+        rather than reading the file to hash it and then reading it again
+        to parse it.
+        """
         payload, meta = self._paths(key)
         try:
             record = artifacts.read_json(meta)
             if not isinstance(record, dict) or record.get("key") != key:
                 raise artifacts.ArtifactIntegrityError(meta, key, "<key-mismatch>")
-            artifacts.verify(payload, str(record["sha256"]))
+            data = payload.read_bytes()
+            if hashlib.sha256(data).hexdigest() != str(record["sha256"]):
+                raise artifacts.ArtifactIntegrityError(payload, key, "<hash-mismatch>")
         except (OSError, artifacts.ArtifactError, ValueError, KeyError, TypeError):
             self._remove(payload, meta)
-            return None
-        return payload
-
-    def lookup_json(self, key: str) -> Any | None:
-        """Return the parsed JSON payload on a verified hit, else ``None``."""
-        payload = self.lookup(key)
-        if payload is None:
-            return None
-        return json.loads(payload.read_bytes())
+            return None, None
+        return payload, data
 
     def invalidate(self, key: str) -> bool:
         """Remove one entry; returns ``True`` when something was removed."""

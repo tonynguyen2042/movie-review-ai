@@ -96,13 +96,40 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+#: The digest of a file, keyed by its path, size and modification time.
+#: A file that has not changed cannot have a different digest.
+_FILE_HASHES: dict[tuple[str, int, int], str] = {}
+
+
 def sha256_file(path: str | Path) -> str:
-    """Hex SHA-256 of a file, streamed in chunks."""
+    """Hex SHA-256 of a file, streamed in chunks.
+
+    The digest is memoised by path, size and modification time. The source
+    movie and the analysis proxy were hashed six times across the pipeline
+    -- about 13-15 GB of redundant reads for a 2 h film -- and a file that
+    has not changed cannot have a different digest.
+    """
+    resolved = Path(path)
+    try:
+        stat = resolved.stat()
+    except OSError:
+        stat = None
+    if stat is not None:
+        key = (str(resolved), stat.st_size, stat.st_mtime_ns)
+        cached = _FILE_HASHES.get(key)
+        if cached is not None:
+            return cached
+    else:
+        key = None
+
     digest = hashlib.sha256()
-    with open(path, "rb") as f:
+    with open(resolved, "rb") as f:
         for chunk in iter(lambda: f.read(1024 * 64), b""):
             digest.update(chunk)
-    return digest.hexdigest()
+    value = digest.hexdigest()
+    if key is not None:
+        _FILE_HASHES[key] = value
+    return value
 
 
 def write_bytes(path: str | Path, data: bytes) -> str:

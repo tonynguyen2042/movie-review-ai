@@ -1435,11 +1435,11 @@ tests/unit/test_hot_paths.py   (new)
 
 **Acceptance criteria**
 
-- [ ] the dialogue window is found by bisect, not by a full scan
-- [ ] the event list is sorted once
-- [ ] a cache hit reads the payload once
-- [ ] the source file is hashed once per process
-- [ ] `pytest -q` passes
+- [x] the dialogue window is found by bisect, not by a full scan
+- [x] the event list is sorted once
+- [x] a cache hit reads the payload once
+- [x] the source file is hashed once per process
+- [x] `pytest -q` passes
 
 ---
 

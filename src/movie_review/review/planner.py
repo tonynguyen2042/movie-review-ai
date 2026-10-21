@@ -42,6 +42,37 @@ def _of_types(events: list[Event], types: set[EventType], count: int) -> list[Ev
     return _top([e for e in events if e.type in types], count)
 
 
+def _buckets(events: list[Event]) -> dict[str, list[Event]]:
+    """The events each section may draw on, ranked once.
+
+    The planner sorted the event list seven independent times -- once for
+    the ranking and once for each section type -- and each sort walked
+    every event. The list is sorted once here and every section takes
+    what it needs from the same ranked order.
+    """
+    ranked = sorted(events, key=lambda e: (-e.importance, e.timestamp))
+    by_type: dict[EventType, list[Event]] = {}
+    for event in ranked:
+        by_type.setdefault(event.type, []).append(event)
+
+    # How many references each section may cite.
+    limits = {"climax": 1, "ending": 2}
+
+    buckets: dict[str, list[Event]] = {"hook": ranked[:1]}
+    for name, types in _SECTION_TYPES.items():
+        limit = limits.get(name, _MAX_REFS)
+        picked: list[Event] = []
+        for event_type in types:
+            for event in by_type.get(event_type, []):
+                if len(picked) >= limit:
+                    break
+                picked.append(event)
+            if len(picked) >= limit:
+                break
+        buckets[name] = picked
+    return buckets
+
+
 def plan_review(
     events: list[Event], style: StyleProfile, target_seconds: float | None = None
 ) -> ReviewPlan:
@@ -56,15 +87,16 @@ def plan_review(
     ranked = _top(events, len(events))
     hook_max = int(style.hook.get("max_seconds", 45)) if isinstance(style.hook, dict) else 45
 
+    buckets = _buckets(events)
     picked: dict[str, list[Event]] = {
-        "hook": ranked[:1],
-        "premise": _of_types(events, _SECTION_TYPES["premise"], _MAX_REFS),
+        "hook": buckets["hook"],
+        "premise": buckets["premise"],
         "characters": sorted(events, key=lambda e: (-len(e.characters), -e.importance))[:_MAX_REFS],
         "setup": sorted(events, key=lambda e: e.timestamp)[:_MAX_REFS],
-        "conflict": _of_types(events, _SECTION_TYPES["conflict"], _MAX_REFS),
-        "revelations": _of_types(events, _SECTION_TYPES["revelations"], _MAX_REFS),
-        "climax": _of_types(events, _SECTION_TYPES["climax"], 1) or ranked[:1],
-        "ending": _of_types(events, _SECTION_TYPES["ending"], 2),
+        "conflict": buckets["conflict"],
+        "revelations": buckets["revelations"],
+        "climax": buckets["climax"] or ranked[:1],
+        "ending": buckets["ending"],
     }
 
     sections: list[OutlineSection] = []

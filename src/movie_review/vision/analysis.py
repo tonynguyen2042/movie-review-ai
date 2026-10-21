@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from bisect import bisect_left, bisect_right
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -115,7 +116,7 @@ def _analyse_one(
 def _analyse_batch(
     batch: list[Scene],
     frames: dict[str, list[Path]],
-    segments: list[TranscriptSegment],
+    dialogue_index: DialogueIndex,
     prompt: Prompt,
     model: str,
     previous_summaries: list[str],
@@ -140,7 +141,7 @@ def _analyse_batch(
         scene_frames = frames.get(scene.scene_id, [])
         if not scene_frames:
             raise VisualAnalysisError(f"No frames for {scene.scene_id}")
-        dialogue = scene_dialogue(segments, scene.start, scene.end)
+        dialogue = _join_dialogue(dialogue_index.window(scene.start, scene.end))
         return _analyse_one(
             scene, scene_frames, dialogue, summary, input_summary, prompt, model, active, ctx
         )
@@ -166,6 +167,53 @@ class VisualAnalysisResult:
     vision_path: Path
     cache_hits: int
     duration_ms: int
+
+
+class DialogueIndex:
+    """The transcript, indexed for the scene windows.
+
+    The dialogue of a scene used to be found by scanning the whole
+    transcript for every scene: a thousand scenes times twenty-five hundred
+    segments is two and a half million iterations, and the stage that did
+    it ran twice.
+
+    The index is built once and the window is found with two bisects, so
+    the cost of a scene does not grow with the length of the film.
+    """
+
+    def __init__(self, segments: list[TranscriptSegment]) -> None:
+        ordered = sorted(segments, key=lambda s: (s.start, s.end))
+        self._segments = ordered
+        self._starts = [segment.start for segment in ordered]
+        # The running maximum of the end times. It is non-decreasing, so a
+        # bisect on it finds the last segment that could still be running
+        # when the window opens.
+        running = 0.0
+        max_end: list[float] = []
+        for segment in ordered:
+            running = max(running, segment.end)
+            max_end.append(running)
+        self._max_end = max_end
+
+    def window(self, start: float, end: float) -> list[TranscriptSegment]:
+        """The segments overlapping ``[start, end)``."""
+        first = bisect_right(self._max_end, start)
+        last = bisect_left(self._starts, end)
+        if last < first:
+            last = first
+        return [
+            segment
+            for segment in self._segments[first:last]
+            if segment.start < end and segment.end > start
+        ]
+
+
+def _join_dialogue(segments: list[TranscriptSegment]) -> str:
+    """Join the text of a window's segments, truncated for the prompt."""
+    joined = " ".join(segment.text for segment in segments if segment.text.strip())
+    if len(joined) > MAX_DIALOGUE_CHARS:
+        return joined[:MAX_DIALOGUE_CHARS] + "\u2026"
+    return joined
 
 
 def scene_dialogue(segments: list[TranscriptSegment], start: float, end: float) -> str:
@@ -234,12 +282,15 @@ def run_visual_analysis(
     # continuity still crosses the scenes; the scene immediately before it
     # inside the same batch is not in the context, which is the trade.
     previous_summaries: list[str] = []
+    # The transcript is indexed once: the dialogue of every scene is found
+    # with two bisects instead of a scan of the whole transcript.
+    dialogue_index = DialogueIndex(segments)
     try:
         for batch in _batches(scenes, batch_size):  # noqa: B007
             results = _analyse_batch(
                 batch,
                 frames,
-                segments,
+                dialogue_index,
                 prompt,
                 model,
                 previous_summaries,
