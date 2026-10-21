@@ -1910,10 +1910,10 @@ tests/integration/test_storage.py
 
 **Acceptance criteria**
 
-- [ ] a `model_runs` table exists with the ?53 columns
-- [ ] every model call records a row
-- [ ] the recorded token counts match the server's usage when it reports them
-- [ ] `pytest -q` passes
+- [x] a `model_runs` table exists with the ?53 columns
+- [x] every model call records a row
+- [x] the recorded token counts match the server's usage when it reports them
+- [x] `pytest -q` passes
 
 ---
 

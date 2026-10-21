@@ -5,7 +5,7 @@ artifacts. Later tasks add their tables as new migration versions; existing
 statements are append-only history and must not be edited.
 """
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 MIGRATION_1 = [
     """
@@ -271,6 +271,28 @@ MIGRATION_13 = [
     """,
 ]
 
+MIGRATION_14 = [
+    # The record of every model invocation. README section 53 calls it
+    # "essential for reproducibility": without it there is no way to answer
+    # "what produced this?" about a job that has already finished.
+    """
+    CREATE TABLE IF NOT EXISTS model_runs (
+        run_id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        stage TEXT NOT NULL,
+        model TEXT NOT NULL,
+        runtime TEXT NOT NULL,
+        prompt_hash TEXT NOT NULL DEFAULT '',
+        prompt_version TEXT,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        temperature REAL,
+        created_at TEXT NOT NULL
+    )
+    """,
+]
+
 MIGRATIONS: dict[int, list[str]] = {
     1: MIGRATION_1,
     2: MIGRATION_2,
@@ -285,4 +307,5 @@ MIGRATIONS: dict[int, list[str]] = {
     11: MIGRATION_11,
     12: MIGRATION_12,
     13: MIGRATION_13,
+    14: MIGRATION_14,
 }

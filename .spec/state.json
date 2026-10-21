@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T19:05:11.274865+00:00",
+  "updated_at": "2026-10-21T19:12:34.671741+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1799,12 +1799,14 @@
       "title": "model_runs + token usage",
       "type": "feat",
       "branch": "T156-model-runs",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T19:12:34.671741+00:00",
+      "updated_at": "2026-10-21T19:12:34.671741+00:00"
     },
     "T157": {
       "title": "missing DB tables",
