@@ -1,0 +1,30 @@
+{
+  "claims": [
+    {
+      "claim_id": "cl1",
+      "evidence": [
+        "ev1",
+        "ev2"
+      ],
+      "text": "Ana and Ben escape by boat.",
+      "type": "PLOT_FACT",
+      "verdict": "SUPPORTED"
+    },
+    {
+      "claim_id": "cl2",
+      "evidence": [],
+      "text": "The film is really about loyalty.",
+      "type": "OPINION",
+      "verdict": "SUPPORTED"
+    }
+  ],
+  "event_ids": [
+    "e_escape",
+    "e_betrayal"
+  ],
+  "evidence_ids": [
+    "ev1",
+    "ev2"
+  ],
+  "movie_id": "golden-01"
+}

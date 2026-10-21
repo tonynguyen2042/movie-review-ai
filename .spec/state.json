@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T19:58:34.292456+00:00",
+  "updated_at": "2026-10-21T20:01:29.163220+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1899,12 +1899,14 @@
       "title": "golden baseline",
       "type": "test",
       "branch": "T164-golden-baseline",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T20:01:29.163220+00:00",
+      "updated_at": "2026-10-21T20:01:29.163220+00:00"
     },
     "T165": {
       "title": "remote/http.py direct tests",
