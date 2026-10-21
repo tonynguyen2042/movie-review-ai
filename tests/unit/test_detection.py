@@ -1,6 +1,5 @@
 """T014 acceptance: scene detection stage maps cuts to stable scenes."""
 
-import shutil
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -23,11 +22,6 @@ from movie_review.media.scenes import DetectionResult, SceneCut, SceneDetectionE
 from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
-
-NEEDS_FFMPEG = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
-    reason="ffmpeg/ffprobe binaries not installed",
-)
 
 
 @dataclass
@@ -171,7 +165,7 @@ def test_stage_rerun_past_scenes_ready(tmp_path: Path) -> None:
     assert harness.ctx.manager.get("job_1").status is JobStatus.TRANSCRIPT_READY
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_stage_real_end_to_end(tmp_path: Path) -> None:
     harness = _harness(tmp_path)
     for name, pattern in (("a.mp4", "testsrc"), ("b.mp4", "smptebars")):

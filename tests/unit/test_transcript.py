@@ -1,6 +1,5 @@
 """T018 acceptance: transcript stage, audio extraction, schema migration."""
 
-import shutil
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,11 +18,6 @@ from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect, get_schema_version, migrate
 from movie_review.storage.schema import MIGRATION_1, SCHEMA_VERSION
-
-NEEDS_FFMPEG = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
-    reason="ffmpeg/ffprobe binaries not installed",
-)
 
 
 class _FakeASR(ASRPort):
@@ -199,7 +193,7 @@ def test_audio_extraction_failure_wrapped(tmp_path: Path) -> None:
         extract_dialogue_audio(source, tmp_path / "out.wav", run_fn=_fail)
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_audio_extraction_real(tmp_path: Path) -> None:
     source = tmp_path / "t.mp4"
     ff.check(

@@ -1,6 +1,5 @@
 """T012 acceptance: proxy generation, reuse, and failure handling."""
 
-import shutil
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -139,13 +138,7 @@ def test_proxy_settings_defaults() -> None:
     assert proxy.crf == 23
 
 
-NEEDS_FFMPEG = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
-    reason="ffmpeg/ffprobe binaries not installed",
-)
-
-
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_proxy_real_end_to_end(tmp_path: Path) -> None:
     harness = _harness(tmp_path)
     source = tmp_path / "big.mp4"

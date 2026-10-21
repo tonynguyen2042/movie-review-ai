@@ -1,6 +1,5 @@
 """T062 acceptance: render validation against manifest and files."""
 
-import shutil
 import wave
 from pathlib import Path
 
@@ -10,11 +9,6 @@ from movie_review.domain import ManifestSegment, MovieMetadata, RenderManifest
 from movie_review.media import ffmpeg as ff
 from movie_review.rendering.subtitles import build_cues, format_srt
 from movie_review.rendering.validate import ValidationReport, validate_render
-
-NEEDS_FFMPEG = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
-    reason="ffmpeg/ffprobe binaries not installed",
-)
 
 
 def _manifest() -> RenderManifest:
@@ -150,7 +144,7 @@ def test_gapped_timeline(tmp_path: Path) -> None:
     assert any(f.name == "timeline.contiguous" for f in report.failures())
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_real_end_to_end(tmp_path: Path) -> None:
     source = tmp_path / "src.mp4"
     ff.check(

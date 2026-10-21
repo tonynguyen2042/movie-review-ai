@@ -1,6 +1,5 @@
 """T015 acceptance: adaptive planning and frame extraction."""
 
-import shutil
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -25,11 +24,6 @@ from movie_review.media.frames import (
 )
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
-
-NEEDS_FFMPEG = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
-    reason="ffmpeg/ffprobe binaries not installed",
-)
 
 
 def test_plan_count_buckets() -> None:
@@ -186,7 +180,7 @@ def test_sampling_config_from_settings() -> None:
     assert plan_count(5.0, config) == 3
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_sample_movie_real_end_to_end(tmp_path: Path) -> None:
     source = tmp_path / "t.mp4"
     ff.check(

@@ -1,7 +1,6 @@
 """T021 acceptance: energy diarizer finds speech spans honestly."""
 
 import math
-import shutil
 import struct
 import wave
 from pathlib import Path
@@ -16,11 +15,6 @@ from movie_review.diarization.initial import (
 )
 from movie_review.diarization.port import DiarizationError, DiarizationPort
 from movie_review.media import ffmpeg as ff
-
-NEEDS_FFMPEG = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None,
-    reason="ffmpeg binary not installed",
-)
 
 RATE = 16000
 
@@ -114,7 +108,7 @@ def test_port_contract(tmp_path: Path) -> None:
     assert len(diarizer.diarize(wav)) == 1
 
 
-@NEEDS_FFMPEG
+@pytest.mark.ffmpeg
 def test_non_wav_decoded(tmp_path: Path) -> None:
     source = tmp_path / "tone.m4a"
     ff.check(
