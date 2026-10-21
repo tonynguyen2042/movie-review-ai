@@ -49,9 +49,20 @@ class ScenesResult:
 
 
 def resolve_analysis_file(
-    source: str | Path, *, jobs_dir: str | Path, job_id: str, prefer_proxy: bool = True
+    source: str | Path, *, jobs_dir: str | Path, job_id: str, prefer_proxy: bool = False
 ) -> Path:
-    """Return the proxy when present (and preferred), else the source file."""
+    """The file the scene boundaries are read from.
+
+    The proxy is only used when a caller asks for it. Preferring it by
+    default made the stage non-idempotent: the proxy is built in the vision
+    stage, which runs *after* this one, so the first run detected on the
+    source and any later run detected on the proxy. The analysed file is
+    part of the cache key, so the second run missed the cache and produced a
+    different set of cuts for the same movie.
+
+    The source is also the honest input: the proxy is a re-encode, so cuts
+    found on it are cuts found on a different picture.
+    """
     if prefer_proxy:
         proxy = artifacts.artifact_path(jobs_dir, job_id, "media", PROXY_FILENAME)
         if proxy.is_file():
@@ -62,7 +73,7 @@ def resolve_analysis_file(
 def detect_scenes_stage(
     source: str | Path,
     ctx: StageContext,
-    prefer_proxy: bool = True,
+    prefer_proxy: bool = False,
     detect_fn: Callable[..., DetectionResult] | None = None,
 ) -> ScenesResult:
     """Detect scenes for ``ctx.job_id`` through to ``SCENES_READY``."""
@@ -127,6 +138,12 @@ def detect_scenes_stage(
         ]
         cache_hit = False
 
+    # The scene list for a job is the whole set. Writing the new rows over
+    # the old ones leaves any scene the new detection does not contain still
+    # in the table with its old boundaries, so a re-run left a mix of two
+    # timelines and the timeline consistency metric compared events against
+    # a mixture.
+    repo.delete_scenes(ctx.conn, ctx.job_id)
     for scene in scenes:
         repo.save_scene(ctx.conn, ctx.job_id, scene)
     document = {

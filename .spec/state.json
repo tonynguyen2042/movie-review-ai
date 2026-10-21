@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T11:51:03.730722+00:00",
+  "updated_at": "2026-10-21T11:55:08.447090+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1448,12 +1448,14 @@
       "title": "scene detection idempotency",
       "type": "fix",
       "branch": "T129-scene-detection-idempotent",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T11:55:08.447090+00:00",
+      "updated_at": "2026-10-21T11:55:08.447090+00:00"
     },
     "T130": {
       "title": "cache keys bind every input",
