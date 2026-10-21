@@ -346,6 +346,7 @@ uv run movie-review stages
   tts-concat: Concatenate narration
   tts-reconcile: Reconcile narration duration
   render-manifest: Build render manifest
+  subtitles: Write the subtitle sidecar
   render: Render final video
   quality: Run quality gate
 ```
@@ -367,7 +368,7 @@ $ uv run movie-review process ./my-movie.mp4 --stage-from nope
 Invalid value for '--stage-from': 'nope' is not one of 'ingest', 'scenes',
 'transcript', 'vision', 'characters', 'locations', 'events', 'arcs', 'themes',
 'twists', 'story', 'review', 'verify', 'review-translate', 'tts-chunks', 'tts-concat',
-'tts-reconcile', 'render-manifest', 'render', 'quality'
+'tts-reconcile', 'render-manifest', 'subtitles', 'render', 'quality'
 $ echo $?
 2
 ```
