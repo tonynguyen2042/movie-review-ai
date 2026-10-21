@@ -2147,10 +2147,10 @@ tests/unit/test_golden_baseline.py   (new)
 
 **Acceptance criteria**
 
-- [ ] the golden fixture lives on disk
-- [ ] the regression report passes against it
-- [ ] the in-source fixture and the on-disk copy are proven equal
-- [ ] `pytest -q` passes
+- [x] the golden fixture lives on disk
+- [x] the regression report passes against it
+- [x] the in-source fixture and the on-disk copy are proven equal
+- [x] `pytest -q` passes
 
 ---
 

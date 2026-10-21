@@ -1,0 +1,120 @@
+{
+  "characters": [
+    {
+      "id": "c_ana",
+      "name": "Ana"
+    },
+    {
+      "id": "c_ben",
+      "name": "Ben"
+    }
+  ],
+  "claims": [],
+  "events": [
+    {
+      "characters": [
+        "c_ana",
+        "c_ben"
+      ],
+      "description": "Ana and Ben escape by boat.",
+      "id": "e_escape",
+      "timestamp": 55.0,
+      "type": "escape"
+    },
+    {
+      "characters": [
+        "c_ben"
+      ],
+      "description": "Ben betrays Ana.",
+      "id": "e_betrayal",
+      "timestamp": 100.0,
+      "type": "betrayal"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev1",
+      "source_id": "t01",
+      "type": "DIALOGUE"
+    },
+    {
+      "id": "ev2",
+      "source_id": "s01",
+      "type": "VISUAL"
+    }
+  ],
+  "locations": [
+    {
+      "id": "l_harbor",
+      "name": "Harbor"
+    }
+  ],
+  "movie": {
+    "id": "golden-01",
+    "title": "Golden Test"
+  },
+  "relationships": [
+    {
+      "object": "c_ana",
+      "relation": "BETRAYS",
+      "subject": "c_ben"
+    }
+  ],
+  "scenes": [
+    {
+      "end": 60.0,
+      "scene_id": "s01",
+      "start": 0.0
+    },
+    {
+      "end": 120.0,
+      "scene_id": "s02",
+      "start": 60.0
+    }
+  ],
+  "speakers": [
+    {
+      "character_id": "c_ana",
+      "confidence": 0.9,
+      "speaker": "spk1"
+    }
+  ],
+  "story_arcs": [
+    {
+      "events": [
+        "e_escape",
+        "e_betrayal"
+      ],
+      "id": "arc1"
+    }
+  ],
+  "themes": [
+    {
+      "name": "loyalty"
+    }
+  ],
+  "timeline": [
+    {
+      "event_id": "e_escape",
+      "timestamp": 55.0
+    },
+    {
+      "event_id": "e_betrayal",
+      "timestamp": 100.0
+    }
+  ],
+  "transcript": [
+    {
+      "end": 9.0,
+      "segment_id": "t01",
+      "start": 5.0,
+      "text": "We must leave now."
+    }
+  ],
+  "twists": [
+    {
+      "description": "Ben was against Ana.",
+      "event_id": "e_betrayal"
+    }
+  ]
+}
