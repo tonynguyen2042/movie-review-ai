@@ -648,7 +648,8 @@ tests/unit/* (7 further files)          14 errors
 
 Pass `encoding="utf-8", errors="replace"` to every `subprocess.run` in the file. Match the command name independently of the table separator so the assertion tests the command surface rather than Rich's glyph choice. Pin the child environment so the result does not depend on the developer's locale.
 
-**Depends on**: T114.
+**Depends on**: none. Executed first, because it is the only change that
+makes `pytest -q` green, and no task may be closed while the suite is red.
 
 **The defect**
 

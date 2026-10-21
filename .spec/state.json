@@ -1250,7 +1250,9 @@
       "type": "chore",
       "branch": "T114-mypy-strict-clean",
       "status": "pending",
-      "depends_on": [],
+      "depends_on": [
+        "T113"
+      ],
       "attempts": 0,
       "implementation": "pending",
       "tests": "pending",
