@@ -2322,9 +2322,9 @@ src/movie_review/pipeline/cleanup.py   (new)
 
 **Acceptance criteria**
 
-- [ ] each script runs and prints its result
-- [ ] the cleanup script removes only regenerable intermediates
-- [ ] `pytest -q` passes
+- [x] each script runs and prints its result
+- [x] the cleanup script removes only regenerable intermediates
+- [x] `pytest -q` passes
 
 ---
 
