@@ -5,7 +5,31 @@
 **Source:** four independent audits (correctness, performance, spec-gap, test-coverage)
 plus direct verification by the reviewer.
 
-## 0. Rules this plan follows
+## 0. Progress
+
+| Wave | State | Tasks |
+|---|---|---|
+| 0 — Gate repair | **done** | T113, T114, T115 |
+| 1 — P0 blockers | **done** | T116, T117, T118 |
+| 2 — P1 correctness | 4 of 13 | T120, T121, T122, T123, T124, T126, T127 |
+| 3 — Performance | 0 of 10 | — |
+| 4 — Missing wiring | 0 of 11 | — |
+| 5 — Spec gaps | 0 of 7 | — |
+| 6 — Test infrastructure | 0 of 9 | — |
+| 7 — Docs and cleanup | 0 of 4 | — |
+
+**14 of 60 tasks merged.** Every one landed as its own branch, its own PR and
+its own merge, and every one passed `pytest -q`, `ruff check .`,
+`ruff format --check .` and `mypy .` before it merged.
+
+The suite has gone from **1214 passed / 7 failed** to **1255 passed / 0
+failed**, and `mypy .` from 107 errors to none.
+
+The three P0 blockers are gone: the render stage can now read a manifest,
+the render manifest is timed by the narration that was synthesized, and the
+quality gate can fail a job.
+
+## 1. Rules this plan follows
 
 From `.spec/constitution.md` §4 and `AGENTS.md`:
 
@@ -48,31 +72,31 @@ repair the gate itself; the middle waves repair the wiring.
 
 | ID | Type | Title | Branch |
 |---|---|---|---|
-| T113 | chore | ignore runtime artifacts | `task/T113-ignore-runtime-artifacts` |
-| T114 | chore | `mypy .` green | `task/T114-mypy-strict-clean` |
-| T115 | fix | docs test: encoding + Rich separator | `task/T115-docs-test-encoding` |
+| T113 | chore | ignore runtime artifacts | `task/T113-ignore-runtime-artifacts` | **DONE** |
+| T114 | chore | `mypy .` green | `task/T114-mypy-strict-clean` | **DONE** |
+| T115 | fix | docs test: encoding + Rich separator | `task/T115-docs-test-encoding` | **DONE** |
 
 ### Wave 1 — P0 blockers (pipeline cannot produce a video)
 
 | ID | Type | Title | Branch |
 |---|---|---|---|
-| T116 | fix | render stage reads the flat manifest | `task/T116-render-manifest-shape` |
-| T117 | fix | render manifest uses measured narration | `task/T117-measured-narration-timings` |
-| T118 | fix | quality gate computes real metrics | `task/T118-quality-gate-metrics` |
+| T116 | fix | render stage reads the flat manifest | `task/T116-render-manifest-shape` | **DONE** |
+| T117 | fix | render manifest uses measured narration | `task/T117-measured-narration-timings` | **DONE** |
+| T118 | fix | quality gate computes real metrics | `task/T118-quality-gate-metrics` | **DONE** |
 
 ### Wave 2 — P1 correctness (silently wrong output)
 
 | ID | Type | Title | Branch |
 |---|---|---|---|
 | T119 | fix | CLI options reach the pipeline | `task/T119-cli-options-plumbing` |
-| T120 | fix | configured WPM replaces hard-coded 150 | `task/T120-configured-wpm` |
-| T121 | fix | fact-check misquote detection | `task/T121-misquote-any-all` |
-| T122 | fix | render-manifest stage name | `task/T122-render-manifest-stage-name` |
-| T123 | fix | resume validates the stage name | `task/T123-resume-stage-validation` |
-| T124 | fix | publish title path leak | `task/T124-publish-title-stem` |
+| T120 | fix | configured WPM replaces hard-coded 150 | `task/T120-configured-wpm` | **DONE** |
+| T121 | fix | fact-check misquote detection | `task/T121-misquote-any-all` | **DONE** |
+| T122 | fix | render-manifest stage name | `task/T122-render-manifest-stage-name` | **DONE** |
+| T123 | fix | resume validates the stage name | `task/T123-resume-stage-validation` | **DONE** |
+| T124 | fix | publish title path leak | `task/T124-publish-title-stem` | **DONE** |
 | T125 | fix | unload adapters on cache hits | `task/T125-unload-on-cache-hit` |
-| T126 | fix | language reaches local Whisper | `task/T126-whisper-language` |
-| T127 | fix | close SQLite connections | `task/T127-close-sqlite-connections` |
+| T126 | fix | language reaches local Whisper | `task/T126-whisper-language` | **DONE** |
+| T127 | fix | close SQLite connections | `task/T127-close-sqlite-connections` | **DONE** |
 | T128 | fix | job-ID allocation race | `task/T128-job-id-race` |
 | T129 | fix | scene detection idempotency | `task/T129-scene-detection-idempotent` |
 | T130 | fix | cache keys bind every input | `task/T130-cache-key-inputs` |
