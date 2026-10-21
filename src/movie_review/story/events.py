@@ -296,6 +296,18 @@ def run_event_extraction(
 
     # One transaction for the whole stage: the events stage writes one row
     # per event, and each write was its own commit.
+    # Every AI output passes schema validation before it enters the next
+    # stage (README section 6.6).
+    from movie_review.schemas import SchemaError, validate_artifact
+
+    for event in events:
+        try:
+            validate_artifact("event", event.model_dump(mode="json"))
+        except SchemaError as exc:
+            if owns_completion:
+                ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
+            raise EventExtractionError(str(exc)) from exc
+
     repo.save_events(ctx.conn, ctx.job_id, events)
     document = {
         "job_id": ctx.job_id,

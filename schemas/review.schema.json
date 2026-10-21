@@ -1,0 +1,159 @@
+{
+  "$defs": {
+    "Claim": {
+      "description": "One checkable statement from a review script.\n\nNew claims default to ``INSUFFICIENT_EVIDENCE``: no guessing (P1).",
+      "properties": {
+        "claim_id": {
+          "minLength": 1,
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/ClaimStatus",
+          "default": "INSUFFICIENT_EVIDENCE"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ClaimType"
+        }
+      },
+      "required": [
+        "claim_id",
+        "text",
+        "type"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "ClaimStatus": {
+      "description": "Fact-check verdicts. New claims start as INSUFFICIENT_EVIDENCE (P1).",
+      "enum": [
+        "SUPPORTED",
+        "PARTIALLY_SUPPORTED",
+        "CONTRADICTED",
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "title": "ClaimStatus",
+      "type": "string"
+    },
+    "ClaimType": {
+      "description": "Fact claims and interpretation are represented separately (P11).",
+      "enum": [
+        "PLOT_FACT",
+        "CHARACTER_FACT",
+        "TIMELINE_FACT",
+        "DIALOGUE_REFERENCE",
+        "INTERPRETATION",
+        "OPINION",
+        "THEME"
+      ],
+      "title": "ClaimType",
+      "type": "string"
+    },
+    "ReviewParagraph": {
+      "description": "One narratable paragraph with tracked claims (spec section 31).",
+      "properties": {
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Claims",
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "target_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Target Seconds",
+          "type": "integer"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "visual_intent": {
+          "default": "",
+          "title": "Visual Intent",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "target_seconds"
+      ],
+      "title": "ReviewParagraph",
+      "type": "object"
+    },
+    "ReviewSection": {
+      "description": "One script section of paragraphs.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "paragraphs": {
+          "items": {
+            "$ref": "#/$defs/ReviewParagraph"
+          },
+          "minItems": 1,
+          "title": "Paragraphs",
+          "type": "array"
+        },
+        "type": {
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "paragraphs"
+      ],
+      "title": "ReviewSection",
+      "type": "object"
+    }
+  },
+  "$id": "https://movie-review-ai/schemas/review.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Primary script representation; Markdown renders from this (spec 31).",
+  "properties": {
+    "sections": {
+      "items": {
+        "$ref": "#/$defs/ReviewSection"
+      },
+      "minItems": 1,
+      "title": "Sections",
+      "type": "array"
+    }
+  },
+  "required": [
+    "sections"
+  ],
+  "title": "review",
+  "type": "object"
+}

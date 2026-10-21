@@ -1,0 +1,65 @@
+{
+  "$id": "https://movie-review-ai/schemas/scene.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One detected scene. ``end`` must follow ``start``; ``duration`` must agree.",
+  "properties": {
+    "audio_energy": {
+      "default": 0.0,
+      "minimum": 0.0,
+      "title": "Audio Energy",
+      "type": "number"
+    },
+    "brightness": {
+      "default": 0.0,
+      "minimum": 0.0,
+      "title": "Brightness",
+      "type": "number"
+    },
+    "cut_density": {
+      "default": 0.0,
+      "minimum": 0.0,
+      "title": "Cut Density",
+      "type": "number"
+    },
+    "duration": {
+      "minimum": 0.0,
+      "title": "Duration",
+      "type": "number"
+    },
+    "end": {
+      "minimum": 0.0,
+      "title": "End",
+      "type": "number"
+    },
+    "motion_score": {
+      "default": 0.0,
+      "minimum": 0.0,
+      "title": "Motion Score",
+      "type": "number"
+    },
+    "scene_id": {
+      "minLength": 1,
+      "title": "Scene Id",
+      "type": "string"
+    },
+    "shot_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Shot Count",
+      "type": "integer"
+    },
+    "start": {
+      "minimum": 0.0,
+      "title": "Start",
+      "type": "number"
+    }
+  },
+  "required": [
+    "scene_id",
+    "start",
+    "end",
+    "duration"
+  ],
+  "title": "scene",
+  "type": "object"
+}

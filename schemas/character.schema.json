@@ -1,0 +1,54 @@
+{
+  "$id": "https://movie-review-ai/schemas/character.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One discovered character candidate or confirmed character.",
+  "properties": {
+    "aliases": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Aliases",
+      "type": "array"
+    },
+    "confidence": {
+      "default": 1.0,
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "first_seen": {
+      "minimum": 0.0,
+      "title": "First Seen",
+      "type": "number"
+    },
+    "gender": {
+      "default": "unknown",
+      "title": "Gender",
+      "type": "string"
+    },
+    "id": {
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "last_seen": {
+      "minimum": 0.0,
+      "title": "Last Seen",
+      "type": "number"
+    },
+    "name": {
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "first_seen",
+    "last_seen"
+  ],
+  "title": "character",
+  "type": "object"
+}

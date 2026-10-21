@@ -5,6 +5,7 @@ description = "Local-first AI pipeline that converts movies into review videos"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "jsonschema>=4.20",
   "numpy>=2.5.3",
   "pydantic>=2.0",
   "pydantic-settings>=2.15.0",
@@ -77,6 +78,10 @@ strict = true
 
 [[tool.mypy.overrides]]
 module = "scenedetect.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "jsonschema.*"
 ignore_missing_imports = true
 
 # Test code is type-checked, but it is not required to be fully annotated.
