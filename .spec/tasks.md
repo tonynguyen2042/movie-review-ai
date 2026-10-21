@@ -1601,10 +1601,10 @@ tests/unit/test_sampling_feedback.py   (new)
 
 **Acceptance criteria**
 
-- [ ] a high-importance scene receives more frames than the duration rule alone would give
-- [ ] a low-information scene receives fewer
-- [ ] the result stays inside the configured maximum
-- [ ] `pytest -q` passes
+- [x] a high-importance scene receives more frames than the duration rule alone would give
+- [x] a low-information scene receives fewer
+- [x] the result stays inside the configured maximum
+- [x] `pytest -q` passes
 
 ---
 
