@@ -108,9 +108,13 @@ def build_movie_analysis(ctx: StageContext) -> AnalysisResult:
         {"speaker": speaker, "character_id": character_id, "confidence": confidence}
         for speaker, character_id, confidence in repo.list_speaker_links(ctx.conn, ctx.job_id)
     ]
-    arcs = _read_artifact_list(jobs_dir, ctx.job_id, "story-arcs.json", "arcs")
-    themes = _read_artifact_list(jobs_dir, ctx.job_id, "themes.json", "themes")
-    twists = _read_artifact_list(jobs_dir, ctx.job_id, "twists.json", "twists")
+    # The arcs, the themes and the twists have tables of their own, so they
+    # are read from the database. They used to be read back out of the JSON
+    # artifacts because they had nowhere else to live, which meant a query
+    # could not reach them.
+    arcs = [arc.model_dump(mode="json") for arc in repo.list_story_arcs(ctx.conn, ctx.job_id)]
+    themes = [theme.model_dump(mode="json") for theme in repo.list_themes(ctx.conn, ctx.job_id)]
+    twists = [twist.model_dump(mode="json") for twist in repo.list_twists(ctx.conn, ctx.job_id)]
     # From the database, like every other consumer of the visual analyses. The
     # other three lists here still come from their artifacts because they have no
     # table of their own.

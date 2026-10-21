@@ -1940,9 +1940,9 @@ tests/integration/test_storage.py
 
 **Acceptance criteria**
 
-- [ ] every table named in ?52 exists
-- [ ] the arcs, themes and twists are queryable from the database
-- [ ] `pytest -q` passes
+- [x] every table named in ?52 exists
+- [x] the arcs, themes and twists are queryable from the database
+- [x] `pytest -q` passes
 
 ---
 

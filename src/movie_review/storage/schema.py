@@ -5,7 +5,7 @@ artifacts. Later tasks add their tables as new migration versions; existing
 statements are append-only history and must not be edited.
 """
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 MIGRATION_1 = [
     """
@@ -293,6 +293,127 @@ MIGRATION_14 = [
     """,
 ]
 
+MIGRATION_15 = [
+    # The nine tables README section 52 names that did not exist. They were
+    # read back out of the JSON artifacts because they had no table of their
+    # own, so a query could not reach them.
+    """
+    CREATE TABLE IF NOT EXISTS shots (
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        scene_id TEXT NOT NULL,
+        shot_id TEXT NOT NULL,
+        start REAL NOT NULL DEFAULT 0.0,
+        end REAL NOT NULL DEFAULT 0.0,
+        PRIMARY KEY (job_id, shot_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS story_arcs (
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        element TEXT NOT NULL,
+        applicable INTEGER NOT NULL DEFAULT 1,
+        description TEXT NOT NULL DEFAULT '',
+        event_ids_json TEXT NOT NULL DEFAULT '[]',
+        confidence REAL NOT NULL DEFAULT 1.0,
+        PRIMARY KEY (job_id, element)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS themes (
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        theme TEXT NOT NULL,
+        evidence_json TEXT NOT NULL DEFAULT '[]',
+        confidence REAL NOT NULL DEFAULT 1.0,
+        PRIMARY KEY (job_id, theme)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS twists (
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        id TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        revealed_at REAL NOT NULL DEFAULT 0.0,
+        foreshadowed_by_json TEXT NOT NULL DEFAULT '[]',
+        confidence REAL NOT NULL DEFAULT 1.0,
+        PRIMARY KEY (job_id, id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS review_sections (
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        section_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        target_seconds REAL NOT NULL DEFAULT 0.0,
+        event_ids_json TEXT NOT NULL DEFAULT '[]',
+        purpose TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (job_id, section_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS review_paragraphs (
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        paragraph_id TEXT NOT NULL,
+        section_id TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        text TEXT NOT NULL DEFAULT '',
+        target_seconds REAL NOT NULL DEFAULT 0.0,
+        visual_intent TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (job_id, paragraph_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS tts_segments (
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        chunk_id TEXT NOT NULL,
+        paragraph_id TEXT NOT NULL,
+        audio_file TEXT NOT NULL DEFAULT '',
+        duration REAL NOT NULL DEFAULT 0.0,
+        voice TEXT NOT NULL DEFAULT '',
+        emotion TEXT NOT NULL DEFAULT '',
+        speed REAL NOT NULL DEFAULT 1.0,
+        PRIMARY KEY (job_id, chunk_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS visual_segments (
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        paragraph_id TEXT NOT NULL,
+        scene_id TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 1,
+        reason TEXT NOT NULL DEFAULT '',
+        clip_start REAL NOT NULL DEFAULT 0.0,
+        clip_end REAL NOT NULL DEFAULT 0.0,
+        timeline_start REAL NOT NULL DEFAULT 0.0,
+        timeline_end REAL NOT NULL DEFAULT 0.0,
+        PRIMARY KEY (job_id, paragraph_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS render_segments (
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        paragraph_id TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        start REAL NOT NULL DEFAULT 0.0,
+        duration REAL NOT NULL DEFAULT 0.0,
+        scene_id TEXT NOT NULL DEFAULT '',
+        clip_start REAL NOT NULL DEFAULT 0.0,
+        clip_end REAL NOT NULL DEFAULT 0.0,
+        loop_clip INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (job_id, paragraph_id)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_shots_job ON shots (job_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_tts_segments_job ON tts_segments (job_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_render_segments_job ON render_segments (job_id)
+    """,
+]
+
 MIGRATIONS: dict[int, list[str]] = {
     1: MIGRATION_1,
     2: MIGRATION_2,
@@ -308,4 +429,5 @@ MIGRATIONS: dict[int, list[str]] = {
     12: MIGRATION_12,
     13: MIGRATION_13,
     14: MIGRATION_14,
+    15: MIGRATION_15,
 }

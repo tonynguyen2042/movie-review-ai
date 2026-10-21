@@ -141,6 +141,9 @@ def extract_themes(
             raise ThemeExtractionError(f"Theme {theme.theme!r} cites no evidence")
         themes.append(theme)
 
+    # The themes have a table of their own, so a query can reach them.
+    repo.save_themes(conn, job_id, themes)
+
     document = {
         "job_id": job_id,
         "stage": STAGE_NAME,

@@ -33,7 +33,11 @@ from movie_review.domain import (
     RelationType,
     Scene,
     SceneAnalysis,
+    StoryArc,
+    StoryElement,
+    Theme,
     TranscriptSegment,
+    Twist,
 )
 
 
@@ -916,6 +920,119 @@ def list_artifacts(
             (job_id, stage),
         ).fetchall()
     return [_row_to_artifact(row) for row in rows]
+
+
+def save_story_arcs(conn: sqlite3.Connection, job_id: str, arcs: list[StoryArc]) -> None:
+    """Persist the story arcs, replacing the job's previous set."""
+    with conn:
+        conn.execute("DELETE FROM story_arcs WHERE job_id = ?", (job_id,))
+        conn.executemany(
+            """
+            INSERT INTO story_arcs
+                (job_id, element, applicable, description, event_ids_json, confidence)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    job_id,
+                    arc.element.value,
+                    1 if arc.applicable else 0,
+                    arc.description,
+                    json.dumps(arc.event_ids),
+                    arc.confidence,
+                )
+                for arc in arcs
+            ],
+        )
+
+
+def list_story_arcs(conn: sqlite3.Connection, job_id: str) -> list[StoryArc]:
+    """The job's story arcs, from the database."""
+    rows = conn.execute(
+        "SELECT * FROM story_arcs WHERE job_id = ? ORDER BY element", (job_id,)
+    ).fetchall()
+    return [
+        StoryArc(
+            element=StoryElement(row["element"]),
+            applicable=bool(row["applicable"]),
+            description=row["description"],
+            event_ids=list(json.loads(row["event_ids_json"])),
+            confidence=row["confidence"],
+        )
+        for row in rows
+    ]
+
+
+def save_themes(conn: sqlite3.Connection, job_id: str, themes: list[Theme]) -> None:
+    """Persist the themes, replacing the job's previous set."""
+    with conn:
+        conn.execute("DELETE FROM themes WHERE job_id = ?", (job_id,))
+        conn.executemany(
+            """
+            INSERT INTO themes (job_id, theme, evidence_json, confidence)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (job_id, theme.theme, json.dumps(theme.evidence), theme.confidence)
+                for theme in themes
+            ],
+        )
+
+
+def list_themes(conn: sqlite3.Connection, job_id: str) -> list[Theme]:
+    """The job's themes, from the database."""
+    rows = conn.execute(
+        "SELECT * FROM themes WHERE job_id = ? ORDER BY theme", (job_id,)
+    ).fetchall()
+    return [
+        Theme(
+            theme=row["theme"],
+            evidence=list(json.loads(row["evidence_json"])),
+            confidence=row["confidence"],
+        )
+        for row in rows
+    ]
+
+
+def save_twists(conn: sqlite3.Connection, job_id: str, twists: list[Twist]) -> None:
+    """Persist the twists, replacing the job's previous set."""
+    with conn:
+        conn.execute("DELETE FROM twists WHERE job_id = ?", (job_id,))
+        conn.executemany(
+            """
+            INSERT INTO twists
+                (job_id, id, description, revealed_at, foreshadowed_by_json, confidence)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    job_id,
+                    twist.id,
+                    twist.description,
+                    twist.revealed_at,
+                    json.dumps(twist.foreshadowed_by),
+                    twist.confidence,
+                )
+                for twist in twists
+            ],
+        )
+
+
+def list_twists(conn: sqlite3.Connection, job_id: str) -> list[Twist]:
+    """The job's twists, from the database."""
+    rows = conn.execute(
+        "SELECT * FROM twists WHERE job_id = ? ORDER BY revealed_at, id", (job_id,)
+    ).fetchall()
+    return [
+        Twist(
+            id=row["id"],
+            description=row["description"],
+            revealed_at=row["revealed_at"],
+            foreshadowed_by=list(json.loads(row["foreshadowed_by_json"])),
+            confidence=row["confidence"],
+        )
+        for row in rows
+    ]
 
 
 def save_model_run(conn: sqlite3.Connection, job_id: str, run: ModelRun) -> None:
