@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T20:01:29.163220+00:00",
+  "updated_at": "2026-10-21T20:17:54.895992+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1888,12 +1888,14 @@
       "title": "end-to-end pipeline test",
       "type": "test",
       "branch": "T163-pipeline-e2e-test",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T20:17:54.895992+00:00",
+      "updated_at": "2026-10-21T20:17:54.895992+00:00"
     },
     "T164": {
       "title": "golden baseline",

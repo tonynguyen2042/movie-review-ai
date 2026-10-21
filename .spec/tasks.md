@@ -2118,10 +2118,10 @@ tests/conftest.py
 
 **Acceptance criteria**
 
-- [ ] every stage closure executes at least once in the suite
-- [ ] the test asserts the artifact tree and the final status
-- [ ] the test is deterministic and needs no network or model
-- [ ] `pytest -q` passes
+- [x] every stage closure executes at least once in the suite
+- [x] the test asserts the artifact tree and the final status
+- [x] the test is deterministic and needs no network or model
+- [x] `pytest -q` passes
 
 ---
 

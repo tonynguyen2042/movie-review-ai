@@ -137,7 +137,12 @@ def extract_twists(
         if not isinstance(entry, dict):
             raise TwistExtractionError("Malformed twist entry")
         try:
-            twist = Twist(id=f"twist_{index:03d}", **entry)
+            # The model names its own twists. The generated id is only a
+            # fallback for a model that did not name one -- passing both
+            # raised "got multiple values for keyword argument 'id'".
+            payload = {**entry}
+            payload.setdefault("id", f"twist_{index:03d}")
+            twist = Twist(**payload)
         except ValueError as exc:
             raise TwistExtractionError(f"Invalid twist: {exc}") from exc
         unknown = [ref for ref in twist.foreshadowed_by if ref not in known_ids]
