@@ -92,6 +92,29 @@ TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
 STAGE_RETRY_POLICY = RetryPolicy(max_attempts=3, backoff_seconds=2.0)
 
 
+def _final_manifest(ctx: PipelineContext, job: Any, metrics: list[Any]) -> dict[str, Any]:
+    """The final manifest of README section 95."""
+    from movie_review.pipeline.export import build_manifest
+    from movie_review.storage import repositories as repo
+
+    movie = repo.get_movie(ctx.conn, ctx.job_id)
+    models = ctx.settings.models
+    return build_manifest(
+        ctx.job_id,
+        job.input_file,
+        movie.metadata.sha256 if movie else "",
+        {
+            "asr": models.asr.model,
+            "vision": models.vision.model,
+            "reasoning": models.reasoning.model,
+            "tts": models.tts.model,
+        },
+        {metric.name: metric.score for metric in metrics},
+        job.status.value,
+        {},
+    )
+
+
 def _record_retry(ctx: PipelineContext) -> None:
     """Count one retry on the job."""
     ctx.manager.record_retry(ctx.job_id)
@@ -1024,8 +1047,22 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         # to reach nothing but a log line, and `paths.output_dir` was never
         # read by any code, so a run buried its results under the job
         # directory.
-        output_dir = ctx.manager.get(ctx.job_id).output_dir or (ctx.settings.paths.output_dir)
-        export_output(ctx.jobs_dir, ctx.job_id, output_dir)
+        job = ctx.manager.get(ctx.job_id)
+        output_dir = job.output_dir or ctx.settings.paths.output_dir
+        # The script is exported as Markdown. A job that never produced one
+        # -- a run that stopped earlier -- exports without it rather than
+        # failing the quality stage over a missing file.
+        try:
+            script = load_effective_script(ctx)
+        except (OSError, ValueError):
+            script = None
+        export_output(
+            ctx.jobs_dir,
+            ctx.job_id,
+            output_dir,
+            script=script,
+            manifest=_final_manifest(ctx, job, metrics),
+        )
         return gate
 
     return {

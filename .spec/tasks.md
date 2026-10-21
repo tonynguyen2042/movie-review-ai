@@ -1756,10 +1756,10 @@ tests/unit/test_output_set.py   (new)
 
 **Acceptance criteria**
 
-- [ ] the output directory contains all eight promised files
-- [ ] `--output` is honoured
-- [ ] the Markdown script is derived from the structured script, not maintained separately
-- [ ] `pytest -q` passes
+- [x] the output directory contains all eight promised files
+- [x] `--output` is honoured
+- [x] the Markdown script is derived from the structured script, not maintained separately
+- [x] `pytest -q` passes
 
 ---
 
