@@ -39,6 +39,7 @@ STAGE_SEQUENCE: list[tuple[str, str]] = [
     ("transcript", "Transcribe dialogue"),
     ("vision", "Visual scene analysis"),
     ("characters", "Discover and link characters"),
+    ("diarization", "Attribute the dialogue to speakers"),
     ("locations", "Extract locations"),
     ("events", "Extract story events"),
     ("arcs", "Extract story arcs"),
@@ -593,6 +594,12 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         # not exist here; add it when the capability lands.
         return result
 
+    def diarization_fn(ctx: PipelineContext) -> Any:
+        from movie_review.pipeline.diarization import run_diarization
+
+        audio_path = Path(ctx.jobs_dir) / ctx.job_id / "tts" / "dialogue.wav"
+        return run_diarization(audio_path, ctx)
+
     def locations_fn(ctx: PipelineContext) -> Any:
         from movie_review.knowledge.locations import extract_locations, scene_locations
         from movie_review.storage import repositories as repo
@@ -1071,6 +1078,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         "transcript": transcript_fn,
         "vision": vision_fn,
         "characters": characters_fn,
+        "diarization": diarization_fn,
         "locations": locations_fn,
         "events": events_fn,
         "arcs": arcs_fn,

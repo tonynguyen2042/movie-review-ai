@@ -52,7 +52,7 @@ def _analysis(scene_id: str = "scene_000001") -> SceneAnalysis:
 
 
 def test_schema_version_is_bumped() -> None:
-    assert SCHEMA_VERSION == 11
+    assert SCHEMA_VERSION == 12
 
 
 def test_migration_creates_the_table_on_an_older_database(tmp_path: Path) -> None:

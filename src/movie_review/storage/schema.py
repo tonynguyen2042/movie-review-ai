@@ -5,7 +5,7 @@ artifacts. Later tasks add their tables as new migration versions; existing
 statements are append-only history and must not be edited.
 """
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 MIGRATION_1 = [
     """
@@ -253,6 +253,16 @@ MIGRATION_11 = [
     """,
 ]
 
+MIGRATION_12 = [
+    # The diarization stage records which speaker said each line. The
+    # speakers table was always empty, so the transcript carried no
+    # attribution and the speaker-to-character linking had nothing to
+    # resolve.
+    """
+    ALTER TABLE transcript_segments ADD COLUMN speaker TEXT
+    """,
+]
+
 MIGRATIONS: dict[int, list[str]] = {
     1: MIGRATION_1,
     2: MIGRATION_2,
@@ -265,4 +275,5 @@ MIGRATIONS: dict[int, list[str]] = {
     9: MIGRATION_9,
     10: MIGRATION_10,
     11: MIGRATION_11,
+    12: MIGRATION_12,
 }

@@ -333,6 +333,7 @@ uv run movie-review stages
   transcript: Transcribe dialogue
   vision: Visual scene analysis
   characters: Discover and link characters
+  diarization: Attribute the dialogue to speakers
   locations: Extract locations
   events: Extract story events
   arcs: Extract story arcs
@@ -366,7 +367,7 @@ Stage names are validated up front. An unknown name is rejected as a usage error
 ```bash
 $ uv run movie-review process ./my-movie.mp4 --stage-from nope
 Invalid value for '--stage-from': 'nope' is not one of 'ingest', 'scenes',
-'transcript', 'vision', 'characters', 'locations', 'events', 'arcs', 'themes',
+'transcript', 'vision', 'characters', 'diarization', 'locations', 'events', 'arcs', 'themes',
 'twists', 'story', 'review', 'verify', 'review-translate', 'tts-chunks', 'tts-concat',
 'tts-reconcile', 'render-manifest', 'subtitles', 'render', 'quality'
 $ echo $?

@@ -16,6 +16,9 @@ class TranscriptSegment(BaseModel):
     text: str = ""
     language: str | None = None
     confidence: Confidence = 1.0
+    #: The diarized speaker this line belongs to, e.g. "SPEAKER_00". None
+    #: until the diarization stage has run.
+    speaker: str | None = None
 
     @model_validator(mode="after")
     def _check_span(self) -> TranscriptSegment:

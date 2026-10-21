@@ -1540,10 +1540,10 @@ tests/unit/test_diarization_stage.py   (new)
 
 **Acceptance criteria**
 
-- [ ] a `diarization` stage appears in `movie-review stages`
-- [ ] the speakers table is populated
-- [ ] speaker ids appear on the transcript segments
-- [ ] `pytest -q` passes
+- [x] a `diarization` stage appears in `movie-review stages`
+- [x] the speakers table is populated
+- [x] speaker ids appear on the transcript segments
+- [x] `pytest -q` passes
 
 ---
 
