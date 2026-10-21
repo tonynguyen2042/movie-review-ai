@@ -2,7 +2,13 @@
 
 import pytest
 
-from movie_review.domain import Claim, ReviewParagraph, ReviewScript, ReviewSection
+from movie_review.domain import (
+    Claim,
+    ClaimType,
+    ReviewParagraph,
+    ReviewScript,
+    ReviewSection,
+)
 from movie_review.publishing.metadata import (
     DESCRIPTION_MAX_CHARS,
     TITLE_MAX_CHARS,
@@ -21,7 +27,7 @@ def _paragraph(pid: str, text: str, target: int = 60) -> ReviewParagraph:
         id=pid,
         text=text,
         target_seconds=target,
-        claims=[Claim(claim_id=f"{pid}-c1", type="PLOT_FACT", text=text)],
+        claims=[Claim(claim_id=f"{pid}-c1", type=ClaimType.PLOT_FACT, text=text)],
     )
 
 

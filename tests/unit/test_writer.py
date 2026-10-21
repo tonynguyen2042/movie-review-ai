@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from movie_review.cache.manager import CacheManager
-from movie_review.config.settings import load_settings
+from movie_review.config.settings import ModelSpec, load_settings
 from movie_review.domain import Job, JobStatus, OutlineSection, ReviewPlan
 from movie_review.jobs.manager import JobManager
 from movie_review.pipeline.context import StageContext
@@ -78,7 +78,7 @@ class Harness:
             load_style("youtube"),
             100,
             self.ctx,
-            "test-reasoning",
+            ModelSpec(model="test-reasoning"),
             reasoner=self.reasoner,
         )
 
@@ -211,7 +211,7 @@ def test_bad_target_words(tmp_path: Path) -> None:
             load_style("youtube"),
             0,
             harness.ctx,
-            "m",
+            ModelSpec(model="m"),
             reasoner=harness.reasoner,
         )
 

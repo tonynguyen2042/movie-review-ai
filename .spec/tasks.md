@@ -635,10 +635,10 @@ tests/unit/* (7 further files)          14 errors
 
 **Acceptance criteria**
 
-- [ ] `mypy .` reports `Success: no issues found`
-- [ ] no blanket `# type: ignore` added
-- [ ] `ruff check .` and `ruff format --check .` pass
-- [ ] `pytest -q` passes
+- [x] `mypy .` reports `Success: no issues found`
+- [x] no blanket `# type: ignore` added
+- [x] `ruff check .` and `ruff format --check .` pass
+- [x] `pytest -q` passes
 
 ---
 

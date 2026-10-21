@@ -2,12 +2,13 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.ui.qc_report import QualityReportUI
 
 
-def _write_report(job_dir: Path, report: dict) -> None:
+def _write_report(job_dir: Path, report: dict[str, Any]) -> None:
     (job_dir / "qc").mkdir(parents=True, exist_ok=True)
     artifacts.write_json(job_dir / "qc" / "quality-report.json", report)
 

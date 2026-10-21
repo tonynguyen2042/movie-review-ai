@@ -15,6 +15,7 @@ import pytest
 
 from movie_review.cache.manager import CacheManager
 from movie_review.config.settings import load_settings
+from movie_review.jobs.manager import JobManager
 from movie_review.pipeline.context import StageContext
 from movie_review.pipeline.orchestrator import (
     STAGE_SEQUENCE,
@@ -25,7 +26,6 @@ from movie_review.pipeline.orchestrator import (
     run_pipeline,
     run_stage,
 )
-from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap
 
 
@@ -40,8 +40,7 @@ def _ctx(tmp_path: Path) -> PipelineContext:
         job_id="job_test",
         jobs_dir=jobs_dir,
         conn=conn,
-        manager=repo
-        and __import__("movie_review.jobs.manager", fromlist=["JobManager"]).JobManager(conn),
+        manager=JobManager(conn),
         cache=CacheManager(tmp_path / "cache"),
         settings=settings,
         movie_path=tmp_path / "movie.mp4",
@@ -188,9 +187,9 @@ def test_stage_function_references_resolve() -> None:
     """
     import importlib
 
-    src = Path(importlib.import_module("movie_review.pipeline.orchestrator").__file__).read_text(
-        encoding="utf-8"
-    )
+    module_file = importlib.import_module("movie_review.pipeline.orchestrator").__file__
+    assert module_file is not None
+    src = Path(module_file).read_text(encoding="utf-8")
 
     from movie_review.characters import linking
     from movie_review.storage import repositories
