@@ -2292,9 +2292,9 @@ docs/troubleshooting.md   (new)
 
 **Acceptance criteria**
 
-- [ ] each file exists and describes the current implementation
-- [ ] no document claims a behaviour the code does not have
-- [ ] `pytest -q` passes
+- [x] each file exists and describes the current implementation
+- [x] no document claims a behaviour the code does not have
+- [x] `pytest -q` passes
 
 ---
 

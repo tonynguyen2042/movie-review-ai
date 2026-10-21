@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T20:31:56.451510+00:00",
+  "updated_at": "2026-10-21T20:38:35.289997+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1966,12 +1966,14 @@
       "title": "the 5 missing `docs/` files",
       "type": "docs",
       "branch": "T169-missing-docs",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T20:38:35.289997+00:00",
+      "updated_at": "2026-10-21T20:38:35.289997+00:00"
     },
     "T170": {
       "title": "the 4 missing `scripts/` files",
