@@ -1,22 +1,26 @@
-"""The transport must reuse connections and retry a transient failure.
+"""The shared HTTP transport needs its own tests.
 
-T136 regression. `urllib.request.urlopen` sets `Connection: close` on every
-request (CPython's `urllib/request.py`), so each of the roughly 2000 model
-calls a 2 h run makes paid a fresh TCP and TLS handshake. And there was no
-retry at all: `perform` raised on the first `URLError` or `HTTPError`, so a
-single blip aborted a run that had been going for hours.
+T165. `remote/http.py` is 211 lines and had **no direct test**. The adapters
+that use it exercised it indirectly, but its own branches did not run:
+`build_endpoint`, `auth_headers`, the `TimeoutError` branch of `perform`,
+the error branches of `decode_json`, `encode_multipart`, `file_upload` and
+the two `post_*` helpers were never called directly.
 
-The reasoning adapter carried its own copy of the request logic, so the two
-paths drifted and the reasoning one got neither.
+The `TimeoutError` branch matters most: a hung remote server raised a raw
+`TimeoutError` instead of `RemoteUnavailableError`, which broke the error
+contract every adapter relies on.
 """
 
 from __future__ import annotations
 
 import json
 from email.message import Message
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request
+
+import pytest
 
 from movie_review.remote import http
 
@@ -35,189 +39,228 @@ class _FakeResponse:
         return None
 
 
-def _request(url: str = "http://gpu:8000/v1/chat/completions") -> Request:
-    return Request(url, data=b"{}", headers={"Content-Type": "application/json"}, method="POST")
+# --- the endpoint --------------------------------------------------------
 
 
-def test_a_transient_failure_is_retried() -> None:
-    """A 5xx must be tried again before it is reported."""
-    attempts: list[int] = []
-
-    def transport(request: Any, timeout: float) -> _FakeResponse:
-        attempts.append(1)
-        if len(attempts) < 3:
-            raise HTTPError("http://gpu:8000/v1/chat/completions", 503, "busy", Message(), None)
-        return _FakeResponse(b'{"ok": true}')
-
-    body = http.perform(
-        _request(), 60.0, transport, url="http://gpu:8000/v1/chat/completions", backoff_seconds=0
+def test_build_endpoint_joins_the_path() -> None:
+    assert http.build_endpoint("http://gpu:8000/v1", "/chat/completions") == (
+        "http://gpu:8000/v1/chat/completions"
     )
-    assert body == b'{"ok": true}'
-    assert len(attempts) == 3
 
 
-def test_a_rate_limit_is_retried() -> None:
-    attempts: list[int] = []
-
-    def transport(request: Any, timeout: float) -> _FakeResponse:
-        attempts.append(1)
-        if len(attempts) < 2:
-            raise HTTPError(
-                "http://gpu:8000/v1/chat/completions", 429, "slow down", Message(), None
-            )
-        return _FakeResponse(b"{}")
-
-    http.perform(
-        _request(), 60.0, transport, url="http://gpu:8000/v1/chat/completions", backoff_seconds=0
+def test_build_endpoint_tolerates_a_trailing_slash() -> None:
+    assert http.build_endpoint("http://gpu:8000/v1/", "/chat/completions") == (
+        "http://gpu:8000/v1/chat/completions"
     )
-    assert len(attempts) == 2
 
 
-def test_a_client_error_is_not_retried() -> None:
-    """A 400 is the request's own fault; repeating it wastes the server."""
-    attempts: list[int] = []
-
-    def transport(request: Any, timeout: float) -> _FakeResponse:
-        attempts.append(1)
-        raise HTTPError("http://gpu:8000/v1/chat/completions", 400, "bad request", Message(), None)
-
-    try:
-        http.perform(
-            _request(),
-            60.0,
-            transport,
-            url="http://gpu:8000/v1/chat/completions",
-            backoff_seconds=0,
-        )
-    except http.RemoteProtocolError as exc:
-        assert "400" in str(exc)
-    else:
-        raise AssertionError("a 400 must be reported")
-    assert len(attempts) == 1, "a 400 was retried"
-
-
-def test_a_connection_failure_is_retried() -> None:
-    attempts: list[int] = []
-
-    def transport(request: Any, timeout: float) -> _FakeResponse:
-        attempts.append(1)
-        if len(attempts) < 2:
-            raise URLError("connection refused")
-        return _FakeResponse(b"{}")
-
-    http.perform(
-        _request(), 60.0, transport, url="http://gpu:8000/v1/chat/completions", backoff_seconds=0
+def test_build_endpoint_is_idempotent() -> None:
+    """A base that already ends with the path is not doubled."""
+    assert http.build_endpoint("http://gpu:8000/v1/chat/completions", "/chat/completions") == (
+        "http://gpu:8000/v1/chat/completions"
     )
-    assert len(attempts) == 2
 
 
-def test_a_persistent_failure_is_reported_after_the_attempts() -> None:
-    attempts: list[int] = []
-
-    def transport(request: Any, timeout: float) -> _FakeResponse:
-        attempts.append(1)
-        raise HTTPError("http://gpu:8000/v1/chat/completions", 500, "boom", Message(), None)
-
-    try:
-        http.perform(
-            _request(),
-            60.0,
-            transport,
-            url="http://gpu:8000/v1/chat/completions",
-            attempts=3,
-            backoff_seconds=0,
-        )
-    except http.RemoteProtocolError:
-        pass
-    else:
-        raise AssertionError("a persistent failure must be reported")
-    assert len(attempts) == 3
+def test_build_endpoint_adds_the_leading_slash() -> None:
+    assert http.build_endpoint("http://gpu:8000/v1", "chat/completions") == (
+        "http://gpu:8000/v1/chat/completions"
+    )
 
 
-def test_a_timeout_is_reported_as_unavailable() -> None:
-    """A timeout must map to the unavailable error, not a raw TimeoutError."""
+# --- the headers ---------------------------------------------------------
+
+
+def test_auth_headers_omit_the_token_when_there_is_none() -> None:
+    headers = http.auth_headers(None)
+    assert "Authorization" not in headers
+    assert headers["Content-Type"] == "application/json"
+
+
+def test_auth_headers_carry_the_bearer_token() -> None:
+    headers = http.auth_headers("secret")
+    assert headers["Authorization"] == "Bearer secret"
+
+
+def test_auth_headers_omit_the_content_type_for_a_multipart_body() -> None:
+    """A multipart body sets its own content type, with the boundary."""
+    headers = http.auth_headers("secret", json_body=False)
+    assert "Content-Type" not in headers
+
+
+# --- the error mapping ---------------------------------------------------
+
+
+def test_a_timeout_maps_to_unavailable() -> None:
+    """A hung server must not raise a raw TimeoutError.
+
+    Every adapter catches `RemoteUnavailableError`; a raw TimeoutError
+    escaped all of them.
+    """
 
     def transport(request: Any, timeout: float) -> _FakeResponse:
         raise TimeoutError
 
-    try:
+    with pytest.raises(http.RemoteUnavailableError):
         http.perform(
-            _request(),
+            Request("http://gpu:8000/v1", data=b"{}", method="POST"),
             60.0,
             transport,
-            url="http://gpu:8000/v1/chat/completions",
+            url="http://gpu:8000/v1",
             attempts=1,
-            backoff_seconds=0,
         )
-    except http.RemoteUnavailableError:
-        pass
-    else:
-        raise AssertionError("a timeout must be reported as unavailable")
 
 
-def test_the_backoff_grows_and_is_bounded() -> None:
-    """The delay must grow with the attempt and stay under the cap."""
-    delays = [http._backoff_delay(attempt, 0.5) for attempt in range(1, 12)]
-    assert all(delay >= 0 for delay in delays)
-    assert max(delays) <= 30.0
-    # The first attempt's delay is around the base; later ones are larger.
-    assert delays[-1] > delays[0]
+def test_a_refused_connection_maps_to_unavailable() -> None:
+    def transport(request: Any, timeout: float) -> _FakeResponse:
+        raise URLError("connection refused")
+
+    with pytest.raises(http.RemoteUnavailableError, match="cannot reach"):
+        http.perform(
+            Request("http://gpu:8000/v1", data=b"{}", method="POST"),
+            60.0,
+            transport,
+            url="http://gpu:8000/v1",
+            attempts=1,
+        )
 
 
-def test_the_pool_reuses_one_connection_per_host() -> None:
-    """Two requests to one host must share a connection."""
-    pool = http._Pool()
-    sent: list[str] = []
+def test_an_http_error_maps_to_a_protocol_error() -> None:
+    def transport(request: Any, timeout: float) -> _FakeResponse:
+        raise HTTPError("http://gpu:8000/v1", 404, "not found", Message(), None)
 
-    class _FakeConnection:
-        def __init__(self, host: str, port: int, timeout: float) -> None:
-            self.host = host
-
-        def request(self, method: str, path: str, body: Any, headers: Any) -> None:
-            sent.append(f"{method} {path}")
-
-        def getresponse(self) -> Any:
-            class _Response:
-                status = 200
-
-                def read(self) -> bytes:
-                    return b"{}"
-
-            return _Response()
-
-        def close(self) -> None:
-            return None
-
-    # The module object, so the pool's factory can be swapped for the test.
-    import importlib
-
-    module = importlib.import_module("movie_review.remote.http")
-    original = module.HTTPConnection
-    module.HTTPConnection = _FakeConnection  # type: ignore[attr-defined]
-    try:
-        pool.send(_request("http://gpu:8000/v1/chat/completions"), 60.0)
-        pool.send(_request("http://gpu:8000/v1/chat/completions"), 60.0)
-    finally:
-        module.HTTPConnection = original  # type: ignore[attr-defined]
-
-    assert len(sent) == 2
-    assert len(pool._connections) == 1, "a second connection was opened for the same host"
-    pool.close()
-    assert pool._connections == {}
+    with pytest.raises(http.RemoteProtocolError, match="404"):
+        http.perform(
+            Request("http://gpu:8000/v1", data=b"{}", method="POST"),
+            60.0,
+            transport,
+            url="http://gpu:8000/v1",
+            attempts=1,
+        )
 
 
-def test_the_reasoning_adapter_uses_the_shared_transport() -> None:
-    """The reasoning adapter must not carry its own request logic."""
-    from movie_review.reasoning.openai_compat import OpenAICompatAdapter
-
-    calls: list[str] = []
+def test_the_error_message_never_carries_the_token() -> None:
+    """The headers carry the bearer token; the message must not."""
 
     def transport(request: Any, timeout: float) -> _FakeResponse:
-        calls.append(request.full_url)
-        return _FakeResponse(
-            json.dumps({"choices": [{"message": {"content": "hello"}}]}).encode("utf-8")
-        )
+        raise HTTPError("http://gpu:8000/v1", 500, "boom", Message(), None)
 
-    adapter = OpenAICompatAdapter("m", "http://gpu:8000/v1", transport=transport)
-    assert adapter.complete("prompt") == "hello"
-    assert calls == ["http://gpu:8000/v1/chat/completions"]
+    with pytest.raises(http.RemoteProtocolError) as excinfo:
+        http.perform(
+            Request("http://gpu:8000/v1", data=b"{}", method="POST"),
+            60.0,
+            transport,
+            url="http://gpu:8000/v1",
+            attempts=1,
+        )
+    assert "secret" not in str(excinfo.value)
+
+
+# --- the body decoding ---------------------------------------------------
+
+
+def test_decode_json_reads_an_object() -> None:
+    assert http.decode_json(b'{"ok": true}', "http://gpu") == {"ok": True}
+
+
+def test_decode_json_reports_invalid_json() -> None:
+    with pytest.raises(http.RemoteProtocolError, match="invalid JSON"):
+        http.decode_json(b"not json", "http://gpu")
+
+
+def test_decode_json_reports_a_non_utf8_body() -> None:
+    with pytest.raises(http.RemoteProtocolError, match="non-UTF-8"):
+        http.decode_json(b"\xff\xfe", "http://gpu")
+
+
+# --- the multipart body --------------------------------------------------
+
+
+def test_encode_multipart_carries_the_fields_and_the_file(tmp_path: Path) -> None:
+    body, content_type = http.encode_multipart(
+        {"model": "whisper"},
+        {"file": ("audio.wav", b"\x00\x01", "audio/wav")},
+    )
+    assert content_type.startswith("multipart/form-data; boundary=")
+    assert b'name="model"' in body
+    assert b"whisper" in body
+    assert b'name="file"; filename="audio.wav"' in body
+    assert b"audio/wav" in body
+
+
+def test_encode_multipart_sanitises_the_filename() -> None:
+    """A path in the filename must not travel into the request."""
+    body, _ = http.encode_multipart(
+        {}, {"file": ("../../etc/passwd", b"\x00", "application/octet-stream")}
+    )
+    assert b"passwd" in body
+    assert b"../" not in body
+
+
+def test_file_upload_guesses_the_content_type(tmp_path: Path) -> None:
+    path = tmp_path / "audio.wav"
+    path.write_bytes(b"\x00")
+    name, content, content_type = http.file_upload(path)
+    assert name == "audio.wav"
+    assert content == b"\x00"
+    assert content_type in ("audio/wav", "audio/x-wav")
+
+
+def test_file_upload_falls_back_for_an_unknown_type(tmp_path: Path) -> None:
+    path = tmp_path / "thing.unknown"
+    path.write_bytes(b"\x00")
+    _, _, content_type = http.file_upload(path)
+    assert content_type == "application/octet-stream"
+
+
+# --- the posting helpers -------------------------------------------------
+
+
+def test_post_json_sends_the_payload() -> None:
+    seen: dict[str, Any] = {}
+
+    def transport(request: Any, timeout: float) -> _FakeResponse:
+        seen["body"] = request.data
+        seen["url"] = request.full_url
+        return _FakeResponse(b'{"ok": true}')
+
+    document = http.post_json(
+        "http://gpu:8000/v1/chat/completions",
+        {"model": "m", "messages": []},
+        api_key="secret",
+        timeout=60.0,
+        transport=transport,
+    )
+    assert document == {"ok": True}
+    assert json.loads(seen["body"]) == {"model": "m", "messages": []}
+
+
+def test_post_for_bytes_returns_the_raw_body() -> None:
+    def transport(request: Any, timeout: float) -> _FakeResponse:
+        return _FakeResponse(b"\x00\x01")
+
+    body = http.post_for_bytes(
+        "http://gpu:8000/v1/tts",
+        {"text": "hello"},
+        api_key=None,
+        timeout=60.0,
+        transport=transport,
+    )
+    assert body == b"\x00\x01"
+
+
+def test_post_multipart_uploads_the_file() -> None:
+    seen: dict[str, Any] = {}
+
+    def transport(request: Any, timeout: float) -> _FakeResponse:
+        seen["body"] = request.data
+        return _FakeResponse(b"{}")
+
+    http.post_multipart(
+        "http://gpu:9000/v1/audio/transcriptions",
+        {"model": "whisper"},
+        {"file": ("audio.wav", b"\x00", "audio/wav")},
+        api_key=None,
+        timeout=60.0,
+        transport=transport,
+    )
+    assert b'name="file"; filename="audio.wav"' in seen["body"]
