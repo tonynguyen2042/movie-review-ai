@@ -752,11 +752,11 @@ tests/unit/test_orchestrator_stage_wiring.py
 
 **Acceptance criteria**
 
-- [ ] a job whose narration is far from the target ends in `NEEDS_REVIEW`, not `COMPLETED`
-- [ ] the gate reports `evidence_coverage`, `timeline_consistency` and `character_consistency`
-- [ ] `quality-report.json` is written for the job
-- [ ] `validate_render` runs and its findings reach the report
-- [ ] `pytest -q` passes
+- [x] a job whose narration is far from the target ends in `NEEDS_REVIEW`, not `COMPLETED`
+- [x] the gate reports `evidence_coverage`, `timeline_consistency` and `character_consistency`
+- [x] `quality-report.json` is written for the job
+- [x] `validate_render` runs and its findings reach the report
+- [x] `pytest -q` passes
 
 ---
 

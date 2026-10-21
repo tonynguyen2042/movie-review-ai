@@ -807,16 +807,78 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
     def quality_fn(ctx: PipelineContext) -> Any:
         from movie_review.domain import QualityMetric
+        from movie_review.quality.characters import character_consistency
+        from movie_review.quality.coverage import evidence_coverage
         from movie_review.quality.gates import run_quality_gate
+        from movie_review.quality.report import build_quality_report
+        from movie_review.quality.timeline import timeline_consistency
+        from movie_review.quality.visual import visual_alignment
+        from movie_review.rendering.manifest import read_manifest
+        from movie_review.rendering.planner import plan_visuals
+        from movie_review.rendering.validate import validate_render
+        from movie_review.storage import repositories as repo
+        from movie_review.tts.reconcile import measure_wav
 
-        # Build metrics
-        metrics: list[QualityMetric] = []
-        # ... compute metrics from artifacts
+        job_dir = Path(ctx.jobs_dir) / ctx.job_id
+
+        # The metrics come from the persisted rows, not from a hard-coded
+        # list. The gate thresholds in quality/gates.py -- evidence coverage
+        # 90, timeline consistency 95, character consistency 95 -- are only
+        # ever consulted for a metric that exists, so a stage that computed
+        # none of them let every job through as COMPLETED.
+        claims = repo.list_claims(ctx.conn, ctx.job_id)
+        scenes = repo.list_scenes(ctx.conn, ctx.job_id)
+        events = repo.list_events(ctx.conn, ctx.job_id)
+        characters = repo.list_characters(ctx.conn, ctx.job_id)
+        mentions = repo.list_mentions(ctx.conn, ctx.job_id)
+        speaker_links = repo.list_speaker_links(ctx.conn, ctx.job_id)
+
+        metrics: list[QualityMetric] = [
+            evidence_coverage(claims),
+            timeline_consistency(events, scenes),
+            character_consistency(characters, mentions, speaker_links, events, scenes),
+        ]
+
+        # Visual alignment compares the plan against what was rendered, so it
+        # needs both the manifest and the plan the clips were chosen from.
+        manifest_path = job_dir / "render" / "render-manifest.json"
+        if manifest_path.is_file():
+            manifest = read_manifest(manifest_path)
+            analyses = {a.scene_id: a for a in repo.list_scene_analyses(ctx.conn, ctx.job_id)}
+            plan = plan_visuals(load_effective_script(ctx), scenes, analyses, events)
+            metrics.append(visual_alignment(plan, manifest))
+
+        # The duration is measured from the narration, not assumed to be the
+        # target. Comparing the target with itself always yields a perfect
+        # score, which is how the duration gate passed every job.
+        narration_wav = job_dir / "tts" / "narration.wav"
+        actual_seconds = measure_wav(narration_wav) if narration_wav.is_file() else 0.0
 
         target_seconds = ctx.settings.pipeline.review.target_duration_minutes * 60
-        actual_seconds = target_seconds  # would measure actual
 
-        return run_quality_gate(metrics, actual_seconds, target_seconds, ctx)
+        gate = run_quality_gate(metrics, actual_seconds, target_seconds, ctx)
+
+        # The render is validated against the manifest it was built from, and
+        # the findings reach the report. A job whose video is missing or whose
+        # segments do not line up is not a job that passed.
+        validation = None
+        if manifest_path.is_file():
+            validation = validate_render(
+                job_dir / "render" / "review.mp4",
+                read_manifest(manifest_path),
+                narration_wav if narration_wav.is_file() else None,
+                job_dir / "render" / "review.srt",
+            )
+
+        build_quality_report(
+            ctx.job_id,
+            gate.metrics,
+            gate,
+            validation,
+            ctx.jobs_dir,
+            ctx.conn,
+        )
+        return gate
 
     return {
         "ingest": ingest_fn,
