@@ -1340,11 +1340,11 @@ tests/unit/test_vision_parallel.py   (new)
 
 **Acceptance criteria**
 
-- [ ] scenes in a batch are analysed concurrently
-- [ ] the results keep scene order
-- [ ] continuity context still comes from the previous batch
-- [ ] the concurrency limit is configurable and defaults to a safe value
-- [ ] `pytest -q` passes
+- [x] scenes in a batch are analysed concurrently
+- [x] the results keep scene order
+- [x] continuity context still comes from the previous batch
+- [x] the concurrency limit is configurable and defaults to a safe value
+- [x] `pytest -q` passes
 
 ---
 

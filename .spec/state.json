@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T12:32:42.107646+00:00",
+  "updated_at": "2026-10-21T12:37:45.782618+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1565,12 +1565,14 @@
       "title": "parallelise the vision stage",
       "type": "perf",
       "branch": "T138-parallel-vision-stage",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T12:37:45.782618+00:00",
+      "updated_at": "2026-10-21T12:37:45.782618+00:00"
     },
     "T139": {
       "title": "parallelise the events stage",
