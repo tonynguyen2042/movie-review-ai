@@ -232,6 +232,43 @@ def delete_scenes(conn: sqlite3.Connection, job_id: str) -> int:
     return cursor.rowcount
 
 
+def save_scene_analyses(
+    conn: sqlite3.Connection, job_id: str, analyses: list[SceneAnalysis]
+) -> None:
+    """Persist many scene analyses in one transaction.
+
+    The vision stage writes one row per scene -- about a thousand for a
+    feature film -- and each write was its own committed transaction.
+    """
+    if not analyses:
+        return
+    with conn:
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO scene_analyses
+                (job_id, scene_id, location, characters_json, actions_json,
+                 objects_json, emotions_json, visual_events_json,
+                 importance, confidence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    job_id,
+                    analysis.scene_id,
+                    analysis.location,
+                    json.dumps(analysis.characters),
+                    json.dumps(analysis.actions),
+                    json.dumps(analysis.objects),
+                    json.dumps(analysis.emotions),
+                    json.dumps(analysis.visual_events),
+                    analysis.importance,
+                    analysis.confidence,
+                )
+                for analysis in analyses
+            ],
+        )
+
+
 def save_scene_analysis(conn: sqlite3.Connection, job_id: str, analysis: SceneAnalysis) -> None:
     """Persist one scene's visual analysis.
 
@@ -546,6 +583,36 @@ def save_mention(conn: sqlite3.Connection, job_id: str, mention: CharacterMentio
         )
 
 
+def save_mentions(conn: sqlite3.Connection, job_id: str, mentions: list[CharacterMention]) -> None:
+    """Persist many character mentions in one transaction.
+
+    A mention is written once per (character, segment) pair -- about 15000
+    times for a feature film -- and each write was its own committed
+    transaction. One statement for the whole list turns that into one
+    commit.
+    """
+    if not mentions:
+        return
+    with conn:
+        conn.executemany(
+            """
+            INSERT INTO character_mentions
+                (job_id, mention, source_segment_id, timestamp, character_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    job_id,
+                    mention.mention,
+                    mention.source_segment_id,
+                    mention.timestamp,
+                    mention.character_id,
+                )
+                for mention in mentions
+            ],
+        )
+
+
 def list_mentions(conn: sqlite3.Connection, job_id: str) -> list[CharacterMention]:
     rows = conn.execute(
         "SELECT * FROM character_mentions WHERE job_id = ? ORDER BY timestamp", (job_id,)
@@ -669,6 +736,47 @@ def save_event(conn: sqlite3.Connection, job_id: str, event: Event) -> None:
                 event.importance,
                 json.dumps(event.evidence),
             ),
+        )
+
+
+def save_events(conn: sqlite3.Connection, job_id: str, events: list[Event]) -> None:
+    """Persist many events in one transaction.
+
+    The events stage writes one row per event -- hundreds for a feature
+    film -- and each write was its own committed transaction.
+    """
+    if not events:
+        return
+    with conn:
+        conn.executemany(
+            """
+            INSERT INTO events
+                (job_id, id, type, timestamp, characters_json, location,
+                 description, importance, evidence_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id, id) DO UPDATE SET
+                type = excluded.type,
+                timestamp = excluded.timestamp,
+                characters_json = excluded.characters_json,
+                location = excluded.location,
+                description = excluded.description,
+                importance = excluded.importance,
+                evidence_json = excluded.evidence_json
+            """,
+            [
+                (
+                    job_id,
+                    event.id,
+                    event.type.value,
+                    event.timestamp,
+                    json.dumps(event.characters),
+                    event.location,
+                    event.description,
+                    event.importance,
+                    json.dumps(event.evidence),
+                )
+                for event in events
+            ],
         )
 
 

@@ -133,5 +133,6 @@ def save_discovery(conn: sqlite3.Connection, job_id: str, result: DiscoveryResul
     """Persist discovery output through the T027 repositories."""
     for character in result.characters:
         repo.save_character(conn, job_id, character)
-    for mention in result.mentions:
-        repo.save_mention(conn, job_id, mention)
+    # One transaction for every mention: a mention is written once per
+    # (character, segment) pair, and each write was its own commit.
+    repo.save_mentions(conn, job_id, result.mentions)

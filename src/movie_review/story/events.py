@@ -161,8 +161,9 @@ def run_event_extraction(
                 ctx.manager.fail(ctx.job_id, STAGE_NAME, f"invalid event: {exc}")
             raise EventExtractionError(f"Invalid extracted event: {exc}") from exc
 
-    for event in events:
-        repo.save_event(ctx.conn, ctx.job_id, event)
+    # One transaction for the whole stage: the events stage writes one row
+    # per event, and each write was its own commit.
+    repo.save_events(ctx.conn, ctx.job_id, events)
     document = {
         "job_id": ctx.job_id,
         "stage": STAGE_NAME,

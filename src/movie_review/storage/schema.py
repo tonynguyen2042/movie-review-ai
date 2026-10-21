@@ -5,7 +5,7 @@ artifacts. Later tasks add their tables as new migration versions; existing
 statements are append-only history and must not be edited.
 """
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 MIGRATION_1 = [
     """
@@ -233,6 +233,26 @@ MIGRATION_10 = [
     """,
 ]
 
+MIGRATION_11 = [
+    # The three tables that grow per job and are read back per job. Without
+    # an index, listing a job's mentions or relationships was a full table
+    # scan of every job's rows. `character_mentions` is written once per
+    # (character, segment) pair -- about 15000 times for a feature film --
+    # and the artifacts table is read on every validation.
+    """
+    CREATE INDEX IF NOT EXISTS idx_mentions_job
+        ON character_mentions (job_id, timestamp)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_relationships_job
+        ON relationships (job_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_artifacts_job
+        ON artifacts (job_id)
+    """,
+]
+
 MIGRATIONS: dict[int, list[str]] = {
     1: MIGRATION_1,
     2: MIGRATION_2,
@@ -244,4 +264,5 @@ MIGRATIONS: dict[int, list[str]] = {
     8: MIGRATION_8,
     9: MIGRATION_9,
     10: MIGRATION_10,
+    11: MIGRATION_11,
 }
