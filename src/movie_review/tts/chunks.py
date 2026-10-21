@@ -160,6 +160,22 @@ def synthesize_chunks(
     return results
 
 
+def paragraph_durations(results: list[ChunkResult]) -> dict[str, float]:
+    """Measured narration seconds per paragraph id.
+
+    A paragraph is split into several chunks when it is overlong, so its
+    duration is the sum of its chunks'. The numbers are measured from the
+    synthesized audio, never estimated from the text: the render timeline,
+    the subtitle timings and the source-footage controls all depend on how
+    long the narration actually is.
+    """
+    totals: dict[str, float] = {}
+    for result in results:
+        paragraph_id = result.chunk.paragraph_id
+        totals[paragraph_id] = totals.get(paragraph_id, 0.0) + result.duration_seconds
+    return totals
+
+
 def collect_chunk_results(
     chunks: list[TTSChunk],
     jobs_dir: str | Path,

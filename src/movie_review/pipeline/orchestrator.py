@@ -709,9 +709,15 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
     def render_manifest_fn(ctx: PipelineContext) -> Any:
         from movie_review.rendering.clips import select_clips
-        from movie_review.rendering.manifest import assemble_manifest
+        from movie_review.rendering.manifest import ManifestError, assemble_manifest
         from movie_review.rendering.planner import plan_visuals
         from movie_review.storage import repositories as repo
+        from movie_review.tts.chunks import (
+            DEFAULT_VOICE,
+            collect_chunk_results,
+            paragraph_durations,
+            plan_chunks,
+        )
 
         script = load_effective_script(ctx)
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
@@ -724,8 +730,26 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         # Plan visuals
         visual_plan = plan_visuals(script, scenes, analyses, events)
 
-        # Need narration timings - simplified for now
-        narration_seconds = {p.id: 10.0 for p in paragraphs}
+        # The narration timings are measured from the synthesized audio, not
+        # invented. They are the only source of the segment durations in the
+        # manifest, so the timeline, the source-footage controls, the subtitle
+        # timings and the renderer's own duration check all depend on them.
+        #
+        # The chunks are re-planned rather than carried in memory: the
+        # manifest is its own retryable stage, and the plan is positional, so
+        # the same script and voice reproduce the same chunk ids. Each file is
+        # then measured, so a chunk that was truncated or replaced is reported
+        # at its real length.
+        planned = plan_chunks(script, voice=DEFAULT_VOICE)
+        narration_seconds = paragraph_durations(
+            collect_chunk_results(planned, ctx.jobs_dir, ctx.job_id)
+        )
+        missing = [p.id for p in paragraphs if p.id not in narration_seconds]
+        if missing:
+            # Guessing a duration here would produce a timeline that does not
+            # match the audio, and a render that fails its own duration check
+            # with no explanation. Say what is missing instead.
+            raise ManifestError(f"No measured narration for paragraph(s): {', '.join(missing)}")
 
         # Resolve each paragraph's top-ranked scene into a concrete source range.
         # The planner ranks candidates; select_clips turns the top one into an

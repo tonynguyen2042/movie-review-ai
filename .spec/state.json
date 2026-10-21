@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T04:37:34.882441+00:00",
+  "updated_at": "2026-10-21T04:42:48.350744+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1292,12 +1292,14 @@
       "title": "render manifest uses measured narration",
       "type": "fix",
       "branch": "T117-measured-narration-timings",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T04:42:48.350744+00:00",
+      "updated_at": "2026-10-21T04:42:48.350744+00:00"
     },
     "T118": {
       "title": "quality gate computes real metrics",

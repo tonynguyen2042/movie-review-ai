@@ -721,10 +721,10 @@ tests/unit/test_orchestrator_stage_wiring.py
 
 **Acceptance criteria**
 
-- [ ] manifest segment durations equal the measured narration durations
-- [ ] the stage raises a classified error when no narration has been measured
-- [ ] a 3-paragraph script no longer produces a 30.0 s manifest
-- [ ] `pytest -q` passes
+- [x] manifest segment durations equal the measured narration durations
+- [x] the stage raises a classified error when no narration has been measured
+- [x] a 3-paragraph script no longer produces a 30.0 s manifest
+- [x] `pytest -q` passes
 
 ---
 
