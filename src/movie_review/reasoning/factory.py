@@ -32,6 +32,7 @@ def build_reasoning_adapter(spec: ModelSpec, *, max_tokens: int = 2048) -> Reaso
             api_key=spec.resolved_api_key(),
             timeout_seconds=spec.timeout_seconds,
             max_tokens=max_tokens,
+            generation=spec.generation,
         )
 
-    return QwenReasoningAdapter(spec.model, max_tokens=max_tokens)
+    return QwenReasoningAdapter(spec.model, max_tokens=max_tokens, generation=spec.generation)

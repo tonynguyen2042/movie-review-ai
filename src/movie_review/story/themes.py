@@ -16,7 +16,7 @@ from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.cache.manager import CacheManager
 from movie_review.config.prompts import load_prompt, render
-from movie_review.config.settings import ModelSpec
+from movie_review.config.settings import ModelSpec, generation_config
 from movie_review.domain import Artifact, Event, Theme
 from movie_review.reasoning.factory import build_reasoning_adapter
 from movie_review.reasoning.port import ReasoningPort
@@ -90,6 +90,7 @@ def extract_themes(
         input_hash=artifacts.sha256_bytes(text.encode("utf-8")),
         model_id=model_id,
         prompt_version=prompt.cache_version,
+        generation_config=generation_config(spec),
     )
     key = cache_key(cache_spec)
     try:

@@ -52,8 +52,8 @@ def save_job(conn: sqlite3.Connection, job: Job) -> None:
             INSERT INTO jobs
                 (job_id, input_file, status, failed_stage, error,
                  retry_count, style, spoilers, target_seconds, output_dir,
-                 created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 keep_intermediates, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(job_id) DO UPDATE SET
                 input_file = excluded.input_file,
                 status = excluded.status,
@@ -64,6 +64,7 @@ def save_job(conn: sqlite3.Connection, job: Job) -> None:
                 spoilers = excluded.spoilers,
                 target_seconds = excluded.target_seconds,
                 output_dir = excluded.output_dir,
+                keep_intermediates = excluded.keep_intermediates,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at
             """,
@@ -78,6 +79,7 @@ def save_job(conn: sqlite3.Connection, job: Job) -> None:
                 job.spoilers,
                 job.target_seconds,
                 job.output_dir,
+                1 if job.keep_intermediates else 0,
                 job.created_at.isoformat(),
                 job.updated_at.isoformat(),
             ),
@@ -100,8 +102,8 @@ def insert_job(conn: sqlite3.Connection, job: Job) -> bool:
             INSERT INTO jobs
                 (job_id, input_file, status, failed_stage, error,
                  retry_count, style, spoilers, target_seconds, output_dir,
-                 created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 keep_intermediates, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(job_id) DO NOTHING
             """,
             (
@@ -115,6 +117,7 @@ def insert_job(conn: sqlite3.Connection, job: Job) -> bool:
                 job.spoilers,
                 job.target_seconds,
                 job.output_dir,
+                1 if job.keep_intermediates else 0,
                 job.created_at.isoformat(),
                 job.updated_at.isoformat(),
             ),
@@ -137,6 +140,9 @@ def get_job(conn: sqlite3.Connection, job_id: str) -> Job | None:
         spoilers=row["spoilers"] if row["spoilers"] is not None else "full",
         target_seconds=row["target_seconds"],
         output_dir=row["output_dir"],
+        keep_intermediates=bool(row["keep_intermediates"])
+        if "keep_intermediates" in row.keys()
+        else False,
         created_at=_parse_dt(row["created_at"]),
         updated_at=_parse_dt(row["updated_at"]),
     )
@@ -909,3 +915,14 @@ def list_artifacts(
             (job_id, stage),
         ).fetchall()
     return [_row_to_artifact(row) for row in rows]
+
+
+def delete_artifact(conn: sqlite3.Connection, artifact_id: str) -> bool:
+    """Remove one artifact record; returns whether a row was removed.
+
+    `--force` drops the record of what a stage produced, so the stage runs
+    again and rewrites it.
+    """
+    with conn:
+        cursor = conn.execute("DELETE FROM artifacts WHERE artifact_id = ?", (artifact_id,))
+    return cursor.rowcount > 0

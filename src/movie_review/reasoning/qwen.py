@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import cast
 
+from movie_review.config.settings import GenerationSettings
 from movie_review.reasoning.port import (
     ReasoningError,
     ReasoningPort,
@@ -54,11 +55,16 @@ class QwenReasoningAdapter(ReasoningPort):
     """Qwen reasoning family via MLX (model name supplied by caller)."""
 
     def __init__(
-        self, model: str, backend: RawBackend | None = None, max_tokens: int = 2048
+        self,
+        model: str,
+        backend: RawBackend | None = None,
+        max_tokens: int = 2048,
+        generation: GenerationSettings | None = None,
     ) -> None:
         self._model = model
         self._backend = backend
         self._max_tokens = max_tokens
+        self._generation = generation or GenerationSettings()
 
     @property
     def model(self) -> str:
@@ -70,10 +76,13 @@ class QwenReasoningAdapter(ReasoningPort):
             self._backend = _load_mlx_backend(self._model, self._max_tokens)
         return self._backend
 
-    def complete(self, prompt: str, *, temperature: float = 0.4) -> str:
+    def complete(self, prompt: str, *, temperature: float | None = None) -> str:
         if not prompt.strip():
             raise ReasoningError("Prompt must not be empty")
-        return self._ensure_loaded()(prompt, temperature)
+        return self._ensure_loaded()(
+            prompt,
+            self._generation.temperature if temperature is None else temperature,
+        )
 
     def unload(self) -> None:
         """Drop the backend so its memory can be reclaimed (plan section 6)."""

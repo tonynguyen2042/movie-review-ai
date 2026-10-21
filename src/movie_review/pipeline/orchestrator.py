@@ -17,7 +17,7 @@ from typing import Any
 from movie_review.artifacts import ArtifactRecord, IntegrityReport
 from movie_review.artifacts import manager as artifacts_manager
 from movie_review.cache.manager import CacheManager
-from movie_review.config.settings import AppSettings
+from movie_review.config.settings import AppSettings, GenerationSettings
 from movie_review.domain import JobStatus, ReviewScript
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.recovery import recovery_plan
@@ -290,6 +290,7 @@ def _build_context(
     profile: str | None = None,
     source_language: str | None = None,
     target_language: str | None = None,
+    generation: GenerationSettings | None = None,
 ) -> PipelineContext:
     """Build runtime context from settings and job database.
 
@@ -307,7 +308,7 @@ def _build_context(
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
 
-    settings = load_settings(profile=profile)
+    settings = load_settings(profile=profile, generation=generation)
     data_dir = Path(settings.paths.data_dir)
     resolved_db = Path(db_path) if db_path else data_dir / "jobs.db"
     conn = sqlite3.connect(str(bootstrap(resolved_db)))
@@ -344,6 +345,7 @@ def run_pipeline(
     on_work: Callable[[str, WorkProgress], None] | None = None,
     source_language: str | None = None,
     target_language: str | None = None,
+    generation: GenerationSettings | None = None,
 ) -> list[StageResult]:
     """Execute pipeline stages in sequence with optional start/end bounds.
 
@@ -367,6 +369,7 @@ def run_pipeline(
         profile=profile,
         source_language=source_language,
         target_language=target_language,
+        generation=generation,
     )
     try:
         results: list[StageResult] = []
@@ -398,6 +401,21 @@ def run_pipeline(
         # database file, which matters on Windows where an open handle keeps
         # the file locked.
         ctx.conn.close()
+
+
+def _cleanup_intermediates(ctx: PipelineContext) -> None:
+    """Drop the frame images the job has finished with.
+
+    README section 83: the important artifacts are kept and the temporary
+    frames are deleted after a successful analysis. A job that asked to keep
+    them keeps them.
+    """
+    from movie_review.pipeline.cleanup import cleanup_intermediates
+
+    job = ctx.manager.get(ctx.job_id)
+    if job.keep_intermediates:
+        return
+    cleanup_intermediates(Path(ctx.jobs_dir) / ctx.job_id)
 
 
 def _mix_music(ctx: StageContext, narration_wav: Path) -> Path:
@@ -664,6 +682,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             ),
             on_progress=_sub_step(ctx),
         )
+        return result
 
     def characters_fn(ctx: PipelineContext) -> Any:
         from movie_review.characters.discovery import discover_characters, save_discovery
@@ -1180,6 +1199,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             script=script,
             manifest=_final_manifest(ctx, job, metrics),
         )
+        # The job is done, so the regenerable intermediates go. A job that
+        # asked to keep them keeps them.
+        _cleanup_intermediates(ctx)
         return gate
 
     return {
@@ -1216,6 +1238,7 @@ def resume_job(
     on_work: Callable[[str, WorkProgress], None] | None = None,
     source_language: str | None = None,
     target_language: str | None = None,
+    generation: GenerationSettings | None = None,
 ) -> list[StageResult]:
     """Resume a job from its recovery point.
 
@@ -1227,7 +1250,7 @@ def resume_job(
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
 
-    settings = load_settings()
+    settings = load_settings(generation=generation)
     resolved_db = Path(db_path) if db_path else Path(settings.paths.data_dir) / "jobs.db"
     conn = sqlite3.connect(str(bootstrap(resolved_db)))
     conn.execute("PRAGMA foreign_keys = ON")
@@ -1270,6 +1293,7 @@ def resume_job(
         on_work=on_work,
         source_language=source_language,
         target_language=target_language,
+        generation=generation,
     )
 
 

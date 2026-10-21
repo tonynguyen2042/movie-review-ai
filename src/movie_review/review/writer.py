@@ -17,7 +17,7 @@ from typing import Any
 from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.config.prompts import load_prompt, render
-from movie_review.config.settings import ModelSpec
+from movie_review.config.settings import ModelSpec, generation_config
 from movie_review.domain import Artifact, JobStatus, ReviewPlan, ReviewScript, ReviewSection
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.models.resources import run_with_oom_recovery
@@ -184,6 +184,7 @@ def write_script(
                 input_hash=artifacts.sha256_bytes(text.encode("utf-8")),
                 model_id=model_id,
                 prompt_version=prompt.cache_version,
+                generation_config=generation_config(spec),
             )
             key = cache_key(cache_spec)
             cached = ctx.cache.lookup_json(key)

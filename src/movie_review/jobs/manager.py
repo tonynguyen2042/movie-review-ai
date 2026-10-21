@@ -35,6 +35,7 @@ class JobManager:
         spoilers: str = "full",
         target_seconds: float | None = None,
         output_dir: str | None = None,
+        keep_intermediates: bool = False,
     ) -> Job:
         """Persist a new job in ``CREATED`` with a unique daily-sequenced ID.
 
@@ -53,6 +54,7 @@ class JobManager:
                 spoilers=spoilers,
                 target_seconds=target_seconds,
                 output_dir=output_dir,
+                keep_intermediates=keep_intermediates,
             )
             # The insert is the test, not a separate lookup. Checking for a
             # free id and then inserting is not atomic, so two concurrent

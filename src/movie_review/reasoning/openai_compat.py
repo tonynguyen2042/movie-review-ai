@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from movie_review.config.settings import GenerationSettings
 from movie_review.reasoning.port import (
     ReasoningError,
     ReasoningPort,
@@ -57,6 +58,7 @@ class OpenAICompatAdapter(ReasoningPort):
         max_tokens: int = 2048,
         transport: RawTransport | None = None,
         system_prompt: str | None = None,
+        generation: GenerationSettings | None = None,
     ) -> None:
         if not base_url:
             raise ReasoningError("base_url is required for a remote reasoning adapter")
@@ -67,6 +69,7 @@ class OpenAICompatAdapter(ReasoningPort):
         self._max_tokens = max_tokens
         self._transport = transport
         self._system_prompt = system_prompt
+        self._generation = generation or GenerationSettings()
 
     @property
     def model(self) -> str:
@@ -87,6 +90,9 @@ class OpenAICompatAdapter(ReasoningPort):
             "model": self._model,
             "messages": messages,
             "temperature": temperature,
+            # The seed and the top-p are what make a run reproducible.
+            "seed": self._generation.seed,
+            "top_p": self._generation.top_p,
             "max_tokens": self._max_tokens,
             # Ask for JSON when we can; extract_json_output still tolerates prose.
             "stream": False,
@@ -102,7 +108,7 @@ class OpenAICompatAdapter(ReasoningPort):
             headers["Authorization"] = f"Bearer {self._api_key}"
         return headers
 
-    def complete(self, prompt: str, *, temperature: float = 0.4) -> str:
+    def complete(self, prompt: str, *, temperature: float | None = None) -> str:
         """POST one chat completion and return the assistant text.
 
         The request goes through the shared transport, so it reuses a pooled
@@ -114,7 +120,10 @@ class OpenAICompatAdapter(ReasoningPort):
             raise ReasoningError("Prompt must not be empty")
 
         url = build_chat_url(self._base_url)
-        payload = self._payload(prompt, temperature)
+        payload = self._payload(
+            prompt,
+            self._generation.temperature if temperature is None else temperature,
+        )
 
         try:
             document = http.post_json(
