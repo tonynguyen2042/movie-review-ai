@@ -3,10 +3,6 @@
 # Model identities live in models.yaml; only the profile NAME is selected here.
 # Source-footage limits are product controls, NOT a legal guarantee.
 
-runtime:
-  backend: mlx
-  device: gpu
-
 models:
   profile: balanced
 
@@ -23,7 +19,6 @@ pipeline:
     medium_frames: 6
     long_frames: 12
   diarization: true
-  evidence_required: true
   review:
     target_duration_minutes: 20
     target_wpm: 150
@@ -53,10 +48,6 @@ music:
 
 privacy:
   cloud_ai: false
-  telemetry: false
-
-memory:
-  reserve_mb: 8192
 
 prompts:
   # The pinned version of every prompt that exists. A prompt that is not
@@ -76,7 +67,6 @@ prompts:
 
 logging:
   level: INFO
-  json_output: true
 
 media:
   ffmpeg: ffmpeg

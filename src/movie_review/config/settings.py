@@ -61,13 +61,6 @@ def read_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
-class RuntimeSettings(BaseModel):
-    """Model runtime backend selection."""
-
-    backend: str = "mlx"
-    device: str = "gpu"
-
-
 class GenerationSettings(BaseModel):
     """How a model call is sampled (README sections 73 and 74).
 
@@ -276,8 +269,9 @@ class PipelineSettings(BaseModel):
 
     scene_detection: SceneDetectionSettings = SceneDetectionSettings()
     visual_sampling: VisualSamplingSettings = VisualSamplingSettings()
+    #: Whether the diarization stage runs. The speakers are only needed for
+    #: the speaker-to-character linking.
     diarization: bool = True
-    evidence_required: bool = True
     review: ReviewSettings = ReviewSettings()
     rendering: RenderingSettings = RenderingSettings()
 
@@ -315,16 +309,17 @@ class PathsSettings(BaseModel):
 
 
 class PrivacySettings(BaseModel):
-    """Local-first defaults: nothing leaves the machine unless enabled."""
+    """The local-first privacy switch (P7).
+
+    ``cloud_ai`` gates every remote adapter: a model that would send movie
+    content off this machine is refused while it is off.
+
+    There is no telemetry switch because the project sends no telemetry at
+    all. A flag promising something that does not exist is worse than no
+    flag.
+    """
 
     cloud_ai: bool = False
-    telemetry: bool = False
-
-
-class MemorySettings(BaseModel):
-    """Unified-memory budget reservation for OS/FFmpeg/Python overhead."""
-
-    reserve_mb: PositiveInt = 8192
 
 
 class PromptsSettings(BaseModel):
@@ -334,10 +329,13 @@ class PromptsSettings(BaseModel):
 
 
 class LoggingSettings(BaseModel):
-    """Logging output controls."""
+    """Logging output controls.
+
+    The output is always JSON: the dashboard and the desktop app both read
+    it, and a second format would mean two parsers.
+    """
 
     level: str = "INFO"
-    json_output: bool = True
 
 
 class MediaProxySettings(BaseModel):
@@ -467,18 +465,15 @@ class AppSettings(BaseSettings):
         env_prefix=ENV_PREFIX, env_nested_delimiter="__", extra="ignore"
     )
 
-    runtime: RuntimeSettings = RuntimeSettings()
     models: ModelsSettings
     pipeline: PipelineSettings = PipelineSettings()
     source_video: SourceVideoSettings = SourceVideoSettings()
     paths: PathsSettings = PathsSettings()
     music: MusicSettings = MusicSettings()
     privacy: PrivacySettings = PrivacySettings()
-    memory: MemorySettings = MemorySettings()
     prompts: PromptsSettings
     logging: LoggingSettings = LoggingSettings()
     media: MediaSettings = MediaSettings()
-    style: str = "youtube"
 
     @classmethod
     def settings_customise_sources(

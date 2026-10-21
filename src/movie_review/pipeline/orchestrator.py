@@ -506,6 +506,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         job = ctx.manager.get(ctx.job_id)
         if job.status in (JobStatus.CREATED, JobStatus.INGESTING):
             ctx.manager.transition(ctx.job_id, JobStatus.INGESTING)
+        from movie_review.media import ffmpeg as ff
+
+        settings = ctx.settings
         return ingest_movie(
             ctx.movie_path,
             StageContext(
@@ -514,8 +517,11 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
                 conn=ctx.conn,
                 manager=ctx.manager,
                 cache=ctx.cache,
-                settings=ctx.settings,
+                settings=settings,
             ),
+            # The configured ffprobe is used: the setting existed, and the
+            # probe ignored it.
+            probe_fn=lambda path: ff.probe(path, settings.media.ffprobe),
         )
 
     def scenes_fn(ctx: PipelineContext) -> Any:
@@ -719,6 +725,12 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
     def diarization_fn(ctx: PipelineContext) -> Any:
         from movie_review.pipeline.diarization import run_diarization
+
+        if not ctx.settings.pipeline.diarization:
+            # The speakers are only needed for the speaker-to-character
+            # linking, so a deployment that does not need them can turn the
+            # stage off.
+            return None
 
         # The transcript stage writes the dialogue into the audio directory;
         # looking for it in the tts directory meant the stage could never
