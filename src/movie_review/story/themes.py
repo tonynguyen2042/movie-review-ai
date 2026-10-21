@@ -18,6 +18,7 @@ from movie_review.cache.manager import CacheManager
 from movie_review.config.prompts import load_prompt, render
 from movie_review.config.settings import ModelSpec, generation_config
 from movie_review.domain import Artifact, Event, Theme
+from movie_review.pipeline.model_runs import record_model_run
 from movie_review.reasoning.factory import build_reasoning_adapter
 from movie_review.reasoning.port import ReasoningPort
 from movie_review.storage import repositories as repo
@@ -102,7 +103,17 @@ def extract_themes(
             cache_hit = True
         else:
             try:
-                raw = active.complete_json(text)
+                with record_model_run(
+                    conn,
+                    job_id,
+                    STAGE_NAME,
+                    active,
+                    model_id,
+                    prompt_hash=key,
+                    prompt_version=prompt.cache_version,
+                    temperature=spec.generation.temperature,
+                ):
+                    raw = active.complete_json(text)
             except Exception as exc:
                 raise ThemeExtractionError(f"Cannot extract themes: {exc}") from exc
             if not isinstance(raw, list):

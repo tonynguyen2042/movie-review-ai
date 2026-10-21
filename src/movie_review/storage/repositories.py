@@ -26,6 +26,7 @@ from movie_review.domain import (
     Job,
     JobStatus,
     Location,
+    ModelRun,
     Movie,
     MovieMetadata,
     Relationship,
@@ -915,6 +916,68 @@ def list_artifacts(
             (job_id, stage),
         ).fetchall()
     return [_row_to_artifact(row) for row in rows]
+
+
+def save_model_run(conn: sqlite3.Connection, job_id: str, run: ModelRun) -> None:
+    """Record one model invocation."""
+    with conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO model_runs
+                (run_id, job_id, stage, model, runtime, prompt_hash,
+                 prompt_version, input_tokens, output_tokens, duration_ms,
+                 temperature, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run.run_id,
+                job_id,
+                run.stage,
+                run.model,
+                run.runtime,
+                run.prompt_hash,
+                run.prompt_version,
+                run.input_tokens,
+                run.output_tokens,
+                run.duration_ms,
+                run.temperature,
+                run.created_at.isoformat(),
+            ),
+        )
+
+
+def list_model_runs(
+    conn: sqlite3.Connection, job_id: str, stage: str | None = None
+) -> list[ModelRun]:
+    """The recorded model invocations of a job, oldest first."""
+    if stage is None:
+        rows = conn.execute(
+            "SELECT * FROM model_runs WHERE job_id = ? ORDER BY created_at, run_id",
+            (job_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM model_runs WHERE job_id = ? AND stage = ? ORDER BY created_at, run_id",
+            (job_id, stage),
+        ).fetchall()
+    return [_row_to_model_run(row) for row in rows]
+
+
+def _row_to_model_run(row: sqlite3.Row) -> ModelRun:
+    return ModelRun(
+        run_id=row["run_id"],
+        job_id=row["job_id"],
+        stage=row["stage"],
+        model=row["model"],
+        runtime=row["runtime"],
+        prompt_hash=row["prompt_hash"] or "",
+        prompt_version=row["prompt_version"],
+        input_tokens=row["input_tokens"],
+        output_tokens=row["output_tokens"],
+        duration_ms=row["duration_ms"],
+        temperature=row["temperature"],
+        created_at=_parse_dt(row["created_at"]),
+    )
 
 
 def delete_artifact(conn: sqlite3.Connection, artifact_id: str) -> bool:

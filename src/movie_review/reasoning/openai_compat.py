@@ -19,10 +19,12 @@ Security notes:
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from typing import Any
 
 from movie_review.config.settings import GenerationSettings
+from movie_review.domain import ModelUsage
 from movie_review.reasoning.port import (
     ReasoningError,
     ReasoningPort,
@@ -35,6 +37,23 @@ RawTransport = Callable[..., Any]
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
 _USER_AGENT = "movie-review-ai/0.1"
+
+
+def _usage_from(document: Any) -> ModelUsage | None:
+    """The token counts a chat response reports, when it reports them."""
+    if not isinstance(document, dict):
+        return None
+    usage = document.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    if prompt_tokens is None and completion_tokens is None:
+        return None
+    return ModelUsage(
+        input_tokens=int(prompt_tokens) if prompt_tokens is not None else None,
+        output_tokens=int(completion_tokens) if completion_tokens is not None else None,
+    )
 
 
 def build_chat_url(base_url: str) -> str:
@@ -70,11 +89,23 @@ class OpenAICompatAdapter(ReasoningPort):
         self._transport = transport
         self._system_prompt = system_prompt
         self._generation = generation or GenerationSettings()
+        # The usage of the last call. It is thread-local because the vision
+        # and events stages now run their calls concurrently.
+        self._usage = threading.local()
 
     @property
     def model(self) -> str:
         """Configured model identity, as reported by the remote server."""
         return self._model
+
+    @property
+    def runtime(self) -> str:
+        """The runtime serving this model."""
+        return "remote"
+
+    def last_usage(self) -> ModelUsage | None:
+        """The tokens the last call cost, when the server reported them."""
+        return getattr(self._usage, "value", None)
 
     @property
     def base_url(self) -> str:
@@ -138,6 +169,7 @@ class OpenAICompatAdapter(ReasoningPort):
         except http.RemoteProtocolError as exc:
             raise ReasoningError(str(exc)) from exc
 
+        self._usage.value = _usage_from(document)
         return self._extract_text(document, url)
 
     def _extract_text(self, document: Any, url: str) -> str:

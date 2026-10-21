@@ -11,6 +11,8 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any
 
+from movie_review.domain import ModelUsage
+
 
 class ReasoningError(Exception):
     """Base class for reasoning failures."""
@@ -56,6 +58,23 @@ class ReasoningPort(ABC):
         contract rather than something callers should reach for by type check.
         """
         return type(self).__name__
+
+    @property
+    def runtime(self) -> str:
+        """The runtime serving this model: "remote", "mlx" or the adapter's own name.
+
+        It is recorded with every model invocation, because the same
+        checkpoint served by two runtimes does not give the same answer.
+        """
+        return type(self).__name__
+
+    def last_usage(self) -> ModelUsage | None:
+        """The tokens the last call cost, when the runtime reports them.
+
+        A local runtime often cannot, so None means "not reported", not
+        "zero".
+        """
+        return None
 
     @abstractmethod
     def complete(self, prompt: str, *, temperature: float = 0.4) -> str:
