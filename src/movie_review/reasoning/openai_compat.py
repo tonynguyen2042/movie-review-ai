@@ -19,28 +19,21 @@ Security notes:
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from movie_review.reasoning.port import (
     ReasoningError,
     ReasoningPort,
     ReasoningUnavailableError,
 )
+from movie_review.remote import http
 
 # Injected in tests; signature matches urllib.request.urlopen's callable subset.
 RawTransport = Callable[..., Any]
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
 _USER_AGENT = "movie-review-ai/0.1"
-
-
-def _default_transport(request: Request, timeout: float) -> Any:
-    """Perform the HTTP POST via urllib."""
-    return urlopen(request, timeout=timeout)  # noqa: S310 - scheme validated upstream
 
 
 def build_chat_url(base_url: str) -> str:
@@ -110,50 +103,37 @@ class OpenAICompatAdapter(ReasoningPort):
         return headers
 
     def complete(self, prompt: str, *, temperature: float = 0.4) -> str:
-        """POST one chat completion and return the assistant text."""
+        """POST one chat completion and return the assistant text.
+
+        The request goes through the shared transport, so it reuses a pooled
+        connection and retries a transient failure. The adapter used to carry
+        its own copy of the request logic, so the two paths drifted and the
+        reasoning one got neither.
+        """
         if not prompt.strip():
             raise ReasoningError("Prompt must not be empty")
 
         url = build_chat_url(self._base_url)
-        body = json.dumps(self._payload(prompt, temperature)).encode("utf-8")
-        request = Request(url, data=body, headers=self._headers(), method="POST")
+        payload = self._payload(prompt, temperature)
 
-        transport = self._transport or _default_transport
         try:
-            with transport(request, self._timeout) as response:
-                raw = response.read()
-        except HTTPError as exc:
-            # Never echo the request headers: they carry the bearer token.
-            raise ReasoningError(f"Remote reasoning endpoint returned HTTP {exc.code}") from exc
-        except URLError as exc:
-            raise ReasoningUnavailableError(
-                self._model, f"cannot reach {url}: {exc.reason}"
-            ) from exc
-        except TimeoutError as exc:
-            raise ReasoningUnavailableError(
-                self._model, f"request to {url} timed out after {self._timeout}s"
-            ) from exc
+            document = http.post_json(
+                url,
+                payload,
+                api_key=self._api_key,
+                timeout=self._timeout,
+                transport=self._transport,
+            )
+        except http.RemoteUnavailableError as exc:
+            raise ReasoningUnavailableError(self._model, str(exc)) from exc
+        except http.RemoteProtocolError as exc:
+            raise ReasoningError(str(exc)) from exc
 
-        return self._extract_text(raw, url)
+        return self._extract_text(document, url)
 
-    def _extract_text(self, raw: bytes | str, url: str) -> str:
+    def _extract_text(self, document: Any, url: str) -> str:
         """Pull ``choices[0].message.content`` out of the response body."""
-        if isinstance(raw, bytes):
-            try:
-                raw = raw.decode("utf-8")
-            except UnicodeDecodeError as exc:
-                raise ReasoningError(
-                    f"Remote reasoning endpoint returned non-UTF-8 body from {url}"
-                ) from exc
-        try:
-            document = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            preview = raw[:200].replace("\n", " ")
-            raise ReasoningError(
-                f"Remote reasoning endpoint returned invalid JSON from {url}: {preview}"
-            ) from exc
-
-        choices = document.get("choices")
+        choices = document.get("choices") if isinstance(document, dict) else None
         if not isinstance(choices, list) or not choices:
             raise ReasoningError(f"Remote reasoning response from {url} has no choices")
         message = choices[0].get("message") or {}
