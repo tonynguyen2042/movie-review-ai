@@ -288,7 +288,12 @@ def run_event_extraction(
     events = []
     for index, entry in enumerate(ordered, start=1):
         try:
-            events.append(Event(id=f"event_{index:05d}", **entry))  # type: ignore[arg-type]
+            # The model names its own events, and the stages that come after
+            # refer to them by that name. The generated id is only a fallback
+            # for a model that did not name one.
+            payload = {**entry}
+            payload.setdefault("id", f"event_{index:05d}")
+            events.append(Event(**payload))  # type: ignore[arg-type]
         except ValueError as exc:
             if owns_completion:
                 ctx.manager.fail(ctx.job_id, STAGE_NAME, f"invalid event: {exc}")

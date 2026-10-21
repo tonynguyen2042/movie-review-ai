@@ -111,7 +111,7 @@ def run_reconciliation(
         raise ReconciliationError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
         raise ReconciliationError(f"Job {ctx.job_id} failed; resume arrives in T085")
-    owns_completion = job.status is JobStatus.SCRIPT_READY
+    owns_completion = job.status in (JobStatus.SCRIPT_READY, JobStatus.SCRIPT_VERIFIED)
 
     actual = measure_wav(narration_path)
     result = reconcile_script(script, actual, target_seconds, wpm)
@@ -143,6 +143,10 @@ def run_reconciliation(
             action=result.action,
         )
     if owns_completion:
-        ctx.manager.transition(ctx.job_id, JobStatus.SCRIPT_VERIFIED)
+        # The verify stage owns SCRIPT_READY -> SCRIPT_VERIFIED. A job that
+        # never went through it -- an older one, or a run that skipped the
+        # stage -- is still at SCRIPT_READY, so it is moved on here.
+        if job.status is JobStatus.SCRIPT_READY:
+            ctx.manager.transition(ctx.job_id, JobStatus.SCRIPT_VERIFIED)
         ctx.manager.transition(ctx.job_id, JobStatus.AUDIO_READY)
     return result

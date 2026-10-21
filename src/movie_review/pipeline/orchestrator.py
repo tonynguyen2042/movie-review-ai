@@ -701,6 +701,16 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         result = discover_characters(analyses_list, scene_spans, segments)
         save_discovery(ctx.conn, ctx.job_id, result)
 
+        # The job moves on to CHARACTERS_READY. Without this the whole
+        # lifecycle stopped here: every later stage checks the job's status
+        # before it advances it, so the events stage never reached
+        # EVENTS_READY, the story stage never reached STORY_READY, and the
+        # job never got past VISUAL_ANALYSIS_READY. The pipeline produced
+        # every artifact, and the job never reported completion.
+        job = ctx.manager.get(ctx.job_id)
+        if job.status is JobStatus.VISUAL_ANALYSIS_READY:
+            ctx.manager.transition(ctx.job_id, JobStatus.CHARACTERS_READY)
+
         # NOTE: linking characters to visual identities is not implemented.
         # characters.linking currently only provides speaker linking, which the
         # diarization stage already performs. Do not call a function that does
@@ -710,7 +720,10 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
     def diarization_fn(ctx: PipelineContext) -> Any:
         from movie_review.pipeline.diarization import run_diarization
 
-        audio_path = Path(ctx.jobs_dir) / ctx.job_id / "tts" / "dialogue.wav"
+        # The transcript stage writes the dialogue into the audio directory;
+        # looking for it in the tts directory meant the stage could never
+        # find it.
+        audio_path = Path(ctx.jobs_dir) / ctx.job_id / "audio" / "dialogue.wav"
         return run_diarization(audio_path, ctx)
 
     def locations_fn(ctx: PipelineContext) -> Any:
