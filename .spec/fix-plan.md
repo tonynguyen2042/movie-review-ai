@@ -9,29 +9,30 @@ plus direct verification by the reviewer.
 
 | Wave | State | Tasks |
 |---|---|---|
-| 0 — Gate repair | **done** | T113, T114, T115 |
-| 1 — P0 blockers | **done** | T116, T117, T118 |
-| 2 — P1 correctness | 4 of 13 | T120, T121, T122, T123, T124, T126, T127 |
-| 3 — Performance | 0 of 10 | — |
-| 4 — Missing wiring | 0 of 11 | — |
-| 5 — Spec gaps | 0 of 7 | — |
-| 6 — Test infrastructure | 0 of 9 | — |
-| 7 — Docs and cleanup | 0 of 4 | — |
+| 0 - Gate repair | **done** | T113, T114, T115 |
+| 1 - P0 blockers | **done** | T116, T117, T118 |
+| 2 - P1 correctness | **done** | T119-T131 |
+| 3 - Performance | **done** | T132-T141 |
+| 4 - Missing wiring | **done** | T142-T152 |
+| 5 - Spec gaps | 0 of 7 | - |
+| 6 - Test infrastructure | 0 of 9 | - |
+| 7 - Docs and cleanup | 0 of 4 | - |
 
-**14 of 60 tasks merged.** Every one landed as its own branch, its own PR and
+**41 of 60 tasks merged.** Every one landed as its own branch, its own PR and
 its own merge, and every one passed `pytest -q`, `ruff check .`,
 `ruff format --check .` and `mypy .` before it merged.
 
-The suite has gone from **1214 passed / 7 failed** to **1255 passed / 0
+The suite has gone from **1214 passed / 7 failed** to **1400 passed / 0
 failed**, and `mypy .` from 107 errors to none.
 
-The three P0 blockers are gone, the operator's flags reach the pipeline, and the
-verify stage now makes the constitution's P1 (Evidence First) real: a claim
-the evidence does not support is removed, converted or qualified.
+The three P0 blockers are gone, the operator's flags reach the pipeline, and
+the verify stage now makes the constitution's P1 (Evidence First) real: a
+claim the evidence does not support is removed, converted or qualified.
 
-The three P0 blockers are gone: the render stage can now read a manifest,
-the render manifest is timed by the narration that was synthesized, and the
-quality gate can fail a job.
+Every module that was written and never called is now wired: the fact
+checker, the repair loop, the claim extractor, the story graph, the
+diarizer, the speaker linking, the sampling feedback, the music mixer, the
+thumbnail generator, the OOM recovery and the prompt registry.
 
 ## 1. Rules this plan follows
 
