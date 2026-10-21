@@ -989,9 +989,9 @@ tests/unit/test_whisper_language.py   (new)
 
 **Acceptance criteria**
 
-- [ ] the configured language reaches the Whisper call
-- [ ] omitting the language still auto-detects
-- [ ] `pytest -q` passes
+- [x] the configured language reaches the Whisper call
+- [x] omitting the language still auto-detects
+- [x] `pytest -q` passes
 
 ---
 

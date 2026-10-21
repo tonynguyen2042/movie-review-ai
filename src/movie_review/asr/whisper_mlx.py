@@ -59,6 +59,19 @@ def map_segments(
     return mapped
 
 
+def _transcribe_with(mlx_whisper: Any, model: str, audio_path: str, language: str | None) -> Any:
+    """Call Whisper, passing the language through when there is one.
+
+    Without the language, Whisper auto-detects. A job told to transcribe
+    Japanese could then come back in a mis-detected language while the
+    transcript rows and the cache key both recorded the language that was
+    asked for -- so the pipeline believed something the audio did not say.
+    """
+    if language:
+        return mlx_whisper.transcribe(audio_path, path_or_hf_repo=model, language=language)
+    return mlx_whisper.transcribe(audio_path, path_or_hf_repo=model)
+
+
 def _load_mlx_transcriber(model: str) -> RawTranscriber:
     """Build the real MLX transcriber or raise :class:`ModelUnavailableError`."""
     try:
@@ -68,7 +81,7 @@ def _load_mlx_transcriber(model: str) -> RawTranscriber:
 
     def _transcribe(audio_path: str, language: str | None) -> Iterable[RawSegment]:
         try:
-            result = mlx_whisper.transcribe(audio_path, path_or_hf_repo=model)
+            result = _transcribe_with(mlx_whisper, model, audio_path, language)
         except Exception as exc:
             raise ASRError(f"Whisper transcription failed for {audio_path}: {exc}") from exc
         segments = result.get("segments", []) if isinstance(result, dict) else []
