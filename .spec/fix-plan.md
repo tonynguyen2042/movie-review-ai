@@ -88,31 +88,31 @@ repair the gate itself; the middle waves repair the wiring.
 
 | ID | Type | Title | Branch |
 |---|---|---|---|
-| T119 | fix | CLI options reach the pipeline | `task/T119-cli-options-plumbing` |
+| T119 | fix | CLI options reach the pipeline | `task/T119-cli-options-plumbing` | **DONE** |
 | T120 | fix | configured WPM replaces hard-coded 150 | `task/T120-configured-wpm` | **DONE** |
 | T121 | fix | fact-check misquote detection | `task/T121-misquote-any-all` | **DONE** |
 | T122 | fix | render-manifest stage name | `task/T122-render-manifest-stage-name` | **DONE** |
 | T123 | fix | resume validates the stage name | `task/T123-resume-stage-validation` | **DONE** |
 | T124 | fix | publish title path leak | `task/T124-publish-title-stem` | **DONE** |
-| T125 | fix | unload adapters on cache hits | `task/T125-unload-on-cache-hit` |
+| T125 | fix | unload adapters on cache hits | `task/T125-unload-on-cache-hit` | **DONE** |
 | T126 | fix | language reaches local Whisper | `task/T126-whisper-language` | **DONE** |
 | T127 | fix | close SQLite connections | `task/T127-close-sqlite-connections` | **DONE** |
-| T128 | fix | job-ID allocation race | `task/T128-job-id-race` |
-| T129 | fix | scene detection idempotency | `task/T129-scene-detection-idempotent` |
-| T130 | fix | cache keys bind every input | `task/T130-cache-key-inputs` |
-| T131 | fix | CLI exit codes and reporter cleanup | `task/T131-cli-exit-codes` |
+| T128 | fix | job-ID allocation race | `task/T128-job-id-race` | **DONE** |
+| T129 | fix | scene detection idempotency | `task/T129-scene-detection-idempotent` | **DONE** |
+| T130 | fix | cache keys bind every input | `task/T130-cache-key-inputs` | **DONE** |
+| T131 | fix | CLI exit codes and reporter cleanup | `task/T131-cli-exit-codes` | **DONE** |
 
 ### Wave 3 — Performance (measured; 2 h film)
 
 | ID | Type | Title | Branch |
 |---|---|---|---|
-| T132 | perf | retrieval EvidenceIndex — O(S²)→O(S) | `task/T132-retrieval-evidence-index` |
-| T133 | perf | frames manifest O(N²) | `task/T133-frames-manifest-quadratic` |
-| T134 | perf | SQLite WAL + indexes | `task/T134-sqlite-wal-indexes` |
-| T135 | perf | chunked ASR upload | `task/T135-asr-chunked-upload` |
-| T136 | perf | HTTP reuse + transport retry | `task/T136-http-pooling-retry` |
-| T137 | perf | stage-level retry policy | `task/T137-stage-retry-policy` |
-| T138 | perf | parallelise the vision stage | `task/T138-parallel-vision-stage` |
+| T132 | perf | retrieval EvidenceIndex — O(S²)→O(S) | `task/T132-retrieval-evidence-index` | **DONE** |
+| T133 | perf | frames manifest O(N²) | `task/T133-frames-manifest-quadratic` | **DONE** |
+| T134 | perf | SQLite WAL + indexes | `task/T134-sqlite-wal-indexes` | **DONE** |
+| T135 | perf | chunked ASR upload | `task/T135-asr-chunked-upload` | **DONE** |
+| T136 | perf | HTTP reuse + transport retry | `task/T136-http-pooling-retry` | **DONE** |
+| T137 | perf | stage-level retry policy | `task/T137-stage-retry-policy` | **DONE** |
+| T138 | perf | parallelise the vision stage | `task/T138-parallel-vision-stage` | **DONE** |
 | T139 | perf | parallelise the events stage | `task/T139-parallel-events-stage` |
 | T140 | perf | cut prompt token duplication | `task/T140-prompt-token-duplication` |
 | T141 | perf | remaining hot paths | `task/T141-hot-path-cleanups` |
