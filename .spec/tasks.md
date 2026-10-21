@@ -1509,10 +1509,10 @@ tests/unit/test_subtitles_stage.py   (new)
 
 **Acceptance criteria**
 
-- [ ] `review.srt` is written for a completed render
-- [ ] cue timings come from the measured narration, not from word counts
-- [ ] the renderer receives the sidecar
-- [ ] `pytest -q` passes
+- [x] `review.srt` is written for a completed render
+- [x] cue timings come from the measured narration, not from word counts
+- [x] the renderer receives the sidecar
+- [x] `pytest -q` passes
 
 ---
 

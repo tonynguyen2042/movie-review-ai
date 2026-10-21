@@ -52,6 +52,7 @@ STAGE_SEQUENCE: list[tuple[str, str]] = [
     ("tts-concat", "Concatenate narration"),
     ("tts-reconcile", "Reconcile narration duration"),
     ("render-manifest", "Build render manifest"),
+    ("subtitles", "Write the subtitle sidecar"),
     ("render", "Render final video"),
     ("quality", "Run quality gate"),
 ]
@@ -914,6 +915,13 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             max_source_ratio=ctx.settings.source_video.max_source_ratio,
         )
 
+    def subtitles_fn(ctx: PipelineContext) -> Any:
+        from movie_review.pipeline.subtitles import write_subtitles
+
+        manifest_path = Path(ctx.jobs_dir) / ctx.job_id / "render" / "render-manifest.json"
+        script = load_effective_script(ctx)
+        return write_subtitles(manifest_path, script, ctx)
+
     def render_fn(ctx: PipelineContext) -> Any:
         from movie_review.rendering.manifest import read_manifest
         from movie_review.rendering.renderer import render_job
@@ -1039,6 +1047,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         "tts-concat": tts_concat_fn,
         "tts-reconcile": tts_reconcile_fn,
         "render-manifest": render_manifest_fn,
+        "subtitles": subtitles_fn,
         "render": render_fn,
         "quality": quality_fn,
     }.get(stage_name)
