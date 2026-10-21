@@ -849,9 +849,9 @@ tests/unit/test_factcheck.py
 
 **Acceptance criteria**
 
-- [ ] a claim quoting one fabricated and one real line is `CONTRADICTED`
-- [ ] a claim quoting only real lines stays supported
-- [ ] `pytest -q` passes
+- [x] a claim quoting one fabricated and one real line is `CONTRADICTED`
+- [x] a claim quoting only real lines stays supported
+- [x] `pytest -q` passes
 
 ---
 

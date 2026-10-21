@@ -50,11 +50,18 @@ def _dialogue_texts(conn: sqlite3.Connection, job_id: str, refs: list[str]) -> l
 
 
 def _misquoted(claim_text: str, dialogue_texts: list[str]) -> bool:
+    """True when a quoted line appears in none of the cited segments.
+
+    A quote is misquoted when it is absent from *every* cited segment. The
+    previous form asked whether any quote matched any segment, so a claim
+    quoting two lines was judged clean as long as one of them was real --
+    which is exactly the case a fabricated quotation takes.
+    """
     quotes = [normalize_text(q).lower() for q in _QUOTED_RE.findall(claim_text) if q.strip()]
     if not quotes or not dialogue_texts:
         return False
     haystacks = [normalize_text(text).lower() for text in dialogue_texts]
-    return not any(quote in haystack for quote in quotes for haystack in haystacks)
+    return any(all(quote not in haystack for haystack in haystacks) for quote in quotes)
 
 
 def check_claim(claim: Claim, conn: sqlite3.Connection, job_id: str) -> ClaimVerdict:
