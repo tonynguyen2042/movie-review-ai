@@ -99,6 +99,11 @@ class ModelSpec(BaseModel):
     #: reply is indistinguishable from prose once the closing brace is missing,
     #: and the model needs room for every list it was asked to produce.
     max_tokens: int | None = Field(default=None, gt=0)
+    #: Whether this model may be used while ``privacy.cloud_ai`` is off. A
+    #: remote model would send movie content off the machine, so the
+    #: configuration sets this from the privacy flag. A hand-built spec
+    #: defaults to allowed.
+    cloud_ai: bool = True
 
     @property
     def is_remote(self) -> bool:
@@ -152,6 +157,31 @@ class ModelSpec(BaseModel):
                     f"but model {self.model!r} uses {self.backend!r}"
                 )
         return self
+
+
+class CloudAIDisabledError(ValueError):
+    """A remote model was requested while cloud AI is switched off.
+
+    The constitution's P7 makes cloud AI opt-in: no movie content leaves
+    the machine unless an explicitly configured provider is enabled. The
+    flag was declared in the configuration and read by nothing, so a
+    profile that routed a slot at a remote endpoint sent the movie's
+    dialogue and frames off the machine with no warning.
+    """
+
+
+def require_cloud_ai(spec: ModelSpec, cloud_ai: bool, slot: str) -> None:
+    """Refuse to build a remote adapter while cloud AI is switched off.
+
+    Raises:
+        CloudAIDisabledError: the slot is remote and the flag is off.
+    """
+    if spec.is_remote and not cloud_ai:
+        raise CloudAIDisabledError(
+            f"The {slot} slot routes to {spec.base_url!r}, which would send movie "
+            f"content off this machine, but privacy.cloud_ai is false. Set "
+            f"privacy.cloud_ai to true to allow it, or use a local profile."
+        )
 
 
 class ModelsSettings(BaseModel):
@@ -319,6 +349,30 @@ class _ProfileOverrideSource(PydanticBaseSettingsSource):
         return {"models": {"profile": self._profile}}
 
 
+def _with_privacy(profile: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Record the privacy policy on every model slot of the profile.
+
+    The constitution's P7 makes cloud AI opt-in: no movie content leaves
+    the machine unless an explicitly configured provider is enabled. The
+    ``privacy.cloud_ai`` flag was declared in the configuration and read by
+    nothing, so a profile that routed a slot at a remote endpoint sent the
+    movie's dialogue and frames off the machine with no warning.
+
+    The policy travels on the model spec rather than as a separate argument
+    to the adapter factories: the spec is the configured model, and a
+    factory that only has the spec still knows the rule it has to obey.
+    """
+    privacy = data.get("privacy")
+    cloud_ai = bool(privacy.get("cloud_ai", False)) if isinstance(privacy, dict) else False
+    updated: dict[str, Any] = {}
+    for name, spec in profile.items():
+        if isinstance(spec, dict):
+            updated[name] = {**spec, "cloud_ai": cloud_ai}
+        else:
+            updated[name] = spec
+    return updated
+
+
 class _ProfileYamlSource(YamlConfigSettingsSource):
     """YAML source merging ``default.yaml`` with the active ``models.yaml`` profile.
 
@@ -357,7 +411,7 @@ class _ProfileYamlSource(YamlConfigSettingsSource):
         profile = catalog[profile_name]
         if not isinstance(profile, dict):
             raise ValueError(f"Profile {profile_name!r} must be a mapping: {self._models_path}")
-        data["models"] = {**profile, **models_block}
+        data["models"] = {**_with_privacy(profile, data), **models_block}
         return data
 
 

@@ -54,6 +54,9 @@ def _settings_dir(tmp_path, profile: dict[str, Any], selected: str = "remote") -
             {
                 "models": {"profile": selected},
                 "prompts": {"versions": {"scene_analysis": "v1"}},
+                # The remote profile sends content off the machine, so the
+                # test opts in.
+                "privacy": {"cloud_ai": True},
             }
         ),
         encoding="utf-8",
