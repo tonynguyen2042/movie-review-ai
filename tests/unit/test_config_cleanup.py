@@ -33,7 +33,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _config() -> dict[str, Any]:
+def _config__config_cleanup() -> dict[str, Any]:
     with (ROOT / "pyproject.toml").open("rb") as handle:
         loaded: dict[str, Any] = tomllib.load(handle)
         return loaded

@@ -47,7 +47,7 @@ SECTION_52_TABLES = [
 ]
 
 
-def _db(tmp_path: Path) -> sqlite3.Connection:
+def _db__db_tables(tmp_path: Path) -> sqlite3.Connection:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
     return conn
@@ -55,7 +55,7 @@ def _db(tmp_path: Path) -> sqlite3.Connection:
 
 def test_every_named_table_exists(tmp_path: Path) -> None:
     """Fourteen of the twenty-three existed."""
-    conn = _db(tmp_path)
+    conn = _db__db_tables(tmp_path)
     try:
         names = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -68,7 +68,7 @@ def test_every_named_table_exists(tmp_path: Path) -> None:
 
 def test_the_arcs_are_queryable(tmp_path: Path) -> None:
     """They used to be read back out of the JSON artifact."""
-    conn = _db(tmp_path)
+    conn = _db__db_tables(tmp_path)
     try:
         arcs = [
             StoryArc(
@@ -99,7 +99,7 @@ def test_the_arcs_are_queryable(tmp_path: Path) -> None:
 
 
 def test_the_themes_are_queryable(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__db_tables(tmp_path)
     try:
         repo.save_themes(
             conn,
@@ -115,7 +115,7 @@ def test_the_themes_are_queryable(tmp_path: Path) -> None:
 
 
 def test_the_twists_are_queryable(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__db_tables(tmp_path)
     try:
         repo.save_twists(
             conn,
@@ -139,7 +139,7 @@ def test_the_twists_are_queryable(tmp_path: Path) -> None:
 
 def test_saving_replaces_the_previous_set(tmp_path: Path) -> None:
     """A re-run must not leave the old rows behind."""
-    conn = _db(tmp_path)
+    conn = _db__db_tables(tmp_path)
     try:
         repo.save_themes(conn, "job_1", [Theme(theme="first")])
         repo.save_themes(conn, "job_1", [Theme(theme="second")])

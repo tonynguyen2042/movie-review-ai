@@ -18,6 +18,9 @@ from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect, get_schema_version, migrate
 from movie_review.storage.schema import MIGRATION_1, SCHEMA_VERSION
+from tests.helpers import (
+    _fake_extract,
+)
 
 
 class _FakeASR(ASRPort):
@@ -39,7 +42,7 @@ class _FakeASR(ASRPort):
         self.unloaded = True
 
 
-def _segments() -> list[TranscriptSegment]:
+def _segments__transcript() -> list[TranscriptSegment]:
     return [
         TranscriptSegment(
             segment_id="seg_00000",
@@ -60,12 +63,6 @@ def _segments() -> list[TranscriptSegment]:
     ]
 
 
-def _fake_extract(source: Path, dest: Path, ffmpeg: str) -> Path:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(b"fake-wav")
-    return dest
-
-
 @dataclass
 class Harness:
     conn: sqlite3.Connection
@@ -83,7 +80,7 @@ class Harness:
         )
 
 
-def _harness(tmp_path: Path) -> Harness:
+def _harness__transcript(tmp_path: Path) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -91,7 +88,7 @@ def _harness(tmp_path: Path) -> Harness:
         manager.transition("job_1", state)
     source = tmp_path / "m.mp4"
     source.write_bytes(b"source-bytes")
-    port = _FakeASR(_segments())
+    port = _FakeASR(_segments__transcript())
     ctx = StageContext(
         job_id="job_1",
         jobs_dir=tmp_path / "jobs",
@@ -104,7 +101,7 @@ def _harness(tmp_path: Path) -> Harness:
 
 
 def test_stage_happy_path(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__transcript(tmp_path)
     result = harness.stage()
     assert [s.segment_id for s in result.segments] == ["seg_00000", "seg_00001"]
     assert result.cache_hit is False
@@ -118,7 +115,7 @@ def test_stage_happy_path(tmp_path: Path) -> None:
 
 
 def test_stage_second_run_hits_cache(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__transcript(tmp_path)
     harness.stage()
     harness.port.fail_on_call = True
     result = harness.stage()
@@ -126,21 +123,21 @@ def test_stage_second_run_hits_cache(tmp_path: Path) -> None:
 
 
 def test_stage_unknown_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__transcript(tmp_path)
     harness.ctx.job_id = "job_2"
     with pytest.raises(TranscriptError, match="Unknown job"):
         harness.stage()
 
 
 def test_stage_failed_job_rejected(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__transcript(tmp_path)
     harness.ctx.manager.fail("job_1", "scenes", "earlier")
     with pytest.raises(TranscriptError, match="failed"):
         harness.stage()
 
 
 def test_stage_asr_failure_fails_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__transcript(tmp_path)
 
     class _Bad(_FakeASR):
         def transcribe(
@@ -148,7 +145,7 @@ def test_stage_asr_failure_fails_job(tmp_path: Path) -> None:
         ) -> list[TranscriptSegment]:
             raise RuntimeError("backend exploded")
 
-    harness.port = _Bad(_segments())
+    harness.port = _Bad(_segments__transcript())
     with pytest.raises(TranscriptError, match="Cannot transcribe"):
         harness.stage()
     job = harness.ctx.manager.get("job_1")
@@ -158,7 +155,7 @@ def test_stage_asr_failure_fails_job(tmp_path: Path) -> None:
 
 
 def test_stage_hit_regenerates_missing_audio(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__transcript(tmp_path)
     first = harness.stage()
     assert first.audio_path.is_file()
     first.audio_path.unlink()
@@ -169,7 +166,7 @@ def test_stage_hit_regenerates_missing_audio(tmp_path: Path) -> None:
 
 
 def test_stage_rerun_past_transcript_ready(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__transcript(tmp_path)
     harness.stage()
     harness.ctx.manager.transition("job_1", JobStatus.VISUAL_ANALYSIS_READY)
     result = harness.stage()

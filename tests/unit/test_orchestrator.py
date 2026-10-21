@@ -29,7 +29,7 @@ from movie_review.pipeline.orchestrator import (
 from movie_review.storage.database import bootstrap
 
 
-def _ctx(tmp_path: Path) -> PipelineContext:
+def _ctx__orchestrator(tmp_path: Path) -> PipelineContext:
     settings = load_settings()
     db = tmp_path / "jobs.db"
     conn = sqlite3.connect(str(bootstrap(db)))
@@ -66,7 +66,7 @@ def _stub_context(
         target_language: str | None = None,
         generation: object = None,
     ) -> PipelineContext:
-        return _ctx(tmp_path)
+        return _ctx__orchestrator(tmp_path)
 
     return _build
 
@@ -78,13 +78,13 @@ def _stub_context(
 
 def test_pipeline_context_is_a_stage_context() -> None:
     """It must be passable to any stage without conversion."""
-    ctx = _ctx(Path("/tmp"))
+    ctx = _ctx__orchestrator(Path("/tmp"))
     assert isinstance(ctx, StageContext)
 
 
 def test_pipeline_context_exposes_stage_fields() -> None:
     """Every StageContext field is present."""
-    ctx = _ctx(Path("/tmp"))
+    ctx = _ctx__orchestrator(Path("/tmp"))
     for field in ("job_id", "jobs_dir", "cache", "manager", "settings", "conn"):
         assert hasattr(ctx, field)
 
@@ -127,7 +127,7 @@ def test_build_context_uses_jobs_subdirectory(tmp_path, monkeypatch) -> None:
 
 
 def test_run_stage_reports_success() -> None:
-    ctx = _ctx(Path("/tmp"))
+    ctx = _ctx__orchestrator(Path("/tmp"))
     result = run_stage("demo", lambda c: "ok", ctx)
     assert isinstance(result, StageResult)
     assert result.stage == "demo"
@@ -138,7 +138,7 @@ def test_run_stage_reports_success() -> None:
 
 def test_run_stage_captures_failure_without_raising() -> None:
     """A failing stage returns a result instead of propagating."""
-    ctx = _ctx(Path("/tmp"))
+    ctx = _ctx__orchestrator(Path("/tmp"))
 
     def boom(c: PipelineContext) -> None:
         raise ValueError("kaboom")
@@ -157,7 +157,7 @@ def test_run_stage_measures_duration() -> None:
     """
     import time
 
-    ctx = _ctx(Path("/tmp"))
+    ctx = _ctx__orchestrator(Path("/tmp"))
 
     def slow(c: PipelineContext) -> None:
         time.sleep(0.05)

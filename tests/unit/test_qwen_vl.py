@@ -7,6 +7,9 @@ import pytest
 
 from movie_review.vision.port import AnalysisInput, VLMError, VLMPort, VLMUnavailableError
 from movie_review.vision.qwen_vl import QwenVLAdapter, parse_analysis
+from tests.helpers import (
+    _input,
+)
 
 _HAS_MLX = importlib.util.find_spec("mlx_vlm") is not None
 
@@ -33,12 +36,6 @@ def test_parse_rejects_bad_payloads() -> None:
         parse_analysis({"importance": 2.0}, "s")
     with pytest.raises(VLMError):
         parse_analysis(42, "s")  # type: ignore[arg-type]
-
-
-def _input(tmp_path: Path) -> AnalysisInput:
-    frame = tmp_path / "f.jpg"
-    frame.write_bytes(b"fake-frame")
-    return AnalysisInput(scene_id="scene_000001", frames=[frame], dialogue="hi")
 
 
 def test_adapter_uses_injected_analyzer(tmp_path: Path) -> None:

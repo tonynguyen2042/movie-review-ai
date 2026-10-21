@@ -24,6 +24,9 @@ from typer.testing import CliRunner
 from movie_review.cli.app import _resolve_profile, app
 from movie_review.pipeline.orchestrator import StageResult
 from movie_review.storage.database import bootstrap
+from tests.helpers import (
+    _db,
+)
 
 # `import movie_review.cli.app as m` binds the `app` ATTRIBUTE (a Typer
 # instance) rather than the module, because cli/__init__.py re-exports it.
@@ -31,10 +34,6 @@ from movie_review.storage.database import bootstrap
 cliapp = importlib.import_module("movie_review.cli.app")
 
 runner = CliRunner()
-
-
-def _db(tmp: Path) -> str:
-    return str(tmp / "jobs.db")
 
 
 def _job_count(db_path: str) -> int:
@@ -50,7 +49,7 @@ def _job_count(db_path: str) -> int:
         conn.close()
 
 
-def _movie(tmp: Path) -> Path:
+def _movie__cli_profile(tmp: Path) -> Path:
     movie = tmp / "m.mp4"
     movie.write_bytes(b"fake")
     return movie
@@ -108,7 +107,14 @@ def test_profile_reaches_run_pipeline(tmp_path: Path, monkeypatch: pytest.Monkey
 
     result = runner.invoke(
         app,
-        ["process", str(_movie(tmp_path)), "--db-path", _db(tmp_path), "--profile", "remote"],
+        [
+            "process",
+            str(_movie__cli_profile(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+            "--profile",
+            "remote",
+        ],
     )
     assert result.exit_code == 0, result.output
     assert seen == ["remote"]
@@ -128,7 +134,14 @@ def test_quality_alias_still_selects_the_profile(
 
     result = runner.invoke(
         app,
-        ["process", str(_movie(tmp_path)), "--db-path", _db(tmp_path), "--quality", "remote"],
+        [
+            "process",
+            str(_movie__cli_profile(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+            "--quality",
+            "remote",
+        ],
     )
     assert result.exit_code == 0, result.output
     assert seen == ["remote"]
@@ -143,7 +156,14 @@ def test_unknown_profile_is_a_usage_error(tmp_path: Path) -> None:
     """The message must list real options, not just say 'invalid'."""
     result = runner.invoke(
         app,
-        ["process", str(_movie(tmp_path)), "--db-path", _db(tmp_path), "--profile", "turbo"],
+        [
+            "process",
+            str(_movie__cli_profile(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+            "--profile",
+            "turbo",
+        ],
     )
     assert result.exit_code != 0
     assert "remote" in result.output
@@ -158,7 +178,7 @@ def test_unknown_profile_creates_no_job(tmp_path: Path) -> None:
     db = _db(tmp_path)
     bootstrap(db)
     result = runner.invoke(
-        app, ["process", str(_movie(tmp_path)), "--db-path", db, "--profile", "turbo"]
+        app, ["process", str(_movie__cli_profile(tmp_path)), "--db-path", db, "--profile", "turbo"]
     )
     assert result.exit_code != 0
     assert _job_count(db) == 0
@@ -169,7 +189,7 @@ def test_conflicting_flags_are_rejected(tmp_path: Path) -> None:
         app,
         [
             "process",
-            str(_movie(tmp_path)),
+            str(_movie__cli_profile(tmp_path)),
             "--db-path",
             _db(tmp_path),
             "--profile",
@@ -204,7 +224,7 @@ def test_log_states_the_effective_profile_not_just_the_flag(tmp_path: Path) -> N
     """
     result = runner.invoke(
         app,
-        ["process", str(_movie(tmp_path)), "--db-path", _db(tmp_path), "--no-run"],
+        ["process", str(_movie__cli_profile(tmp_path)), "--db-path", _db(tmp_path), "--no-run"],
     )
     assert result.exit_code == 0, result.output
     event = _accepted_log(result.output)
@@ -218,7 +238,7 @@ def test_log_states_the_profile_when_flagged(tmp_path: Path) -> None:
         app,
         [
             "process",
-            str(_movie(tmp_path)),
+            str(_movie__cli_profile(tmp_path)),
             "--db-path",
             _db(tmp_path),
             "--no-run",
@@ -238,7 +258,7 @@ def test_log_states_each_slot_backend(tmp_path: Path) -> None:
         app,
         [
             "process",
-            str(_movie(tmp_path)),
+            str(_movie__cli_profile(tmp_path)),
             "--db-path",
             _db(tmp_path),
             "--no-run",
@@ -256,7 +276,7 @@ def test_translation_slot_is_logged_even_when_borrowed(tmp_path: Path) -> None:
     """The log answers "which model will translate", not "did I configure one"."""
     result = runner.invoke(
         app,
-        ["process", str(_movie(tmp_path)), "--db-path", _db(tmp_path), "--no-run"],
+        ["process", str(_movie__cli_profile(tmp_path)), "--db-path", _db(tmp_path), "--no-run"],
     )
     assert result.exit_code == 0, result.output
     backends = _accepted_log(result.output)["backends"]
@@ -313,7 +333,7 @@ def test_warning_reaches_the_terminal(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr(cliapp, "_mlx_available_on_this_host", lambda: False)
     result = runner.invoke(
         app,
-        ["process", str(_movie(tmp_path)), "--db-path", _db(tmp_path), "--no-run"],
+        ["process", str(_movie__cli_profile(tmp_path)), "--db-path", _db(tmp_path), "--no-run"],
     )
     assert result.exit_code == 0
     assert "MLX cannot run on" in result.output

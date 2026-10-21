@@ -32,7 +32,7 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
-def _job(data_dir: Path) -> tuple[Path, str]:
+def _job__thumbnail_command(data_dir: Path) -> tuple[Path, str]:
     """A job in the temporary data directory, and the path to its database."""
     db = data_dir / "jobs.db"
     conn = connect(bootstrap(db))
@@ -42,7 +42,7 @@ def _job(data_dir: Path) -> tuple[Path, str]:
     return db, "job_1"
 
 
-def _manifest(data_dir: Path, job_id: str) -> None:
+def _manifest__thumbnail_command(data_dir: Path, job_id: str) -> None:
     path = data_dir / "jobs" / job_id / "render" / "render-manifest.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     manifest = RenderManifest(
@@ -71,7 +71,7 @@ def test_the_command_exists() -> None:
 
 def test_a_job_without_a_manifest_is_reported(data_dir: Path) -> None:
     """The thumbnail needs the render manifest to pick a frame."""
-    db, job_id = _job(data_dir)
+    db, job_id = _job__thumbnail_command(data_dir)
     result = CliRunner().invoke(app, ["thumbnail", job_id, "--db-path", str(db)])
     assert result.exit_code == 1
     assert "No render manifest" in (result.stdout or "") + (result.stderr or "")
@@ -79,8 +79,8 @@ def test_a_job_without_a_manifest_is_reported(data_dir: Path) -> None:
 
 def test_a_failed_extraction_is_reported(data_dir: Path) -> None:
     """A thumbnail that cannot be produced is a classified failure."""
-    db, job_id = _job(data_dir)
-    _manifest(data_dir, job_id)
+    db, job_id = _job__thumbnail_command(data_dir)
+    _manifest__thumbnail_command(data_dir, job_id)
     # The movie file does not exist, so the frame cannot be extracted.
     result = CliRunner().invoke(app, ["thumbnail", job_id, "--db-path", str(db)])
     assert result.exit_code == 1
@@ -89,7 +89,7 @@ def test_a_failed_extraction_is_reported(data_dir: Path) -> None:
 
 def test_the_publish_command_attaches_the_thumbnail(data_dir: Path) -> None:
     """The upload carries the thumbnail when the job has one."""
-    db, job_id = _job(data_dir)
+    db, job_id = _job__thumbnail_command(data_dir)
     path = thumbnail_path(data_dir / "jobs", job_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"jpeg")

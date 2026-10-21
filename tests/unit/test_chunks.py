@@ -20,20 +20,23 @@ from movie_review.tts.chunks import (
 from movie_review.tts.port import TTSPort
 
 
-def _paragraph(paragraph_id: str, text: str) -> ReviewParagraph:
+def _paragraph__chunks(paragraph_id: str, text: str) -> ReviewParagraph:
     return ReviewParagraph(
         id=paragraph_id, text=text, target_seconds=12, claims=[], visual_intent="shot"
     )
 
 
-def _script() -> ReviewScript:
+def _script__chunks() -> ReviewScript:
     long_text = " ".join(f"Sentence number {n} ends here." for n in range(60))
     return ReviewScript(
         sections=[
             ReviewSection(
                 id="sec_01",
                 type="hook",
-                paragraphs=[_paragraph("p1", "Short hook text here."), _paragraph("p2", long_text)],
+                paragraphs=[
+                    _paragraph__chunks("p1", "Short hook text here."),
+                    _paragraph__chunks("p2", long_text),
+                ],
             )
         ]
     )
@@ -51,7 +54,7 @@ def test_split_sentences() -> None:
 
 
 def test_plan_chunks_ids_and_split() -> None:
-    chunks = plan_chunks(_script(), voice="Ryan", emotion="dramatic")
+    chunks = plan_chunks(_script__chunks(), voice="Ryan", emotion="dramatic")
     # The id is derived from the content, not from the position.
     assert chunks[0].chunk_id.startswith("tts_")
     assert chunks[0].paragraph_id == "p1"
@@ -64,7 +67,7 @@ def test_plan_chunks_ids_and_split() -> None:
 def test_plan_no_split_at_boundary() -> None:
     text = " ".join(f"w{n}" for n in range(150))
     script = ReviewScript(
-        sections=[ReviewSection(id="s", type="hook", paragraphs=[_paragraph("p", text)])]
+        sections=[ReviewSection(id="s", type="hook", paragraphs=[_paragraph__chunks("p", text)])]
     )
     assert len(plan_chunks(script, voice="v")) == 1
 
@@ -85,7 +88,7 @@ class _FakeTTS(TTSPort):
 
 def test_synthesize_writes_valid_wav(tmp_path: Path) -> None:
     port = _FakeTTS()
-    chunks = plan_chunks(_script(), voice="Ryan")[:2]
+    chunks = plan_chunks(_script__chunks(), voice="Ryan")[:2]
     results = synthesize_chunks(chunks, port, tmp_path / "jobs", "job_1")
     assert port.unloaded is True
     for result in results:
@@ -98,7 +101,7 @@ def test_synthesize_writes_valid_wav(tmp_path: Path) -> None:
 
 def test_synthesize_single_chunk_retry(tmp_path: Path) -> None:
     port = _FakeTTS()
-    [chunk] = plan_chunks(_script(), voice="Ryan", emotion="sad")[:1]
+    [chunk] = plan_chunks(_script__chunks(), voice="Ryan", emotion="sad")[:1]
     result = synthesize_chunk(chunk, port, tmp_path / "jobs", "job_1")
     assert result.chunk.emotion == "sad"
     assert result.duration_seconds >= 0.0

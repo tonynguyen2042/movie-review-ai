@@ -50,7 +50,7 @@ def _fake_detect(path: str | Path, **kwargs: object) -> DetectionResult:
     )
 
 
-def _harness(tmp_path: Path) -> Harness:
+def _harness__detection(tmp_path: Path) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -70,7 +70,7 @@ def _harness(tmp_path: Path) -> Harness:
 
 
 def test_stage_happy_path(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__detection(tmp_path)
     result = harness.stage()
     assert [s.scene_id for s in result.scenes] == ["scene_000001", "scene_000002"]
     assert result.scenes[1].duration == pytest.approx(1.5)
@@ -85,7 +85,7 @@ def test_stage_happy_path(tmp_path: Path) -> None:
 
 
 def test_stage_second_run_hits_cache(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__detection(tmp_path)
     harness.stage()
 
     def _boom(path: str | Path, **kwargs: object) -> DetectionResult:
@@ -103,7 +103,7 @@ def test_stage_uses_the_source_by_default(tmp_path: Path) -> None:
     detect on the proxy -- different cuts for the same movie, and a cache
     miss every time.
     """
-    harness = _harness(tmp_path)
+    harness = _harness__detection(tmp_path)
     proxy = tmp_path / "jobs" / "job_1" / "media" / "proxy.mp4"
     proxy.parent.mkdir(parents=True, exist_ok=True)
     proxy.write_bytes(b"proxy-bytes")
@@ -121,7 +121,7 @@ def test_stage_uses_the_source_by_default(tmp_path: Path) -> None:
 
 
 def test_stage_uses_the_proxy_when_it_is_asked_for(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__detection(tmp_path)
     proxy = tmp_path / "jobs" / "job_1" / "media" / "proxy.mp4"
     proxy.parent.mkdir(parents=True, exist_ok=True)
     proxy.write_bytes(b"proxy-bytes")
@@ -130,21 +130,21 @@ def test_stage_uses_the_proxy_when_it_is_asked_for(tmp_path: Path) -> None:
 
 
 def test_stage_unknown_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__detection(tmp_path)
     harness.ctx.job_id = "job_2"
     with pytest.raises(SceneStageError, match="Unknown job"):
         harness.stage()
 
 
 def test_stage_failed_job_rejected(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__detection(tmp_path)
     harness.ctx.manager.fail("job_1", "ingest", "earlier")
     with pytest.raises(SceneStageError, match="failed"):
         harness.stage()
 
 
 def test_stage_detection_failure_fails_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__detection(tmp_path)
 
     def _bad(path: str | Path, **kwargs: object) -> DetectionResult:
         raise SceneDetectionError("nope")
@@ -157,7 +157,7 @@ def test_stage_detection_failure_fails_job(tmp_path: Path) -> None:
 
 
 def test_stage_rerun_past_scenes_ready(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__detection(tmp_path)
     harness.stage()
     harness.ctx.manager.transition("job_1", JobStatus.TRANSCRIPT_READY)
     result = harness.stage()
@@ -167,7 +167,7 @@ def test_stage_rerun_past_scenes_ready(tmp_path: Path) -> None:
 
 @pytest.mark.ffmpeg
 def test_stage_real_end_to_end(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__detection(tmp_path)
     for name, pattern in (("a.mp4", "testsrc"), ("b.mp4", "smptebars")):
         ff.check(
             "ffmpeg",

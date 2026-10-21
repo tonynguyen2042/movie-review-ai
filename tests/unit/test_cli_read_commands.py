@@ -18,15 +18,9 @@ import pytest
 from typer.testing import CliRunner
 
 from movie_review.cli.app import app
-from movie_review.domain import (
-    Event,
-    EventType,
-    Job,
-    Scene,
-    TranscriptSegment,
+from tests.helpers import (
+    _job,
 )
-from movie_review.storage import repositories as repo
-from movie_review.storage.database import bootstrap, connect
 
 READ_COMMANDS = ("scenes", "transcript", "story", "script", "render", "analyze")
 
@@ -37,37 +31,6 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root.mkdir()
     monkeypatch.setenv("MOVIE_REVIEW_PATHS__DATA_DIR", str(root))
     return root
-
-
-def _job(data_dir: Path) -> tuple[Path, str]:
-    db = data_dir / "jobs.db"
-    conn = connect(bootstrap(db))
-    repo.save_job(conn, Job(job_id="job_1", input_file=str(data_dir / "movie.mp4")))
-    repo.save_scene(
-        conn, "job_1", Scene(scene_id="scene_000001", start=0.0, end=10.0, duration=10.0)
-    )
-    repo.save_transcript_segments(
-        conn,
-        "job_1",
-        [
-            TranscriptSegment(
-                segment_id="seg_1", start=0.0, end=2.0, text="Hello there.", speaker="SPEAKER_00"
-            )
-        ],
-    )
-    repo.save_event(
-        conn,
-        "job_1",
-        Event(
-            id="event_00001",
-            type=EventType.DISCOVERY,
-            timestamp=5.0,
-            description="Someone finds something.",
-        ),
-    )
-    conn.commit()
-    conn.close()
-    return db, "job_1"
 
 
 def test_every_read_command_exists() -> None:

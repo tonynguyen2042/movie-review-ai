@@ -12,10 +12,7 @@ assets, and nothing about the movie leaves the machine because of them.
 from __future__ import annotations
 
 import sqlite3
-import wave
 from pathlib import Path
-
-import numpy as np
 
 from movie_review.cache.manager import CacheManager
 from movie_review.config.settings import load_settings
@@ -25,22 +22,14 @@ from movie_review.pipeline.context import StageContext
 from movie_review.pipeline.orchestrator import _mix_music
 from movie_review.rendering.audio import ducking_envelope, mix
 from movie_review.storage.database import bootstrap, connect
+from tests.helpers import (
+    _wav,
+)
 
 
-def _wav(path: Path, seconds: float, rate: int = 8000, amplitude: float = 0.5) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    count = int(rate * seconds)
-    samples = (np.sin(np.arange(count) * 2 * np.pi * 220 / rate) * amplitude).astype(np.float64)
-    pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
-    with wave.open(str(path), "wb") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(rate)
-        wav.writeframes(pcm.tobytes())
-    return path
-
-
-def _ctx(tmp_path: Path, music: dict[str, object]) -> tuple[StageContext, sqlite3.Connection]:
+def _ctx__music_mixing(
+    tmp_path: Path, music: dict[str, object]
+) -> tuple[StageContext, sqlite3.Connection]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo_job = Job(job_id="job_1", input_file="m.mp4")
@@ -83,7 +72,7 @@ def test_the_music_is_mixed_under_the_narration(tmp_path: Path) -> None:
     """A configured track has to reach the mix."""
     narration = _wav(tmp_path / "jobs" / "job_1" / "tts" / "narration.wav", 4.0)
     track = _wav(tmp_path / "music" / "bed.wav", 4.0, amplitude=0.2)
-    ctx, conn = _ctx(tmp_path, {"enabled": True, "track": str(track), "gain": 1.0})
+    ctx, conn = _ctx__music_mixing(tmp_path, {"enabled": True, "track": str(track), "gain": 1.0})
     try:
         mixed = _mix_music(ctx, narration)
         assert mixed != narration
@@ -96,7 +85,7 @@ def test_the_music_is_mixed_under_the_narration(tmp_path: Path) -> None:
 def test_no_music_means_no_mix(tmp_path: Path) -> None:
     """Without a track the narration is rendered as it is."""
     narration = _wav(tmp_path / "jobs" / "job_1" / "tts" / "narration.wav", 2.0)
-    ctx, conn = _ctx(tmp_path, {"enabled": False, "track": None, "gain": 1.0})
+    ctx, conn = _ctx__music_mixing(tmp_path, {"enabled": False, "track": None, "gain": 1.0})
     try:
         assert _mix_music(ctx, narration) == narration
     finally:
@@ -106,7 +95,9 @@ def test_no_music_means_no_mix(tmp_path: Path) -> None:
 def test_a_missing_track_does_not_fail_the_render(tmp_path: Path) -> None:
     """The music is optional; a missing file is not a failure."""
     narration = _wav(tmp_path / "jobs" / "job_1" / "tts" / "narration.wav", 2.0)
-    ctx, conn = _ctx(tmp_path, {"enabled": True, "track": str(tmp_path / "nope.wav"), "gain": 1.0})
+    ctx, conn = _ctx__music_mixing(
+        tmp_path, {"enabled": True, "track": str(tmp_path / "nope.wav"), "gain": 1.0}
+    )
     try:
         assert _mix_music(ctx, narration) == narration
     finally:

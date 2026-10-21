@@ -12,7 +12,7 @@ from movie_review.artifacts import manager as artifacts
 from movie_review.ui.graph import StoryGraph
 
 
-def _analysis() -> dict[str, Any]:
+def _analysis__story_graph() -> dict[str, Any]:
     return {
         "movie": {"id": "movie_x", "title": "Blackrock"},
         "characters": [
@@ -73,17 +73,21 @@ def _analysis() -> dict[str, Any]:
     }
 
 
-def _seed(tmp_path: Path, job_id: str = "job_x", doc: dict[str, Any] | None = None) -> Path:
+def _seed__story_graph(
+    tmp_path: Path, job_id: str = "job_x", doc: dict[str, Any] | None = None
+) -> Path:
     jobs_dir = tmp_path / "jobs"
     job_dir = jobs_dir / job_id
     job_dir.mkdir(parents=True)
-    artifacts.write_json(job_dir / "movie-analysis.json", doc if doc is not None else _analysis())
+    artifacts.write_json(
+        job_dir / "movie-analysis.json", doc if doc is not None else _analysis__story_graph()
+    )
     return jobs_dir
 
 
 def test_story_graph_builds_all_node_types(tmp_path: Path) -> None:
     """Characters, events, locations, and scenes become typed nodes."""
-    jobs_dir = _seed(tmp_path)
+    jobs_dir = _seed__story_graph(tmp_path)
     data = StoryGraph(jobs_dir, "job_x").load()
 
     assert data["job_id"] == "job_x"
@@ -113,7 +117,7 @@ def test_story_graph_builds_all_node_types(tmp_path: Path) -> None:
 
 def test_story_graph_node_ids_are_namespaced(tmp_path: Path) -> None:
     """IDs are prefixed by type so cross-type collisions cannot occur."""
-    jobs_dir = _seed(tmp_path)
+    jobs_dir = _seed__story_graph(tmp_path)
     data = StoryGraph(jobs_dir, "job_x").load()
     ids = [n["id"] for n in data["nodes"]]
     assert "char:c1" in ids
@@ -125,7 +129,7 @@ def test_story_graph_node_ids_are_namespaced(tmp_path: Path) -> None:
 
 def test_story_graph_edges_use_resolved_nodes(tmp_path: Path) -> None:
     """Relationships become edges between resolved character nodes."""
-    jobs_dir = _seed(tmp_path)
+    jobs_dir = _seed__story_graph(tmp_path)
     data = StoryGraph(jobs_dir, "job_x").load()
 
     # KNOWS from the relationship + OCCURS_AT from the event's location.
@@ -143,7 +147,7 @@ def test_story_graph_edges_use_resolved_nodes(tmp_path: Path) -> None:
 
 def test_story_graph_deduplicates_nodes(tmp_path: Path) -> None:
     """A repeated character id yields a single node."""
-    doc = _analysis()
+    doc = _analysis__story_graph()
     doc["characters"].append(
         {
             "id": "c1",
@@ -153,7 +157,7 @@ def test_story_graph_deduplicates_nodes(tmp_path: Path) -> None:
             "confidence": 0.5,
         }
     )
-    jobs_dir = _seed(tmp_path, doc=doc)
+    jobs_dir = _seed__story_graph(tmp_path, doc=doc)
 
     data = StoryGraph(jobs_dir, "job_x").load()
     char_nodes = [n for n in data["nodes"] if n["type"] == "character"]
@@ -162,7 +166,7 @@ def test_story_graph_deduplicates_nodes(tmp_path: Path) -> None:
 
 def test_story_graph_json_export(tmp_path: Path) -> None:
     """JSON export round-trips the loaded structure."""
-    jobs_dir = _seed(tmp_path)
+    jobs_dir = _seed__story_graph(tmp_path)
     payload = json.loads(StoryGraph(jobs_dir, "job_x").to_json())
     assert payload["job_id"] == "job_x"
     assert payload["stats"]["total_nodes"] == 5
@@ -170,7 +174,7 @@ def test_story_graph_json_export(tmp_path: Path) -> None:
 
 def test_story_graph_html_export(tmp_path: Path) -> None:
     """HTML export renders the graph shell and embeds node/edge data."""
-    jobs_dir = _seed(tmp_path)
+    jobs_dir = _seed__story_graph(tmp_path)
     html = StoryGraph(jobs_dir, "job_x").to_html()
 
     assert "Story Graph" in html
@@ -182,9 +186,9 @@ def test_story_graph_html_export(tmp_path: Path) -> None:
 
 def test_story_graph_html_escapes_label_content(tmp_path: Path) -> None:
     """Model-produced labels cannot open a new script block."""
-    doc = _analysis()
+    doc = _analysis__story_graph()
     doc["movie"]["title"] = "<script>alert(1)</script>Blackrock"
-    jobs_dir = _seed(tmp_path, doc=doc)
+    jobs_dir = _seed__story_graph(tmp_path, doc=doc)
 
     html = StoryGraph(jobs_dir, "job_x").to_html()
 
@@ -209,7 +213,7 @@ def test_story_graph_empty(tmp_path: Path) -> None:
 
 def test_story_graph_empty_document(tmp_path: Path) -> None:
     """A document with no entities still produces a valid graph."""
-    jobs_dir = _seed(tmp_path, doc={"movie": {"id": "m"}})
+    jobs_dir = _seed__story_graph(tmp_path, doc={"movie": {"id": "m"}})
     data = StoryGraph(jobs_dir, "job_x").load()
     assert data["stats"]["total_nodes"] == 0
     assert data["stats"]["total_edges"] == 0

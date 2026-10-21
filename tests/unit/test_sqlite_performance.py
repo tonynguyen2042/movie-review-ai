@@ -21,12 +21,12 @@ from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 
 
-def _db(tmp_path: Path) -> sqlite3.Connection:
+def _db__sqlite_performance(tmp_path: Path) -> sqlite3.Connection:
     return connect(bootstrap(tmp_path / "jobs.db"))
 
 
 def test_the_connection_uses_wal_and_normal_synchrony(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__sqlite_performance(tmp_path)
     try:
         assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
         assert conn.execute("PRAGMA synchronous").fetchone()[0] == 1
@@ -35,7 +35,7 @@ def test_the_connection_uses_wal_and_normal_synchrony(tmp_path: Path) -> None:
 
 
 def test_the_indexes_exist(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__sqlite_performance(tmp_path)
     try:
         names = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
@@ -49,7 +49,7 @@ def test_the_indexes_exist(tmp_path: Path) -> None:
 
 def test_listing_a_job_uses_the_index(tmp_path: Path) -> None:
     """A job's mentions must be found by index, not by a full scan."""
-    conn = _db(tmp_path)
+    conn = _db__sqlite_performance(tmp_path)
     try:
         repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
         plan = conn.execute(
@@ -71,7 +71,7 @@ def test_writing_many_mentions_is_one_transaction(tmp_path: Path) -> None:
     """
     from movie_review.domain import CharacterMention
 
-    conn = _db(tmp_path)
+    conn = _db__sqlite_performance(tmp_path)
     try:
         repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
         mentions = [
@@ -99,7 +99,7 @@ def test_the_batch_writes_still_round_trip(tmp_path: Path) -> None:
     """Batching must not change what is stored."""
     from movie_review.domain import CharacterMention, Event, EventType, SceneAnalysis
 
-    conn = _db(tmp_path)
+    conn = _db__sqlite_performance(tmp_path)
     try:
         repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
 

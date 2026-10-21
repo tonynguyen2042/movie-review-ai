@@ -193,7 +193,7 @@ def test_disabled_reporter_stays_silent(lines: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _ctx() -> PipelineContext:
+def _ctx__progress_bar() -> PipelineContext:
     import sqlite3
 
     from movie_review.cache.manager import CacheManager
@@ -215,7 +215,7 @@ def _ctx() -> PipelineContext:
 
 def test_stage_body_reaches_the_work_callback() -> None:
     """The stage publishes without knowing its own name; run_stage binds it."""
-    ctx = _ctx()
+    ctx = _ctx__progress_bar()
     seen: list[tuple[str, int, int]] = []
 
     def stage_body(context: PipelineContext) -> None:
@@ -236,7 +236,7 @@ def test_stage_body_reaches_the_work_callback() -> None:
 
 def test_callback_is_unbound_after_the_stage() -> None:
     """One context is reused for every stage; leaking a callback would cross wires."""
-    ctx = _ctx()
+    ctx = _ctx__progress_bar()
 
     run_stage("vision", lambda _c: None, ctx, on_work=lambda *_a: None)
     assert ctx.stage_progress is None
@@ -251,7 +251,7 @@ def test_callback_is_unbound_after_the_stage() -> None:
 
 def test_stage_without_listener_is_not_wrapped() -> None:
     """No no-op indirection when nobody is watching."""
-    ctx = _ctx()
+    ctx = _ctx__progress_bar()
 
     def stage_body(context: PipelineContext) -> None:
         assert context.stage_progress is None
@@ -261,7 +261,7 @@ def test_stage_without_listener_is_not_wrapped() -> None:
 
 def test_work_callback_does_not_break_a_failing_stage() -> None:
     """Reporting must never change the outcome of the stage."""
-    ctx = _ctx()
+    ctx = _ctx__progress_bar()
     seen: list[str] = []
 
     def boom(_c: PipelineContext) -> None:
@@ -276,7 +276,7 @@ def test_work_callback_does_not_break_a_failing_stage() -> None:
 
 def test_sub_step_adapter_binds_the_stage_name() -> None:
     """vision's sub-steps report under 'vision', not under their own names."""
-    ctx = _ctx()
+    ctx = _ctx__progress_bar()
     seen: list[str] = []
 
     def stage_body(context: PipelineContext) -> None:
@@ -291,7 +291,7 @@ def test_sub_step_adapter_binds_the_stage_name() -> None:
 
 
 def test_sub_step_is_none_without_a_listener() -> None:
-    ctx = _ctx()
+    ctx = _ctx__progress_bar()
     captured: list[object] = []
 
     def stage_body(context: PipelineContext) -> None:
@@ -327,7 +327,7 @@ def test_bars_reach_the_terminal(
 
 def test_progress_callback_is_optional() -> None:
     """Existing callers that pass no callbacks keep working."""
-    ctx = _ctx()
+    ctx = _ctx__progress_bar()
     assert run_stage("ingest", lambda _c: None, ctx).success is True
 
 

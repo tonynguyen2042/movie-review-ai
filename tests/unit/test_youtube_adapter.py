@@ -31,7 +31,7 @@ class FakeMetadata:
     tags: list[str] = field(default_factory=lambda: ["thriller"])
 
 
-def _video(tmp_path: Path) -> Path:
+def _video__youtube_adapter(tmp_path: Path) -> Path:
     path = tmp_path / "final.mp4"
     path.write_bytes(b"video-bytes")
     return path
@@ -56,7 +56,7 @@ def test_upload_returns_receipt(tmp_path: Path) -> None:
         return "abc123", "https://www.youtube.com/watch?v=abc123"
 
     adapter = YouTubeAdapter(backend=backend)
-    request = UploadRequest(video_path=_video(tmp_path), metadata=FakeMetadata())
+    request = UploadRequest(video_path=_video__youtube_adapter(tmp_path), metadata=FakeMetadata())
 
     receipt = adapter.upload(request)
 
@@ -76,7 +76,7 @@ def test_upload_forwards_metadata_without_inventing(tmp_path: Path) -> None:
 
     metadata = FakeMetadata(title="Exact Title", description="Exact description.", tags=["a", "b"])
     adapter = YouTubeAdapter(backend=backend)
-    adapter.upload(UploadRequest(video_path=_video(tmp_path), metadata=metadata))
+    adapter.upload(UploadRequest(video_path=_video__youtube_adapter(tmp_path), metadata=metadata))
 
     payload = captured[0]
     assert payload.title == "Exact Title"
@@ -100,7 +100,7 @@ def test_upload_forwards_thumbnail_when_present(tmp_path: Path) -> None:
     adapter = YouTubeAdapter(backend=backend)
     adapter.upload(
         UploadRequest(
-            video_path=_video(tmp_path),
+            video_path=_video__youtube_adapter(tmp_path),
             metadata=FakeMetadata(),
             thumbnail_path=thumb,
         )
@@ -130,7 +130,7 @@ def test_upload_rejects_missing_thumbnail(tmp_path: Path) -> None:
     with pytest.raises(PublishingError):
         adapter.upload(
             UploadRequest(
-                video_path=_video(tmp_path),
+                video_path=_video__youtube_adapter(tmp_path),
                 metadata=FakeMetadata(),
                 thumbnail_path=tmp_path / "absent.jpg",
             )
@@ -142,7 +142,9 @@ def test_upload_accepts_valid_privacy(tmp_path: Path, privacy: str) -> None:
     """All documented privacy states are accepted."""
     adapter = YouTubeAdapter(backend=lambda p: ("id", "url"))
     receipt = adapter.upload(
-        UploadRequest(video_path=_video(tmp_path), metadata=FakeMetadata(), privacy=privacy)
+        UploadRequest(
+            video_path=_video__youtube_adapter(tmp_path), metadata=FakeMetadata(), privacy=privacy
+        )
     )
     assert receipt.video_id == "id"
 
@@ -153,7 +155,11 @@ def test_upload_rejects_invalid_privacy(tmp_path: Path) -> None:
 
     with pytest.raises(UploadRejectedError):
         adapter.upload(
-            UploadRequest(video_path=_video(tmp_path), metadata=FakeMetadata(), privacy="secret")
+            UploadRequest(
+                video_path=_video__youtube_adapter(tmp_path),
+                metadata=FakeMetadata(),
+                privacy="secret",
+            )
         )
 
 
@@ -168,7 +174,9 @@ def test_upload_rejects_empty_title(tmp_path: Path) -> None:
 
     with pytest.raises(UploadRejectedError):
         adapter.upload(
-            UploadRequest(video_path=_video(tmp_path), metadata=FakeMetadata(title="   "))
+            UploadRequest(
+                video_path=_video__youtube_adapter(tmp_path), metadata=FakeMetadata(title="   ")
+            )
         )
 
 
@@ -181,7 +189,9 @@ def test_upload_wraps_backend_failure(tmp_path: Path) -> None:
     adapter = YouTubeAdapter(backend=failing)
 
     with pytest.raises(UploadRejectedError):
-        adapter.upload(UploadRequest(video_path=_video(tmp_path), metadata=FakeMetadata()))
+        adapter.upload(
+            UploadRequest(video_path=_video__youtube_adapter(tmp_path), metadata=FakeMetadata())
+        )
 
 
 def test_upload_rejects_empty_video_id(tmp_path: Path) -> None:
@@ -189,7 +199,9 @@ def test_upload_rejects_empty_video_id(tmp_path: Path) -> None:
     adapter = YouTubeAdapter(backend=lambda p: ("", "url"))
 
     with pytest.raises(UploadRejectedError):
-        adapter.upload(UploadRequest(video_path=_video(tmp_path), metadata=FakeMetadata()))
+        adapter.upload(
+            UploadRequest(video_path=_video__youtube_adapter(tmp_path), metadata=FakeMetadata())
+        )
 
 
 def test_available_true_with_injected_backend() -> None:
@@ -208,4 +220,6 @@ def test_missing_backend_raises_unavailable(tmp_path: Path) -> None:
     adapter = YouTubeAdapter(backend=None)
 
     with pytest.raises(PublishingUnavailableError):
-        adapter.upload(UploadRequest(video_path=_video(tmp_path), metadata=FakeMetadata()))
+        adapter.upload(
+            UploadRequest(video_path=_video__youtube_adapter(tmp_path), metadata=FakeMetadata())
+        )

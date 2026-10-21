@@ -17,7 +17,7 @@ from movie_review.domain import ReviewParagraph, ReviewScript, ReviewSection
 from movie_review.tts.chunks import chunk_id_for, plan_chunks, split_long_text
 
 
-def _script(paragraphs: list[str]) -> ReviewScript:
+def _script__tts_chunk_identity(paragraphs: list[str]) -> ReviewScript:
     return ReviewScript(
         sections=[
             ReviewSection(
@@ -40,8 +40,8 @@ def _script(paragraphs: list[str]) -> ReviewScript:
 
 def test_the_chunk_id_comes_from_the_content() -> None:
     """A positional id shifts when the script is edited."""
-    first = plan_chunks(_script(["One.", "Two."]), voice="default")
-    second = plan_chunks(_script(["One.", "Two."]), voice="default")
+    first = plan_chunks(_script__tts_chunk_identity(["One.", "Two."]), voice="default")
+    second = plan_chunks(_script__tts_chunk_identity(["One.", "Two."]), voice="default")
     assert [c.chunk_id for c in first] == [c.chunk_id for c in second]
 
 
@@ -51,8 +51,8 @@ def test_inserting_a_paragraph_does_not_move_the_others() -> None:
     The concatenation stage re-plans and assumes the ids match, so a shift
     means the wrong audio files are joined -- silently.
     """
-    before = plan_chunks(_script(["One.", "Two."]), voice="default")
-    after = plan_chunks(_script(["One.", "Inserted.", "Two."]), voice="default")
+    before = plan_chunks(_script__tts_chunk_identity(["One.", "Two."]), voice="default")
+    after = plan_chunks(_script__tts_chunk_identity(["One.", "Inserted.", "Two."]), voice="default")
 
     before_by_text = {c.text: c.chunk_id for c in before}
     after_by_text = {c.text: c.chunk_id for c in after}
@@ -63,14 +63,14 @@ def test_inserting_a_paragraph_does_not_move_the_others() -> None:
 
 def test_editing_a_paragraph_changes_its_chunk_id() -> None:
     """The changed text must not be served from the old audio."""
-    before = plan_chunks(_script(["One."]), voice="default")
-    after = plan_chunks(_script(["One, edited."]), voice="default")
+    before = plan_chunks(_script__tts_chunk_identity(["One."]), voice="default")
+    after = plan_chunks(_script__tts_chunk_identity(["One, edited."]), voice="default")
     assert before[0].chunk_id != after[0].chunk_id
 
 
 def test_two_paragraphs_with_the_same_text_differ() -> None:
     """The paragraph is part of the identity."""
-    chunks = plan_chunks(_script(["Same.", "Same."]), voice="default")
+    chunks = plan_chunks(_script__tts_chunk_identity(["Same.", "Same."]), voice="default")
     assert chunks[0].chunk_id != chunks[1].chunk_id
 
 
@@ -96,6 +96,6 @@ def test_a_short_text_is_not_split() -> None:
 def test_an_overlong_paragraph_becomes_several_chunks() -> None:
     """A four hundred word paragraph was one request to the TTS endpoint."""
     words = " ".join(f"word{index}" for index in range(400))
-    chunks = plan_chunks(_script([words]), voice="default", max_words=60)
+    chunks = plan_chunks(_script__tts_chunk_identity([words]), voice="default", max_words=60)
     assert len(chunks) > 1
     assert all(len(chunk.text.split()) <= 60 for chunk in chunks)

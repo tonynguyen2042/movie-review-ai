@@ -34,7 +34,7 @@ from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 
 
-def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
+def _ctx__subtitles_stage(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -70,7 +70,7 @@ def _manifest_path(tmp_path: Path, durations: list[float], ids: list[str] | None
     return path
 
 
-def _script() -> ReviewScript:
+def _script__subtitles_stage() -> ReviewScript:
     return ReviewScript(
         sections=[
             ReviewSection(
@@ -99,10 +99,10 @@ def _script() -> ReviewScript:
 
 def test_the_sidecar_is_written(tmp_path: Path) -> None:
     """`review.srt` is a required output of v1.0 and was never produced."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__subtitles_stage(tmp_path)
     try:
         manifest_path = _manifest_path(tmp_path, [10.0, 8.0])
-        result = write_subtitles(manifest_path, _script(), ctx)
+        result = write_subtitles(manifest_path, _script__subtitles_stage(), ctx)
 
         assert result.srt_path.is_file()
         assert result.srt_path.name == "review.srt"
@@ -114,10 +114,10 @@ def test_the_sidecar_is_written(tmp_path: Path) -> None:
 
 def test_the_cues_follow_the_manifest_timing(tmp_path: Path) -> None:
     """The timing comes from the narration, not from the word count."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__subtitles_stage(tmp_path)
     try:
         manifest_path = _manifest_path(tmp_path, [10.0, 8.0])
-        result = write_subtitles(manifest_path, _script(), ctx)
+        result = write_subtitles(manifest_path, _script__subtitles_stage(), ctx)
 
         cues = parse_srt(result.srt_path.read_text(encoding="utf-8"))
         assert cues
@@ -133,12 +133,12 @@ def test_the_cues_follow_the_manifest_timing(tmp_path: Path) -> None:
 
 def test_a_missing_manifest_is_reported(tmp_path: Path) -> None:
     """A missing manifest is a classified failure, not a crash."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__subtitles_stage(tmp_path)
     try:
         with pytest.raises(SubtitleStageError, match="No render manifest"):
             write_subtitles(
                 tmp_path / "jobs" / "job_1" / "render" / "render-manifest.json",
-                _script(),
+                _script__subtitles_stage(),
                 ctx,
             )
     finally:
@@ -147,12 +147,12 @@ def test_a_missing_manifest_is_reported(tmp_path: Path) -> None:
 
 def test_a_manifest_with_no_matching_text_is_reported(tmp_path: Path) -> None:
     """A manifest whose paragraphs the script does not have has nothing to say."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__subtitles_stage(tmp_path)
     try:
         # The manifest names p9; the script does not have it.
         manifest_path = _manifest_path(tmp_path, [10.0], ids=["p9"])
         with pytest.raises(SubtitleStageError, match="no subtitle text"):
-            write_subtitles(manifest_path, _script(), ctx)
+            write_subtitles(manifest_path, _script__subtitles_stage(), ctx)
     finally:
         conn.close()
 

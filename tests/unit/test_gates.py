@@ -72,7 +72,7 @@ class Harness:
         return run_quality_gate(metrics, 1190.0, 1200.0, self.ctx)
 
 
-def _harness(tmp_path: Path) -> Harness:
+def _harness__gates(tmp_path: Path) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -113,21 +113,21 @@ def _passing() -> list[QualityMetric]:
 
 
 def test_run_completes(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__gates(tmp_path)
     result = harness.gate(_passing())
     assert result.passed is True
     assert harness.ctx.manager.get("job_1").status is JobStatus.COMPLETED
 
 
 def test_run_needs_review(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__gates(tmp_path)
     result = harness.gate([_metric("evidence_coverage", 10.0)])
     assert result.passed is False
     assert harness.ctx.manager.get("job_1").status is JobStatus.NEEDS_REVIEW
 
 
 def test_run_unknown_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__gates(tmp_path)
     harness.ctx.job_id = "job_2"
     with pytest.raises(QualityGateError, match="Unknown job"):
         harness.gate(_passing())

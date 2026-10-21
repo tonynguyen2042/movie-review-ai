@@ -9,7 +9,7 @@ from movie_review.domain import SceneAnalysis
 from movie_review.vision.port import AnalysisInput, VLMError, VLMPort, VLMUnavailableError
 
 
-def _analysis() -> SceneAnalysis:
+def _analysis__vlm_port() -> SceneAnalysis:
     return SceneAnalysis(
         scene_id="scene_000001",
         location="abandoned warehouse",
@@ -49,7 +49,7 @@ class _FakeVLM(VLMPort):
 
 
 def test_port_contract() -> None:
-    fake = _FakeVLM(_analysis())
+    fake = _FakeVLM(_analysis__vlm_port())
     result = fake.analyze(
         AnalysisInput(scene_id="scene_000001", frames=[Path("f.jpg")]),
         prompt="describe",

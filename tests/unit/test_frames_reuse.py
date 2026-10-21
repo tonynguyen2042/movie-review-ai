@@ -19,7 +19,6 @@ sampling run cut short keeps what it finished.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,18 +31,14 @@ from movie_review.config.settings import load_settings
 from movie_review.domain import Job, JobStatus, Scene
 from movie_review.jobs.manager import JobManager
 from movie_review.media.frames import SamplingResult, sample_movie
-from movie_review.pipeline.orchestrator import PipelineContext, _get_stage_function, run_stage
+from movie_review.pipeline.orchestrator import PipelineContext, run_stage
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
+from tests.helpers import (
+    _vision_stage,
+)
 
 SPANS = [("scene_000001", 0.0, 5.0), ("scene_000002", 10.0, 40.0)]
-
-
-def _vision_stage() -> Callable[[PipelineContext], object]:
-    """The vision stage, asserting it exists rather than passing None onwards."""
-    stage = _get_stage_function("vision")
-    assert stage is not None, "vision stage is missing from the orchestrator"
-    return stage
 
 
 #: Captured before patching. sample_movie passes its own run_fn as the fifth
@@ -77,7 +72,7 @@ def workspace(tmp_path: Path) -> _Workspace:
     )
 
 
-def _fake_run(binary: str, args: list[str]) -> str:
+def _fake_run__frames_reuse(binary: str, args: list[str]) -> str:
     dest = Path(args[-1])
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(f"frame-for-{dest.name}".encode())
@@ -97,7 +92,7 @@ def counter(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
         _ignored: object = None,
     ) -> Path:
         calls["n"] += 1
-        result: Path = _REAL_EXTRACT(source, timestamp, dest, ffmpeg, _fake_run)
+        result: Path = _REAL_EXTRACT(source, timestamp, dest, ffmpeg, _fake_run__frames_reuse)
         return result
 
     monkeypatch.setattr(frames_module, "extract_frame", _extract)
@@ -115,7 +110,7 @@ def _sample(workspace: _Workspace, job_id: str) -> SamplingResult:
         jobs_dir=workspace.jobs_dir,
         conn=workspace.conn,
         cache=workspace.cache,
-        run_fn=_fake_run,
+        run_fn=_fake_run__frames_reuse,
     )
 
 
@@ -172,7 +167,7 @@ def test_adopted_bytes_are_identical(workspace: _Workspace, counter: dict[str, i
 # ---------------------------------------------------------------------------
 
 
-def _vision_ctx(workspace: _Workspace, job_id: str) -> PipelineContext:
+def _vision_ctx__frames_reuse(workspace: _Workspace, job_id: str) -> PipelineContext:
     conn = workspace.conn
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id=job_id, input_file="m.mp4"))
@@ -219,7 +214,7 @@ def test_frames_survive_a_remote_failure_and_are_reused(
 
     monkeypatch.setattr("movie_review.vision.analysis.run_visual_analysis", failing)
 
-    first = run_stage("vision", _vision_stage(), _vision_ctx(workspace, "job_006"))
+    first = run_stage("vision", _vision_stage(), _vision_ctx__frames_reuse(workspace, "job_006"))
     assert first.success is False
     after_first = counter["n"]
     assert after_first > 0
@@ -227,7 +222,7 @@ def test_frames_survive_a_remote_failure_and_are_reused(
     monkeypatch.setattr(
         "movie_review.vision.analysis.run_visual_analysis", lambda *a, **kw: object()
     )
-    second = run_stage("vision", _vision_stage(), _vision_ctx(workspace, "job_007"))
+    second = run_stage("vision", _vision_stage(), _vision_ctx__frames_reuse(workspace, "job_007"))
 
     assert second.success is True, second.error
     assert counter["n"] == after_first, "frames were re-sampled after the 500"
@@ -304,7 +299,7 @@ def test_interrupted_sampling_keeps_finished_scenes(
     ) -> Path:
         if Path(dest).parent.name == "scene_000002":
             raise RuntimeError("disk full")
-        result: Path = real(source, timestamp, dest, ffmpeg, _fake_run)
+        result: Path = real(source, timestamp, dest, ffmpeg, _fake_run__frames_reuse)
         return result
 
     monkeypatch.setattr(frames_module, "extract_frame", _flaky)
@@ -317,7 +312,7 @@ def test_interrupted_sampling_keeps_finished_scenes(
             jobs_dir=workspace.jobs_dir,
             conn=workspace.conn,
             cache=workspace.cache,
-            run_fn=_fake_run,
+            run_fn=_fake_run__frames_reuse,
         )
 
     monkeypatch.undo()
@@ -331,7 +326,7 @@ def test_interrupted_sampling_keeps_finished_scenes(
         _ignored: object = None,
     ) -> Path:
         calls["n"] += 1
-        return _REAL_EXTRACT(source, timestamp, dest, ffmpeg, _fake_run)
+        return _REAL_EXTRACT(source, timestamp, dest, ffmpeg, _fake_run__frames_reuse)
 
     monkeypatch.setattr(frames_module, "extract_frame", _counting)
     result = _sample(workspace, "job_after")
@@ -379,7 +374,7 @@ def test_empty_scene_list_is_a_cache_miss_not_an_error(
         jobs_dir=workspace.jobs_dir,
         conn=workspace.conn,
         cache=workspace.cache,
-        run_fn=_fake_run,
+        run_fn=_fake_run__frames_reuse,
     )
     assert result.frames == []
     assert result.cache_hit is False, "zero frames must not claim a cache hit"

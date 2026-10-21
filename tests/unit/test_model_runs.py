@@ -51,7 +51,7 @@ class _Adapter:
         return True
 
 
-def _db(tmp_path: Path) -> sqlite3.Connection:
+def _db__model_runs(tmp_path: Path) -> sqlite3.Connection:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
     return conn
@@ -59,7 +59,7 @@ def _db(tmp_path: Path) -> sqlite3.Connection:
 
 def test_the_table_exists(tmp_path: Path) -> None:
     """README section 52 lists a model_runs table; it did not exist."""
-    conn = _db(tmp_path)
+    conn = _db__model_runs(tmp_path)
     try:
         names = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -70,7 +70,7 @@ def test_the_table_exists(tmp_path: Path) -> None:
 
 
 def test_a_call_is_recorded(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__model_runs(tmp_path)
     try:
         adapter = _Adapter(ModelUsage(input_tokens=120, output_tokens=45))
         with record_model_run(
@@ -103,7 +103,7 @@ def test_a_call_is_recorded(tmp_path: Path) -> None:
 
 def test_a_call_that_reports_no_usage_is_still_recorded(tmp_path: Path) -> None:
     """A local runtime often cannot report the tokens; the call still counts."""
-    conn = _db(tmp_path)
+    conn = _db__model_runs(tmp_path)
     try:
         adapter = _Adapter(None)
         with record_model_run(conn, "job_1", "vision", adapter, "qwen3-vl"):
@@ -119,7 +119,7 @@ def test_a_call_that_reports_no_usage_is_still_recorded(tmp_path: Path) -> None:
 
 def test_a_failed_call_is_recorded_too(tmp_path: Path) -> None:
     """A run that died halfway is exactly when the record matters."""
-    conn = _db(tmp_path)
+    conn = _db__model_runs(tmp_path)
     try:
         adapter = _Adapter()
         with pytest.raises(RuntimeError):
@@ -134,7 +134,7 @@ def test_a_failed_call_is_recorded_too(tmp_path: Path) -> None:
 
 
 def test_the_runs_can_be_filtered_by_stage(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__model_runs(tmp_path)
     try:
         for stage in ("review", "vision", "review"):
             with record_model_run(conn, "job_1", stage, _Adapter(), "m"):
@@ -160,7 +160,7 @@ def test_the_remote_adapter_reports_the_usage_the_server_sent() -> None:
 
 
 def test_the_model_run_round_trips(tmp_path: Path) -> None:
-    conn = _db(tmp_path)
+    conn = _db__model_runs(tmp_path)
     try:
         run = ModelRun(
             run_id="r1",

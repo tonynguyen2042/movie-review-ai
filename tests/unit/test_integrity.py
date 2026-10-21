@@ -10,13 +10,9 @@ from movie_review.artifacts.integrity import (
     verify_or_raise,
 )
 from movie_review.artifacts.manager import ArtifactIntegrityError, sha256_bytes
-
-
-def _write(root: Path, stage: str, name: str, data: bytes) -> ArtifactRecord:
-    target = root / "job1" / stage / name
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(data)
-    return ArtifactRecord(relative_path=f"{stage}/{name}", expected_hash=sha256_bytes(data))
+from tests.helpers import (
+    _write,
+)
 
 
 def test_scan_all_ok(tmp_path: Path) -> None:

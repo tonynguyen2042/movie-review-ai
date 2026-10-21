@@ -28,7 +28,7 @@ from movie_review.pipeline.export import (
 )
 
 
-def _script() -> ReviewScript:
+def _script__output_set() -> ReviewScript:
     return ReviewScript(
         sections=[
             ReviewSection(
@@ -86,7 +86,9 @@ def test_the_whole_output_set_is_written(tmp_path: Path) -> None:
         "COMPLETED",
         {},
     )
-    result = export_output(tmp_path / "jobs", "job_1", out, script=_script(), manifest=manifest)
+    result = export_output(
+        tmp_path / "jobs", "job_1", out, script=_script__output_set(), manifest=manifest
+    )
 
     names = {path.name for path in result.files}
     assert "review.mp4" in names
@@ -113,7 +115,9 @@ def test_the_manifest_holds_the_promised_shape(tmp_path: Path) -> None:
         "COMPLETED",
         {},
     )
-    result = export_output(tmp_path / "jobs", "job_1", out, script=_script(), manifest=manifest)
+    result = export_output(
+        tmp_path / "jobs", "job_1", out, script=_script__output_set(), manifest=manifest
+    )
 
     import json
 
@@ -131,7 +135,7 @@ def test_the_markdown_is_derived_from_the_script(tmp_path: Path) -> None:
     """The structured script is the contract; the Markdown is its presentation."""
     _job_files(tmp_path)
     out = tmp_path / "out"
-    result = export_output(tmp_path / "jobs", "job_1", out, script=_script())
+    result = export_output(tmp_path / "jobs", "job_1", out, script=_script__output_set())
 
     markdown = result.script_path.read_text(encoding="utf-8")
     assert "The hero walks into the room." in markdown
@@ -143,8 +147,8 @@ def test_the_markdown_is_derived_from_the_script(tmp_path: Path) -> None:
 
 def test_the_markdown_renderer_is_derived_from_the_script() -> None:
     """Rendering the same script twice gives the same text."""
-    first = render_script_markdown(_script())
-    second = render_script_markdown(_script())
+    first = render_script_markdown(_script__output_set())
+    second = render_script_markdown(_script__output_set())
     assert first == second
     assert first.strip()
 

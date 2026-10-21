@@ -7,17 +7,9 @@ from pydantic import ValidationError
 
 from movie_review.asr.port import ASRError, ASRPort, ModelUnavailableError
 from movie_review.domain import TranscriptSegment
-
-
-def _segment() -> TranscriptSegment:
-    return TranscriptSegment(
-        segment_id="seg_00042",
-        start=123.44,
-        end=127.12,
-        text="Where were you last night?",
-        language="en",
-        confidence=0.94,
-    )
+from tests.helpers import (
+    _segment,
+)
 
 
 def test_segment_valid() -> None:

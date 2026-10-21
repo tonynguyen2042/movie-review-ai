@@ -39,7 +39,7 @@ def _no_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _ctx(tmp_path: Path) -> tuple[PipelineContext, sqlite3.Connection]:
+def _ctx__stage_retry(tmp_path: Path) -> tuple[PipelineContext, sqlite3.Connection]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -57,7 +57,7 @@ def _ctx(tmp_path: Path) -> tuple[PipelineContext, sqlite3.Connection]:
 
 def test_a_transient_failure_is_retried(tmp_path: Path) -> None:
     """The stage is attempted again after a transient failure."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__stage_retry(tmp_path)
     attempts: list[int] = []
 
     def flaky(_ctx: PipelineContext) -> None:
@@ -75,7 +75,7 @@ def test_a_transient_failure_is_retried(tmp_path: Path) -> None:
 
 def test_a_permanent_failure_is_not_retried(tmp_path: Path) -> None:
     """A refusal is not going to pass on its own."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__stage_retry(tmp_path)
     attempts: list[int] = []
 
     def broken(_ctx: PipelineContext) -> None:
@@ -92,7 +92,7 @@ def test_a_permanent_failure_is_not_retried(tmp_path: Path) -> None:
 
 def test_the_retry_count_is_recorded_on_the_job(tmp_path: Path) -> None:
     """The job must show that the stage was attempted more than once."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__stage_retry(tmp_path)
     attempts: list[int] = []
 
     def flaky(_ctx: PipelineContext) -> None:
@@ -133,7 +133,7 @@ def test_a_cycle_in_the_cause_chain_does_not_loop() -> None:
 
 def test_a_permanent_failure_leaves_the_job_retryable(tmp_path: Path) -> None:
     """A failed stage is still reported as failed."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__stage_retry(tmp_path)
     try:
         result = run_stage("vision", lambda _c: (_ for _ in ()).throw(ValueError("nope")), ctx)
         assert result.success is False

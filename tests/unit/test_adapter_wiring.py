@@ -29,6 +29,11 @@ from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 from movie_review.vision import port as vision_port
+from tests.helpers import (
+    _fake_extract,
+    _remote_spec,
+    _segments,
+)
 
 
 def _with_asr(settings: AppSettings, spec: ModelSpec) -> AppSettings:
@@ -38,25 +43,6 @@ def _with_asr(settings: AppSettings, spec: ModelSpec) -> AppSettings:
     dataclasses.replace.
     """
     return settings.model_copy(update={"models": settings.models.model_copy(update={"asr": spec})})
-
-
-def _segments() -> list[TranscriptSegment]:
-    return [
-        TranscriptSegment(
-            segment_id="seg_00000",
-            start=0.5,
-            end=2.0,
-            text="Hello world",
-            language="en",
-            confidence=0.9,
-        )
-    ]
-
-
-def _fake_extract(source: Path, dest: Path, ffmpeg: str) -> Path:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(b"fake-wav")
-    return dest
 
 
 class _RecordingASR(asr_port.ASRPort):
@@ -108,7 +94,7 @@ class _Stage:
         return run_transcript(self.source, ctx, language="en", extract_fn=_fake_extract), built
 
 
-def _stage(tmp_path: Path) -> _Stage:
+def _stage__adapter_wiring(tmp_path: Path) -> _Stage:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -127,12 +113,6 @@ def _stage(tmp_path: Path) -> _Stage:
     return _Stage(conn=conn, ctx=ctx, source=source)
 
 
-def _remote_spec() -> ModelSpec:
-    return ModelSpec(
-        model="whisper-large-v3-turbo", backend="openai_compatible", base_url="http://host:9000/v1"
-    )
-
-
 # ---------------------------------------------------------------------------
 # The stage asks the factory, with the configured spec
 # ---------------------------------------------------------------------------
@@ -142,7 +122,7 @@ def test_transcript_builds_its_adapter_from_configuration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The spec passed to the factory must be the one the job runs with."""
-    stage = _stage(tmp_path)
+    stage = _stage__adapter_wiring(tmp_path)
     spec = _remote_spec()
 
     _, built = stage.run(monkeypatch, spec)
@@ -157,7 +137,7 @@ def test_remote_spec_does_not_reach_mlx(tmp_path: Path, monkeypatch: pytest.Monk
     WhisperMLXAdapter regardless of backend, so `remote` failed identically to
     `balanced` on a host without mlx-whisper.
     """
-    stage = _stage(tmp_path)
+    stage = _stage__adapter_wiring(tmp_path)
 
     import movie_review.asr.transcript as transcript_module
 
@@ -200,7 +180,7 @@ def test_cache_identity_uses_the_model_not_the_adapter_class(
     was not the local Whisper adapter, so every remote run keyed its cache on
     "OpenAICompatASRAdapter" -- identical no matter which model served it.
     """
-    stage = _stage(tmp_path)
+    stage = _stage__adapter_wiring(tmp_path)
     monkeypatch.setattr(
         "movie_review.asr.transcript.build_asr_adapter",
         lambda spec: _RecordingASR(model="whisper-large-v3"),

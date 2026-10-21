@@ -18,15 +18,15 @@ from movie_review.storage.schema import (
 )
 
 
-def _analysis(scene_id: str, location: str) -> SceneAnalysis:
+def _analysis__locations(scene_id: str, location: str) -> SceneAnalysis:
     return SceneAnalysis(scene_id=scene_id, location=location)
 
 
 def test_merges_case_variants() -> None:
     analyses = [
-        _analysis("scene_000001", "Abandoned Warehouse"),
-        _analysis("scene_000002", "abandoned warehouse "),
-        _analysis("scene_000003", "ABANDONED WAREHOUSE"),
+        _analysis__locations("scene_000001", "Abandoned Warehouse"),
+        _analysis__locations("scene_000002", "abandoned warehouse "),
+        _analysis__locations("scene_000003", "ABANDONED WAREHOUSE"),
     ]
     spans = {
         "scene_000001": (0.0, 10.0),
@@ -40,10 +40,10 @@ def test_merges_case_variants() -> None:
 
 def test_skips_empty_and_unknown_scenes() -> None:
     analyses = [
-        _analysis("scene_000001", ""),
-        _analysis("scene_000002", "   "),
-        _analysis("scene_999999", "Nowhere"),
-        _analysis("scene_000003", "Dock"),
+        _analysis__locations("scene_000001", ""),
+        _analysis__locations("scene_000002", "   "),
+        _analysis__locations("scene_999999", "Nowhere"),
+        _analysis__locations("scene_000003", "Dock"),
     ]
     spans = {"scene_000001": (0.0, 1.0), "scene_000002": (1.0, 2.0), "scene_000003": (2.0, 3.0)}
     [location] = extract_locations(analyses, spans)
@@ -51,7 +51,7 @@ def test_skips_empty_and_unknown_scenes() -> None:
 
 
 def test_ordered_by_first_seen() -> None:
-    analyses = [_analysis("b", "Beta"), _analysis("a", "Alpha")]
+    analyses = [_analysis__locations("b", "Beta"), _analysis__locations("a", "Alpha")]
     spans = {"a": (5.0, 6.0), "b": (0.0, 1.0)}
     locations = extract_locations(analyses, spans)
     assert [(loc.id, loc.name) for loc in locations] == [

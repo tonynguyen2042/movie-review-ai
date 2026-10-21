@@ -2060,10 +2060,10 @@ tests/unit/*.py   (helper removal)
 
 **Acceptance criteria**
 
-- [ ] no helper name is defined in more than one test file
-- [ ] the shared fixtures live in one place
-- [ ] the suite still passes with the same assertions
-- [ ] `pytest -q` passes
+- [x] no helper name is defined in more than one test file
+- [x] the shared fixtures live in one place
+- [x] the suite still passes with the same assertions
+- [x] `pytest -q` passes
 
 ---
 

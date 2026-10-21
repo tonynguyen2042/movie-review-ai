@@ -67,7 +67,7 @@ def captured_logs() -> Iterator[io.StringIO]:
     logger.setLevel(previous_level)
 
 
-def _events(buffer: io.StringIO) -> list[dict[str, Any]]:
+def _events__stage_logging(buffer: io.StringIO) -> list[dict[str, Any]]:
     return [json.loads(line) for line in buffer.getvalue().splitlines() if line.strip()]
 
 
@@ -82,7 +82,7 @@ def test_stage_completion_is_logged(captured_logs: io.StringIO, ctx: PipelineCon
 
     run_stage("scenes", lambda _c: None, ctx)
 
-    events = _events(captured_logs)
+    events = _events__stage_logging(captured_logs)
     assert [e["event"] for e in events] == ["stage.completed"], events
     assert events[0]["stage"] == "scenes"
     assert events[0]["status"] == "ok"
@@ -107,7 +107,7 @@ def test_stage_failure_is_logged_with_the_error(
     result = run_stage("render", boom, ctx)
 
     assert result.success is False
-    events = _events(captured_logs)
+    events = _events__stage_logging(captured_logs)
     assert [e["event"] for e in events] == ["stage.failed"], events
     assert events[0]["status"] == "error"
     assert "ffmpeg exited 1" in events[0]["error"]
@@ -154,7 +154,7 @@ def test_every_stage_in_the_sequence_logs(
 
     run_stage(stage, lambda _c: None, ctx)
 
-    events = _events(captured_logs)
+    events = _events__stage_logging(captured_logs)
     assert len(events) == 1, f"{stage} produced no log line: {events}"
     assert events[0]["stage"] == stage
 
@@ -166,7 +166,7 @@ def test_stage_logs_carry_job_and_stage_context(captured_logs: io.StringIO) -> N
     with ulog.logging_context(job_id="job_ctx", stage="tts-chunks"):
         ulog.get_logger("pipeline.tts-chunks").info("probe")
 
-    payload = _events(captured_logs)[0]
+    payload = _events__stage_logging(captured_logs)[0]
     assert payload["job_id"] == "job_ctx"
     assert payload["stage"] == "tts-chunks"
 

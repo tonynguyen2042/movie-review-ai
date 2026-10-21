@@ -17,7 +17,7 @@ from pathlib import Path
 from movie_review.media.frames import Frame, _manifest_entries
 
 
-def _frames(tmp_path: Path, count: int) -> list[Frame]:
+def _frames__frames_quadratic(tmp_path: Path, count: int) -> list[Frame]:
     """Frames on disk, with the digest each one carries."""
     from movie_review.artifacts import manager as artifacts
 
@@ -41,7 +41,7 @@ def test_building_the_manifest_does_not_rehash(tmp_path: Path, monkeypatch: obje
     """The manifest must use the digest the frame already carries."""
     from movie_review.artifacts import manager as artifacts
 
-    frames = _frames(tmp_path, 30)
+    frames = _frames__frames_quadratic(tmp_path, 30)
     calls: list[Path] = []
     real = artifacts.sha256_file
 
@@ -60,7 +60,7 @@ def test_the_manifest_still_records_the_right_digest(tmp_path: Path) -> None:
     """The digest must be the file's, not a placeholder."""
     from movie_review.artifacts import manager as artifacts
 
-    frames = _frames(tmp_path, 3)
+    frames = _frames__frames_quadratic(tmp_path, 3)
     entries = _manifest_entries(frames)
     for frame, entry in zip(frames, entries, strict=True):
         assert entry["sha256"] == artifacts.sha256_file(frame.path)
@@ -84,8 +84,8 @@ def test_building_a_large_manifest_is_not_quadratic(tmp_path: Path) -> None:
     written after every scene, so the stage's hashing cost grew with the
     square of the frame count.
     """
-    small = _frames(tmp_path / "small", 300)
-    large = _frames(tmp_path / "large", 1200)
+    small = _frames__frames_quadratic(tmp_path / "small", 300)
+    large = _frames__frames_quadratic(tmp_path / "large", 1200)
 
     started = time.perf_counter()
     _manifest_entries(small)

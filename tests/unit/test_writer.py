@@ -83,7 +83,7 @@ class Harness:
         )
 
 
-def _harness(tmp_path: Path, outputs: Sequence[object]) -> Harness:
+def _harness__writer(tmp_path: Path, outputs: Sequence[object]) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -139,7 +139,7 @@ def _harness(tmp_path: Path, outputs: Sequence[object]) -> Harness:
     )
 
 
-def _outputs() -> list[object]:
+def _outputs__writer() -> list[object]:
     return [
         _section("section_01", "hook", "What if everything you knew was wrong"),
         _section("section_02", "climax", "The confrontation changes everything"),
@@ -147,7 +147,7 @@ def _outputs() -> list[object]:
 
 
 def test_happy_path(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, _outputs())
+    harness = _harness__writer(tmp_path, _outputs__writer())
     result = harness.write()
     assert [s.type for s in result.script.sections] == ["hook", "climax"]
     assert result.word_count > 0
@@ -159,7 +159,7 @@ def test_happy_path(tmp_path: Path) -> None:
 
 
 def test_second_run_hits_cache(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, _outputs())
+    harness = _harness__writer(tmp_path, _outputs__writer())
     harness.write()
     harness.reasoner.fail_on_call = True
     result = harness.write()
@@ -171,7 +171,7 @@ def test_order_violation_fails_job(tmp_path: Path) -> None:
         _section("section_01", "climax", "Wrong order here"),
         _section("section_02", "hook", "Wrong order here"),
     ]
-    harness = _harness(tmp_path, bad)
+    harness = _harness__writer(tmp_path, bad)
     with pytest.raises(ScriptWriterError, match="order violated"):
         harness.write()
     job = harness.ctx.manager.get("job_1")
@@ -182,28 +182,28 @@ def test_order_violation_fails_job(tmp_path: Path) -> None:
 def test_bad_claim_type_fails_job(tmp_path: Path) -> None:
     payload = _section("section_01", "hook", "Some text here")
     payload["sections"][0]["paragraphs"][0]["claims"][0]["type"] = "MADE_UP"  # type: ignore[index]
-    harness = _harness(tmp_path, [payload, _section("section_02", "climax", "More text")])
+    harness = _harness__writer(tmp_path, [payload, _section("section_02", "climax", "More text")])
     with pytest.raises(ScriptWriterError, match="Invalid section"):
         harness.write()
     assert harness.ctx.manager.get("job_1").status is JobStatus.FAILED
 
 
 def test_unknown_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, _outputs())
+    harness = _harness__writer(tmp_path, _outputs__writer())
     harness.ctx.job_id = "job_2"
     with pytest.raises(ScriptWriterError, match="Unknown job"):
         harness.write()
 
 
 def test_failed_job_rejected(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, _outputs())
+    harness = _harness__writer(tmp_path, _outputs__writer())
     harness.ctx.manager.fail("job_1", "story", "earlier")
     with pytest.raises(ScriptWriterError, match="failed"):
         harness.write()
 
 
 def test_bad_target_words(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, _outputs())
+    harness = _harness__writer(tmp_path, _outputs__writer())
     with pytest.raises(ScriptWriterError, match="positive"):
         write_script(
             harness.outline,
@@ -217,7 +217,7 @@ def test_bad_target_words(tmp_path: Path) -> None:
 
 
 def test_rerun_past_script_ready(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, _outputs())
+    harness = _harness__writer(tmp_path, _outputs__writer())
     harness.write()
     harness.ctx.manager.transition("job_1", JobStatus.SCRIPT_VERIFIED)
     harness.reasoner.fail_on_call = True

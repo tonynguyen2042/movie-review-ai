@@ -29,7 +29,7 @@ from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 
 
-def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
+def _ctx__detection_idempotent(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -80,7 +80,7 @@ def test_a_rerun_produces_the_same_scenes(tmp_path: Path) -> None:
     """The same movie must give the same cuts, run after run."""
     source = tmp_path / "movie.mp4"
     source.write_bytes(b"\x00")
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__detection_idempotent(tmp_path)
     try:
         first = detect_scenes_stage(
             source, ctx, detect_fn=lambda *a, **k: _cuts((0.0, 10.0), (10.0, 25.0))
@@ -98,7 +98,7 @@ def test_a_rerun_does_not_leave_stale_scenes(tmp_path: Path) -> None:
     """A scene the new detection does not contain must not survive."""
     source = tmp_path / "movie.mp4"
     source.write_bytes(b"\x00")
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__detection_idempotent(tmp_path)
     try:
         detect_scenes_stage(source, ctx, detect_fn=lambda *a, **k: _cuts((0.0, 10.0), (10.0, 25.0)))
         assert len(repo.list_scenes(conn, "job_1")) == 2

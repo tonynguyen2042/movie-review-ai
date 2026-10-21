@@ -52,7 +52,7 @@ LIFECYCLE = (
 )
 
 
-def _write_wav(path: Path, seconds: float, rate: int = 8000) -> None:
+def _write_wav__quality_stage(path: Path, seconds: float, rate: int = 8000) -> None:
     import wave
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -63,7 +63,7 @@ def _write_wav(path: Path, seconds: float, rate: int = 8000) -> None:
         wav.writeframes(b"\x00\x00" * int(rate * seconds))
 
 
-def _harness(tmp_path: Path) -> tuple[PipelineContext, sqlite3.Connection]:
+def _harness__quality_stage(tmp_path: Path) -> tuple[PipelineContext, sqlite3.Connection]:
     """A job that reached RENDERED, with a scene, an event and a claim."""
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
@@ -103,10 +103,10 @@ def _harness(tmp_path: Path) -> tuple[PipelineContext, sqlite3.Connection]:
 
 def test_the_quality_stage_fails_a_job_that_misses_its_target(tmp_path: Path) -> None:
     """Regression: every job passed, because the duration was compared with itself."""
-    ctx, conn = _harness(tmp_path)
+    ctx, conn = _harness__quality_stage(tmp_path)
     # Sixty seconds of narration for a twenty-minute target: a job that is
     # nowhere near the length it promised.
-    _write_wav(ctx.jobs_dir / "job_1" / "tts" / "narration.wav", 60.0)
+    _write_wav__quality_stage(ctx.jobs_dir / "job_1" / "tts" / "narration.wav", 60.0)
 
     stage = _get_stage_function("quality")
     assert stage is not None
@@ -119,8 +119,8 @@ def test_the_quality_stage_fails_a_job_that_misses_its_target(tmp_path: Path) ->
 
 def test_the_quality_stage_reports_the_metrics_it_computed(tmp_path: Path) -> None:
     """The gate must see the three metrics its thresholds name."""
-    ctx, conn = _harness(tmp_path)
-    _write_wav(ctx.jobs_dir / "job_1" / "tts" / "narration.wav", 60.0)
+    ctx, conn = _harness__quality_stage(tmp_path)
+    _write_wav__quality_stage(ctx.jobs_dir / "job_1" / "tts" / "narration.wav", 60.0)
 
     stage = _get_stage_function("quality")
     assert stage is not None
@@ -135,10 +135,10 @@ def test_the_quality_stage_reports_the_metrics_it_computed(tmp_path: Path) -> No
 
 def test_an_unsupported_claim_fails_the_evidence_gate(tmp_path: Path) -> None:
     """A claim that is not supported must drag the coverage score down."""
-    ctx, conn = _harness(tmp_path)
+    ctx, conn = _harness__quality_stage(tmp_path)
     # A narration as long as the target, so the duration gate is not what
     # fails: the evidence gate is.
-    _write_wav(ctx.jobs_dir / "job_1" / "tts" / "narration.wav", 1200.0)
+    _write_wav__quality_stage(ctx.jobs_dir / "job_1" / "tts" / "narration.wav", 1200.0)
     repo.save_claim(
         conn,
         "job_1",
@@ -163,8 +163,8 @@ def test_an_unsupported_claim_fails_the_evidence_gate(tmp_path: Path) -> None:
 
 def test_the_quality_report_is_written(tmp_path: Path) -> None:
     """The report is the artifact of record for the gate's verdict."""
-    ctx, conn = _harness(tmp_path)
-    _write_wav(ctx.jobs_dir / "job_1" / "tts" / "narration.wav", 1200.0)
+    ctx, conn = _harness__quality_stage(tmp_path)
+    _write_wav__quality_stage(ctx.jobs_dir / "job_1" / "tts" / "narration.wav", 1200.0)
 
     stage = _get_stage_function("quality")
     assert stage is not None

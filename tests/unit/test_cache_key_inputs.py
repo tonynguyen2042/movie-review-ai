@@ -15,17 +15,17 @@ an artifact". The whole rendered prompt is that input.
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 from typing import Any
 
 from movie_review.cache.manager import CacheManager
 from movie_review.config.settings import load_settings
-from movie_review.domain import Event, EventType, Job, JobStatus
+from movie_review.domain import Event, EventType, JobStatus
 from movie_review.jobs.manager import JobManager
 from movie_review.reasoning.port import ReasoningPort
-from movie_review.storage import repositories as repo
-from movie_review.storage.database import bootstrap, connect
+from tests.helpers import (
+    _conn,
+)
 
 
 class _RecordingReasoner(ReasoningPort):
@@ -77,7 +77,7 @@ class _WriterReasoner(_RecordingReasoner):
         }
 
 
-def _events() -> list[Event]:
+def _events__cache_key_inputs() -> list[Event]:
     return [
         Event(
             id="event_00001",
@@ -88,13 +88,7 @@ def _events() -> list[Event]:
     ]
 
 
-def _conn(tmp_path: Path) -> sqlite3.Connection:
-    conn = connect(bootstrap(tmp_path / "jobs.db"))
-    repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
-    return conn
-
-
-def _story_stages() -> list[Any]:
+def _story_stages__cache_key_inputs() -> list[Any]:
     from movie_review.story.arcs import extract_story_arcs
     from movie_review.story.themes import extract_themes
     from movie_review.story.twists import extract_twists
@@ -108,10 +102,10 @@ def test_a_different_roster_misses_the_cache(tmp_path: Path) -> None:
     cache = CacheManager(tmp_path / "cache")
     spec = load_settings().models.reasoning
     try:
-        for stage in _story_stages():
+        for stage in _story_stages__cache_key_inputs():
             first = _RecordingReasoner()
             stage(
-                _events(),
+                _events__cache_key_inputs(),
                 "char_1: Someone",
                 job_id="job_1",
                 jobs_dir=tmp_path / "jobs",
@@ -126,7 +120,7 @@ def test_a_different_roster_misses_the_cache(tmp_path: Path) -> None:
             # be reused.
             second = _RecordingReasoner()
             stage(
-                _events(),
+                _events__cache_key_inputs(),
                 "char_1: Someone; char_2: Someone Else",
                 job_id="job_1",
                 jobs_dir=tmp_path / "jobs",
@@ -150,7 +144,7 @@ def test_the_same_roster_hits_the_cache(tmp_path: Path) -> None:
     try:
         first = _RecordingReasoner()
         extract_story_arcs(
-            _events(),
+            _events__cache_key_inputs(),
             "char_1: Someone",
             job_id="job_1",
             jobs_dir=tmp_path / "jobs",
@@ -163,7 +157,7 @@ def test_the_same_roster_hits_the_cache(tmp_path: Path) -> None:
 
         second = _RecordingReasoner()
         extract_story_arcs(
-            _events(),
+            _events__cache_key_inputs(),
             "char_1: Someone",
             job_id="job_1",
             jobs_dir=tmp_path / "jobs",

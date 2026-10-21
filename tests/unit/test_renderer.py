@@ -13,7 +13,6 @@ from movie_review.domain import (
     Job,
     JobStatus,
     ManifestSegment,
-    MovieMetadata,
     RenderManifest,
 )
 from movie_review.jobs.manager import JobManager
@@ -22,43 +21,10 @@ from movie_review.pipeline.context import StageContext
 from movie_review.rendering.renderer import RenderError, RenderResult, render, render_job
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
-
-
-def _manifest() -> RenderManifest:
-    return RenderManifest(
-        segments=[
-            ManifestSegment(
-                paragraph_id="p1",
-                start=0.0,
-                duration=4.0,
-                scene_id="s1",
-                clip_start=1.0,
-                clip_end=4.0,
-            ),
-            ManifestSegment(
-                paragraph_id="p2",
-                start=4.0,
-                duration=2.0,
-                scene_id="s2",
-                clip_start=0.0,
-                clip_end=10.0,
-            ),
-        ],
-        total_seconds=6.0,
-        source_seconds=7.0,
-    )
-
-
-def _meta(duration: float) -> MovieMetadata:
-    return MovieMetadata(
-        file="review.mp4",
-        sha256="a" * 64,
-        duration_seconds=duration,
-        width=1920,
-        height=1080,
-        fps=30.0,
-        video_codec="h264",
-    )
+from tests.helpers import (
+    _manifest,
+    _meta,
+)
 
 
 class _FakeRun:
@@ -167,7 +133,7 @@ class Harness:
         )
 
 
-def _harness(tmp_path: Path) -> Harness:
+def _harness__renderer(tmp_path: Path) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -199,7 +165,7 @@ def _harness(tmp_path: Path) -> Harness:
 
 
 def test_render_job_lifecycle_and_cache(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__renderer(tmp_path)
     fake = _FakeRun()
     source, narration = _files(tmp_path)
     first = harness.render(_manifest(), source, narration, fake)
@@ -216,7 +182,7 @@ def test_render_job_lifecycle_and_cache(tmp_path: Path) -> None:
 
 
 def test_render_job_failure_fails_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__renderer(tmp_path)
     source, narration = _files(tmp_path)
 
     def _fail(binary: str, args: list[str]) -> str:

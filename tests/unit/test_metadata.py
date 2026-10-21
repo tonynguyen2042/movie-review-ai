@@ -22,7 +22,7 @@ from movie_review.publishing.metadata import (
 )
 
 
-def _paragraph(pid: str, text: str, target: int = 60) -> ReviewParagraph:
+def _paragraph__metadata(pid: str, text: str, target: int = 60) -> ReviewParagraph:
     return ReviewParagraph(
         id=pid,
         text=text,
@@ -31,22 +31,24 @@ def _paragraph(pid: str, text: str, target: int = 60) -> ReviewParagraph:
     )
 
 
-def _script() -> ReviewScript:
+def _script__metadata() -> ReviewScript:
     return ReviewScript(
         sections=[
             ReviewSection(
                 id="s1",
                 type="intro",
                 paragraphs=[
-                    _paragraph("p1", "The lighthouse keeper discovers the signal.", 30),
-                    _paragraph("p2", "He suspects the captain lied about the storm.", 30),
+                    _paragraph__metadata("p1", "The lighthouse keeper discovers the signal.", 30),
+                    _paragraph__metadata("p2", "He suspects the captain lied about the storm.", 30),
                 ],
             ),
             ReviewSection(
                 id="s2",
                 type="analysis",
                 paragraphs=[
-                    _paragraph("p3", "The keeper confronts the captain on the bridge.", 40),
+                    _paragraph__metadata(
+                        "p3", "The keeper confronts the captain on the bridge.", 40
+                    ),
                 ],
             ),
         ]
@@ -55,7 +57,7 @@ def _script() -> ReviewScript:
 
 def test_script_text_concatenates_in_order() -> None:
     """Script text joins paragraphs in section then paragraph order."""
-    text = script_text(_script())
+    text = script_text(_script__metadata())
     assert text.splitlines() == [
         "The lighthouse keeper discovers the signal.",
         "He suspects the captain lied about the storm.",
@@ -65,7 +67,7 @@ def test_script_text_concatenates_in_order() -> None:
 
 def test_build_title_uses_movie_title_and_hook() -> None:
     """Title combines the movie title with the first sentence as a hook."""
-    title = build_title(_script(), "The Lighthouse")
+    title = build_title(_script__metadata(), "The Lighthouse")
     assert title.startswith("The Lighthouse Review |")
     assert "The lighthouse keeper discovers the signal" in title
     assert len(title) <= TITLE_MAX_CHARS
@@ -78,7 +80,7 @@ def test_build_title_truncates_to_limit() -> None:
             ReviewSection(
                 id="s1",
                 type="intro",
-                paragraphs=[_paragraph("p1", "Short hook sentence.", 10)],
+                paragraphs=[_paragraph__metadata("p1", "Short hook sentence.", 10)],
             )
         ]
     )
@@ -88,8 +90,8 @@ def test_build_title_truncates_to_limit() -> None:
 
 def test_build_description_includes_summary_and_chapters() -> None:
     """Description contains a summary line and a chapter listing."""
-    chapters = build_chapters(_script())
-    description = build_description(_script(), "The Lighthouse", chapters)
+    chapters = build_chapters(_script__metadata())
+    description = build_description(_script__metadata(), "The Lighthouse", chapters)
 
     assert "The Lighthouse review." in description
     assert "Chapters:" in description
@@ -106,8 +108,8 @@ def test_build_tags_ranks_by_frequency_and_drops_stopwords() -> None:
                 id="s1",
                 type="intro",
                 paragraphs=[
-                    _paragraph("p1", "lighthouse lighthouse keeper keeper captain", 10),
-                    _paragraph("p2", "the keeper and the captain and the storm", 10),
+                    _paragraph__metadata("p1", "lighthouse lighthouse keeper keeper captain", 10),
+                    _paragraph__metadata("p2", "the keeper and the captain and the storm", 10),
                 ],
             )
         ]
@@ -124,7 +126,7 @@ def test_build_tags_ranks_by_frequency_and_drops_stopwords() -> None:
 
 def test_build_chapters_spaced_by_paragraph_targets() -> None:
     """Each chapter starts where the previous section's target time ends."""
-    chapters = build_chapters(_script())
+    chapters = build_chapters(_script__metadata())
     assert [(c.index, c.title, c.start_seconds) for c in chapters] == [
         (1, "Intro", 0.0),
         (2, "Analysis", 60.0),
@@ -133,7 +135,7 @@ def test_build_chapters_spaced_by_paragraph_targets() -> None:
 
 def test_generate_metadata_returns_all_fields() -> None:
     """Top-level generator fills title, description, tags, and chapters."""
-    metadata = generate_metadata(_script(), "The Lighthouse", ["1960s", "Mystery"])
+    metadata = generate_metadata(_script__metadata(), "The Lighthouse", ["1960s", "Mystery"])
     assert metadata.title.startswith("The Lighthouse Review |")
     assert "Chapters:" in metadata.description
     assert "1960s" in metadata.tags
@@ -155,7 +157,7 @@ def test_build_tags_folds_possessives_into_base_form() -> None:
                 id="s1",
                 type="intro",
                 paragraphs=[
-                    _paragraph("p1", "brother brother brother's captain's", 10),
+                    _paragraph__metadata("p1", "brother brother brother's captain's", 10),
                 ],
             )
         ]
@@ -175,12 +177,12 @@ def test_build_description_preserves_line_structure() -> None:
             ReviewSection(
                 id="s1",
                 type="intro",
-                paragraphs=[_paragraph("p1", "Opening line one.", 30)],
+                paragraphs=[_paragraph__metadata("p1", "Opening line one.", 30)],
             ),
             ReviewSection(
                 id="s2",
                 type="analysis",
-                paragraphs=[_paragraph("p2", "Opening line two.", 30)],
+                paragraphs=[_paragraph__metadata("p2", "Opening line two.", 30)],
             ),
         ]
     )
@@ -194,6 +196,6 @@ def test_build_description_preserves_line_structure() -> None:
 
 def test_metadata_is_deterministic() -> None:
     """The same script yields identical metadata (stable hashes/artifacts)."""
-    first = generate_metadata(_script(), "The Lighthouse", ["Mystery"])
-    second = generate_metadata(_script(), "The Lighthouse", ["Mystery"])
+    first = generate_metadata(_script__metadata(), "The Lighthouse", ["Mystery"])
+    second = generate_metadata(_script__metadata(), "The Lighthouse", ["Mystery"])
     assert first == second

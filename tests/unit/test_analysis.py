@@ -65,7 +65,7 @@ class Harness:
         )
 
 
-def _harness(tmp_path: Path) -> Harness:
+def _harness__analysis(tmp_path: Path) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -111,7 +111,7 @@ def _harness(tmp_path: Path) -> Harness:
 
 
 def test_stage_happy_path(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__analysis(tmp_path)
     result = harness.stage()
     assert [a.scene_id for a in result.analyses] == ["scene_000001", "scene_000002"]
     assert result.cache_hits == 0
@@ -132,14 +132,14 @@ def test_scene_sees_the_previous_scene_summary(tmp_path: Path) -> None:
     The scenes are analysed in batches, and the continuity context comes from
     the batch before, so a batch of one is the serial behaviour.
     """
-    harness = _harness(tmp_path)
+    harness = _harness__analysis(tmp_path)
     harness.stage(batch_size=1)
     by_scene = {call.scene_id: call for call in harness.port.calls}
     assert "loc-scene_000001" in (by_scene["scene_000002"].previous_summary or "")
 
 
 def test_stage_second_run_hits_cache(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__analysis(tmp_path)
     harness.stage()
     harness.port.calls.clear()
     result = harness.stage()
@@ -148,21 +148,21 @@ def test_stage_second_run_hits_cache(tmp_path: Path) -> None:
 
 
 def test_stage_unknown_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__analysis(tmp_path)
     harness.ctx.job_id = "job_2"
     with pytest.raises(VisualAnalysisError, match="Unknown job"):
         harness.stage()
 
 
 def test_stage_failed_job_rejected(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__analysis(tmp_path)
     harness.ctx.manager.fail("job_1", "transcript", "earlier")
     with pytest.raises(VisualAnalysisError, match="failed"):
         harness.stage()
 
 
 def test_stage_vlm_failure_fails_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__analysis(tmp_path)
     harness.port.fail_on = "scene_000002"
     with pytest.raises(VisualAnalysisError, match="Cannot analyze scene_000002"):
         harness.stage()
@@ -173,14 +173,14 @@ def test_stage_vlm_failure_fails_job(tmp_path: Path) -> None:
 
 
 def test_stage_missing_frames_rejected(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__analysis(tmp_path)
     harness.frames.pop("scene_000002")
     with pytest.raises(VisualAnalysisError, match="No frames"):
         harness.stage()
 
 
 def test_stage_rerun_past_ready(tmp_path: Path) -> None:
-    harness = _harness(tmp_path)
+    harness = _harness__analysis(tmp_path)
     harness.stage()
     harness.ctx.manager.transition("job_1", JobStatus.CHARACTERS_READY)
     result = harness.stage()

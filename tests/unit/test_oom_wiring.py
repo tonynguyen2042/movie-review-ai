@@ -105,7 +105,7 @@ def test_the_oom_detection_covers_the_common_phrasings() -> None:
     assert is_oom(ValueError("bad schema")) is False
 
 
-def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
+def _ctx__oom_wiring(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo_job = Job(job_id="job_1", input_file="m.mp4")

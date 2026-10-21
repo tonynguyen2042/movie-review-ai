@@ -37,7 +37,7 @@ from movie_review.storage.database import bootstrap, connect
 SPANS = [("scene_000001", 0.0, 5.0), ("scene_000002", 10.0, 40.0)]
 
 
-def _fake_run(binary: str, args: list[str]) -> str:
+def _fake_run__proxy_frames(binary: str, args: list[str]) -> str:
     """Stand in for ffmpeg: write a marker at whatever path was requested."""
     dest = Path(args[-1])
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -45,7 +45,7 @@ def _fake_run(binary: str, args: list[str]) -> str:
     return ""
 
 
-def _fake_probe(binary: str) -> MovieMetadata:
+def _fake_probe__proxy_frames(binary: str) -> MovieMetadata:
     return MovieMetadata(
         file="proxy.mp4",
         sha256="a" * 64,
@@ -92,8 +92,8 @@ def _proxy(workspace: _Workspace) -> ProxyResult:
         cache=workspace.cache,
         max_width=1280,
         max_height=720,
-        run_fn=_fake_run,
-        probe_fn=_fake_probe,
+        run_fn=_fake_run__proxy_frames,
+        probe_fn=_fake_probe__proxy_frames,
     )
 
 
@@ -105,7 +105,7 @@ def _sample_from(workspace: _Workspace, media: Path) -> SamplingResult:
         jobs_dir=workspace.jobs_dir,
         conn=workspace.conn,
         cache=workspace.cache,
-        run_fn=_fake_run,
+        run_fn=_fake_run__proxy_frames,
     )
 
 
@@ -138,7 +138,7 @@ def test_proxy_is_reused_on_a_second_call(workspace: _Workspace) -> None:
         max_width=1280,
         max_height=720,
         run_fn=_boom,
-        probe_fn=_fake_probe,
+        probe_fn=_fake_probe__proxy_frames,
     )
 
     assert first.cache_hit is False
@@ -169,7 +169,7 @@ def test_frames_from_source_and_from_proxy_are_not_interchangeable(
         _ignored: object = None,
     ) -> Path:
         extracted.append(Path(src))
-        result: Path = _REAL_EXTRACT(src, ts, dest, ffmpeg, _fake_run)
+        result: Path = _REAL_EXTRACT(src, ts, dest, ffmpeg, _fake_run__proxy_frames)
         return result
 
     monkeypatch.setattr("movie_review.media.frames.extract_frame", _spy_extract)
@@ -221,7 +221,7 @@ def test_frames_stage_version_records_the_change(workspace: _Workspace) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _vision_ctx(workspace: _Workspace) -> PipelineContext:
+def _vision_ctx__proxy_frames(workspace: _Workspace) -> PipelineContext:
     manager = JobManager(workspace.conn)
     for state in (
         JobStatus.INGESTING,
@@ -271,8 +271,8 @@ def test_stage_samples_from_the_proxy_not_the_source(
     real_generate = media_proxy.generate_proxy
 
     def _stub_generate(source: str | Path, **kwargs: Any) -> ProxyResult:
-        kwargs.setdefault("run_fn", _fake_run)
-        kwargs.setdefault("probe_fn", _fake_probe)
+        kwargs.setdefault("run_fn", _fake_run__proxy_frames)
+        kwargs.setdefault("probe_fn", _fake_probe__proxy_frames)
         return real_generate(source, **kwargs)
 
     monkeypatch.setattr("movie_review.media.proxy.generate_proxy", _stub_generate)
@@ -280,7 +280,7 @@ def test_stage_samples_from_the_proxy_not_the_source(
     # what the lookup resolves against at call time.
     monkeypatch.setattr("movie_review.media.frames.sample_movie", _spy)
 
-    result = run_stage("vision", _stage(), _vision_ctx(workspace))
+    result = run_stage("vision", _stage__proxy_frames(), _vision_ctx__proxy_frames(workspace))
 
     assert result.success is True, result.error
     assert len(sampled_paths) == 1
@@ -289,7 +289,7 @@ def test_stage_samples_from_the_proxy_not_the_source(
     assert sampled_paths[0] != workspace.source, "sampled from the source, not the proxy"
 
 
-def _stage() -> Callable[[PipelineContext], object]:
+def _stage__proxy_frames() -> Callable[[PipelineContext], object]:
     stage = _get_stage_function("vision")
     assert stage is not None
     return stage
@@ -302,7 +302,7 @@ def _forced_extract(
     ffmpeg: str = "ffmpeg",
     _ignored: object = None,
 ) -> Path:
-    result: Path = _REAL_EXTRACT(source, timestamp, dest, ffmpeg, _fake_run)
+    result: Path = _REAL_EXTRACT(source, timestamp, dest, ffmpeg, _fake_run__proxy_frames)
     return result
 
 

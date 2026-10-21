@@ -18,7 +18,7 @@ from movie_review.media.feedback import (
 )
 
 
-def _scene(scene_id: str = "scene_000001", duration: float = 20.0) -> Scene:
+def _scene__sampling_feedback(scene_id: str = "scene_000001", duration: float = 20.0) -> Scene:
     return Scene(
         scene_id=scene_id,
         start=0.0,
@@ -27,7 +27,7 @@ def _scene(scene_id: str = "scene_000001", duration: float = 20.0) -> Scene:
     )
 
 
-def _analysis(
+def _analysis__sampling_feedback(
     importance: float = 0.5,
     actions: list[str] | None = None,
     characters: list[str] | None = None,
@@ -47,8 +47,8 @@ def _analysis(
 def test_an_important_scene_gets_more_frames() -> None:
     """The importance boost was never applied."""
     decision = decide_feedback(
-        _scene(),
-        _analysis(importance=0.95),
+        _scene__sampling_feedback(),
+        _analysis__sampling_feedback(importance=0.95),
         "some dialogue",
         frozenset(),
         base_count=6,
@@ -60,8 +60,8 @@ def test_an_important_scene_gets_more_frames() -> None:
 
 def test_an_observed_action_gets_more_frames() -> None:
     decision = decide_feedback(
-        _scene(),
-        _analysis(actions=["a door opens"]),
+        _scene__sampling_feedback(),
+        _analysis__sampling_feedback(actions=["a door opens"]),
         "some dialogue",
         frozenset(),
         base_count=6,
@@ -72,8 +72,8 @@ def test_an_observed_action_gets_more_frames() -> None:
 
 def test_a_new_character_gets_more_frames() -> None:
     decision = decide_feedback(
-        _scene(),
-        _analysis(characters=["Sarah"]),
+        _scene__sampling_feedback(),
+        _analysis__sampling_feedback(characters=["Sarah"]),
         "some dialogue",
         frozenset(),
         base_count=6,
@@ -85,8 +85,8 @@ def test_a_new_character_gets_more_frames() -> None:
 def test_a_low_information_scene_gets_fewer_frames() -> None:
     """A static scene with nothing in it does not need twelve frames."""
     decision = decide_feedback(
-        _scene(),
-        _analysis(importance=0.1),
+        _scene__sampling_feedback(),
+        _analysis__sampling_feedback(importance=0.1),
         "",
         frozenset(),
         base_count=8,
@@ -98,8 +98,10 @@ def test_a_low_information_scene_gets_fewer_frames() -> None:
 def test_the_budget_stays_inside_its_bounds() -> None:
     """A very important scene must not ask for a thousand frames."""
     decision = decide_feedback(
-        _scene(),
-        _analysis(importance=1.0, actions=["a", "b", "c"], characters=["A", "B", "C"]),
+        _scene__sampling_feedback(),
+        _analysis__sampling_feedback(
+            importance=1.0, actions=["a", "b", "c"], characters=["A", "B", "C"]
+        ),
         "dialogue",
         frozenset(),
         base_count=20,

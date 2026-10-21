@@ -16,13 +16,16 @@ from movie_review.media.feedback import (
 from movie_review.media.frames import FrameSamplingError, sample_movie
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
+from tests.helpers import (
+    _fake_run,
+)
 
 
-def _scene() -> Scene:
+def _scene__feedback() -> Scene:
     return Scene(scene_id="scene_000001", start=0.0, end=5.0, duration=5.0)
 
 
-def _analysis(**overrides: object) -> SceneAnalysis:
+def _analysis__feedback(**overrides: object) -> SceneAnalysis:
     data: dict[str, object] = {"scene_id": "scene_000001", "importance": 0.5}
     data.update(overrides)
     return SceneAnalysis.model_validate(data)
@@ -30,7 +33,7 @@ def _analysis(**overrides: object) -> SceneAnalysis:
 
 def test_important_scene_boosted() -> None:
     decision = decide_feedback(
-        _scene(), _analysis(importance=0.9), "hello", frozenset(), base_count=3
+        _scene__feedback(), _analysis__feedback(importance=0.9), "hello", frozenset(), base_count=3
     )
     assert decision.adjusted_count == 7
     assert decision.boosted is True
@@ -38,30 +41,44 @@ def test_important_scene_boosted() -> None:
 
 
 def test_action_boost() -> None:
-    decision = decide_feedback(_scene(), _analysis(actions=["runs"]), "", frozenset(), base_count=3)
+    decision = decide_feedback(
+        _scene__feedback(), _analysis__feedback(actions=["runs"]), "", frozenset(), base_count=3
+    )
     assert decision.adjusted_count == 5
 
 
 def test_new_characters_boost() -> None:
     decision = decide_feedback(
-        _scene(), _analysis(characters=["A", "B"]), "", frozenset(), base_count=3
+        _scene__feedback(),
+        _analysis__feedback(characters=["A", "B"]),
+        "",
+        frozenset(),
+        base_count=3,
     )
     assert decision.adjusted_count == 7
     known = decide_feedback(
-        _scene(), _analysis(characters=["A"]), "", frozenset({"A"}), base_count=3
+        _scene__feedback(),
+        _analysis__feedback(characters=["A"]),
+        "",
+        frozenset({"A"}),
+        base_count=3,
     )
     assert known.adjusted_count == 3
 
 
 def test_low_information_halved_to_floor() -> None:
-    decision = decide_feedback(_scene(), _analysis(importance=0.1), "", frozenset(), base_count=3)
+    decision = decide_feedback(
+        _scene__feedback(), _analysis__feedback(importance=0.1), "", frozenset(), base_count=3
+    )
     assert decision.adjusted_count == 2
     assert decision.boosted is False
     assert any("halved" in reason for reason in decision.reasons)
 
 
 def test_count_clamped() -> None:
-    decision = decide_feedback(_scene(), _analysis(importance=0.9), "", frozenset(), base_count=30)
+    decision = decide_feedback(
+        _scene__feedback(), _analysis__feedback(importance=0.9), "", frozenset(), base_count=30
+    )
     assert decision.adjusted_count == 24
 
 
@@ -69,13 +86,6 @@ def test_additional_timestamps_avoid_existing() -> None:
     assert additional_timestamps([0.0, 2.5], 0.0, 5.0, 4) == [1.25, 3.75]
     assert additional_timestamps([0.0, 1.0], 0.0, 5.0, 2) == []
     assert additional_timestamps([], 2.0, 2.0, 4) == []
-
-
-def _fake_run(binary: str, args: list[str]) -> str:
-    dest = Path(args[-1])
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(b"frame-bytes")
-    return ""
 
 
 def _setup(tmp_path: Path) -> tuple[sqlite3.Connection, Path, Path]:
@@ -98,7 +108,7 @@ def _setup(tmp_path: Path) -> tuple[sqlite3.Connection, Path, Path]:
     return conn, jobs_dir, source
 
 
-def _analyses(importance: float) -> dict[str, tuple[SceneAnalysis, str]]:
+def _analyses__feedback(importance: float) -> dict[str, tuple[SceneAnalysis, str]]:
     return {
         "scene_000001": (
             SceneAnalysis(scene_id="scene_000001", importance=importance),
@@ -114,7 +124,7 @@ def test_apply_feedback_adds_frames(tmp_path: Path) -> None:
     assert before is not None
     result = apply_feedback(
         source,
-        _analyses(0.9),
+        _analyses__feedback(0.9),
         job_id="job_1",
         jobs_dir=jobs_dir,
         conn=conn,
@@ -130,7 +140,7 @@ def test_apply_feedback_adds_frames(tmp_path: Path) -> None:
     # Second pass reads the updated manifest: budget already covered.
     again = apply_feedback(
         source,
-        _analyses(0.9),
+        _analyses__feedback(0.9),
         job_id="job_1",
         jobs_dir=jobs_dir,
         conn=conn,
@@ -148,7 +158,7 @@ def test_apply_feedback_requires_prior_sampling(tmp_path: Path) -> None:
     with pytest.raises(FrameSamplingError, match="sampling before feedback"):
         apply_feedback(
             source,
-            _analyses(0.9),
+            _analyses__feedback(0.9),
             job_id="job_1",
             jobs_dir=tmp_path / "jobs",
             conn=conn,

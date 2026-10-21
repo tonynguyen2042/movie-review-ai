@@ -11,7 +11,7 @@ from movie_review.rendering.subtitles import build_cues, format_srt
 from movie_review.rendering.validate import ValidationReport, validate_render
 
 
-def _manifest() -> RenderManifest:
+def _manifest__validate() -> RenderManifest:
     return RenderManifest(
         segments=[
             ManifestSegment(
@@ -36,7 +36,7 @@ def _manifest() -> RenderManifest:
     )
 
 
-def _meta(duration: float) -> MovieMetadata:
+def _meta__validate(duration: float) -> MovieMetadata:
     return MovieMetadata(
         file="v.mp4",
         sha256="a" * 64,
@@ -48,7 +48,7 @@ def _meta(duration: float) -> MovieMetadata:
     )
 
 
-def _wav(path: Path, seconds: float, rate: int = 16000) -> Path:
+def _wav__validate(path: Path, seconds: float, rate: int = 16000) -> Path:
     with wave.open(str(path), "wb") as wav:
         wav.setnchannels(1)
         wav.setsampwidth(2)
@@ -58,7 +58,7 @@ def _wav(path: Path, seconds: float, rate: int = 16000) -> Path:
 
 
 def _srt(path: Path) -> Path:
-    cues = build_cues(_manifest(), {"p1": "Hello world.", "p2": "More words here."})
+    cues = build_cues(_manifest__validate(), {"p1": "Hello world.", "p2": "More words here."})
     path.write_text(format_srt(cues), encoding="utf-8")
     return path
 
@@ -68,10 +68,10 @@ def test_happy_path(tmp_path: Path) -> None:
     video.write_bytes(b"fake-video")
     report = validate_render(
         video,
-        _manifest(),
-        _wav(tmp_path / "n.wav", 5.0),
+        _manifest__validate(),
+        _wav__validate(tmp_path / "n.wav", 5.0),
         _srt(tmp_path / "r.srt"),
-        probe_fn=lambda p: _meta(5.0),
+        probe_fn=lambda p: _meta__validate(5.0),
     )
     assert isinstance(report, ValidationReport)
     assert report.ok is True
@@ -79,7 +79,9 @@ def test_happy_path(tmp_path: Path) -> None:
 
 
 def test_missing_video(tmp_path: Path) -> None:
-    report = validate_render(tmp_path / "absent.mp4", _manifest(), probe_fn=lambda p: _meta(5.0))
+    report = validate_render(
+        tmp_path / "absent.mp4", _manifest__validate(), probe_fn=lambda p: _meta__validate(5.0)
+    )
     assert report.ok is False
     assert report.failures()[0].name == "video.present"
 
@@ -87,7 +89,7 @@ def test_missing_video(tmp_path: Path) -> None:
 def test_duration_mismatch(tmp_path: Path) -> None:
     video = tmp_path / "v.mp4"
     video.write_bytes(b"x")
-    report = validate_render(video, _manifest(), probe_fn=lambda p: _meta(60.0))
+    report = validate_render(video, _manifest__validate(), probe_fn=lambda p: _meta__validate(60.0))
     assert report.ok is False
     assert "video.duration" in {f.name for f in report.failures()}
 
@@ -97,7 +99,9 @@ def test_unreadable_audio(tmp_path: Path) -> None:
     video.write_bytes(b"x")
     bad = tmp_path / "n.wav"
     bad.write_bytes(b"not-a-wav")
-    report = validate_render(video, _manifest(), bad, probe_fn=lambda p: _meta(5.0))
+    report = validate_render(
+        video, _manifest__validate(), bad, probe_fn=lambda p: _meta__validate(5.0)
+    )
     assert report.ok is False
     assert any(f.name == "audio.readable" for f in report.failures())
 
@@ -108,7 +112,11 @@ def test_malformed_subtitles(tmp_path: Path) -> None:
     bad = tmp_path / "r.srt"
     bad.write_text("garbage", encoding="utf-8")
     report = validate_render(
-        video, _manifest(), _wav(tmp_path / "n.wav", 5.0), bad, probe_fn=lambda p: _meta(5.0)
+        video,
+        _manifest__validate(),
+        _wav__validate(tmp_path / "n.wav", 5.0),
+        bad,
+        probe_fn=lambda p: _meta__validate(5.0),
     )
     assert report.ok is False
     assert any(f.name == "subtitles.parseable" for f in report.failures())
@@ -139,7 +147,7 @@ def test_gapped_timeline(tmp_path: Path) -> None:
     )
     video = tmp_path / "v.mp4"
     video.write_bytes(b"x")
-    report = validate_render(video, manifest, probe_fn=lambda p: _meta(8.0))
+    report = validate_render(video, manifest, probe_fn=lambda p: _meta__validate(8.0))
     assert report.ok is False
     assert any(f.name == "timeline.contiguous" for f in report.failures())
 

@@ -25,7 +25,7 @@ from movie_review.domain import TranscriptSegment
 from movie_review.vision.analysis import DialogueIndex, scene_dialogue
 
 
-def _segments(count: int) -> list[TranscriptSegment]:
+def _segments__hot_paths(count: int) -> list[TranscriptSegment]:
     return [
         TranscriptSegment(
             segment_id=f"seg_{index:05d}",
@@ -39,7 +39,7 @@ def _segments(count: int) -> list[TranscriptSegment]:
 
 def test_the_dialogue_index_finds_the_same_segments() -> None:
     """The index must answer exactly what the scan answered."""
-    segments = _segments(500)
+    segments = _segments__hot_paths(500)
     index = DialogueIndex(segments)
     for start in (0.0, 12.0, 250.5, 480.0):
         end = start + 8.0
@@ -66,8 +66,8 @@ def test_the_dialogue_index_handles_a_segment_that_ends_late() -> None:
 
 def test_finding_the_dialogue_does_not_grow_with_the_transcript() -> None:
     """The window must be found in time that does not depend on the length."""
-    small = _segments(200)
-    large = _segments(4000)
+    small = _segments__hot_paths(200)
+    large = _segments__hot_paths(4000)
 
     # The index is built once, as a stage does; the measurement is the
     # lookup, which is what used to be a scan.
@@ -94,7 +94,7 @@ def test_finding_the_dialogue_does_not_grow_with_the_transcript() -> None:
 
 def test_the_scan_still_answers_the_same_question() -> None:
     """The plain scan is kept for a caller with a short list."""
-    segments = _segments(20)
+    segments = _segments__hot_paths(20)
     index = DialogueIndex(segments)
     start, end = 5.0, 9.0
     scanned = " ".join(

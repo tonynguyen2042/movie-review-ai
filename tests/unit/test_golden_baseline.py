@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 GOLDEN = ROOT / "tests" / "golden" / "golden-01"
 
 
-def _load(name: str) -> Any:
+def _load__golden_baseline(name: str) -> Any:
     document = json.loads((GOLDEN / name).read_text(encoding="utf-8"))
     assert isinstance(document, dict)
     return document
@@ -46,12 +46,12 @@ def test_the_file_and_the_fixture_agree() -> None:
     evaluators were scored against. The two are now pinned together, so a
     change to either one has to be a deliberate change to both.
     """
-    assert _load("analysis.json") == golden_analysis()
+    assert _load__golden_baseline("analysis.json") == golden_analysis()
 
 
 def test_the_baseline_passes_every_gate() -> None:
     """A known-good review passes plot accuracy, hallucination and coverage."""
-    truth = _load("ground_truth.json")
+    truth = _load__golden_baseline("ground_truth.json")
     report = run_regression(
         truth["event_ids"],
         truth["event_ids"],
@@ -67,7 +67,7 @@ def test_the_baseline_passes_every_gate() -> None:
 
 def test_a_wrong_prediction_fails_the_baseline() -> None:
     """The baseline has to be able to fail, or it proves nothing."""
-    truth = _load("ground_truth.json")
+    truth = _load__golden_baseline("ground_truth.json")
     report = run_regression(
         ["e_escape", "e_invented"],
         truth["event_ids"],
@@ -80,7 +80,7 @@ def test_a_wrong_prediction_fails_the_baseline() -> None:
 
 def test_an_unsupported_major_claim_fails_the_baseline() -> None:
     """The hallucination gate has to bite."""
-    truth = _load("ground_truth.json")
+    truth = _load__golden_baseline("ground_truth.json")
     claims = list(truth["claims"]) + [
         {
             "claim_id": "cl_bad",
@@ -102,7 +102,7 @@ def test_an_unsupported_major_claim_fails_the_baseline() -> None:
 
 def test_a_claim_without_evidence_fails_the_baseline() -> None:
     """The coverage gate has to bite."""
-    truth = _load("ground_truth.json")
+    truth = _load__golden_baseline("ground_truth.json")
     claims = list(truth["claims"]) + [
         {
             "claim_id": "cl_uncovered",

@@ -9,7 +9,7 @@ from movie_review.domain import (
 from movie_review.quality.characters import character_consistency
 
 
-def _character(character_id: str = "char_001") -> Character:
+def _character__character_metric(character_id: str = "char_001") -> Character:
     return Character(id=character_id, name="John", first_seen=0.0, last_seen=90.0)
 
 
@@ -40,7 +40,7 @@ def _death() -> list[Event]:
 
 def test_clean_scores_100() -> None:
     metric = character_consistency(
-        [_character()],
+        [_character__character_metric()],
         [_mention("John", "char_001")],
         [("SPEAKER_00", "char_001", 0.8)],
         [],
@@ -52,7 +52,7 @@ def test_clean_scores_100() -> None:
 
 def test_dangling_penalized() -> None:
     metric = character_consistency(
-        [_character()],
+        [_character__character_metric()],
         [_mention("Zorg", "char_999")],
         [("SPEAKER_01", "char_998", 0.5)],
         [],
@@ -63,7 +63,9 @@ def test_dangling_penalized() -> None:
 
 
 def test_death_issue_penalized() -> None:
-    metric = character_consistency([_character()], [_mention("John", "char_001")], [], _death(), [])
+    metric = character_consistency(
+        [_character__character_metric()], [_mention("John", "char_001")], [], _death(), []
+    )
     assert metric.score == 50.0
 
 

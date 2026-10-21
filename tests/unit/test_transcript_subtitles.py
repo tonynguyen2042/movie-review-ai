@@ -6,7 +6,7 @@ from movie_review.asr.subtitles import format_srt, format_vtt, write_sidecars
 from movie_review.domain import TranscriptSegment
 
 
-def _segments() -> list[TranscriptSegment]:
+def _segments__transcript_subtitles() -> list[TranscriptSegment]:
     return [
         TranscriptSegment(
             segment_id="seg_00000",
@@ -30,7 +30,7 @@ def _segments() -> list[TranscriptSegment]:
 
 
 def test_format_srt_skips_blank_and_numbers_positionally() -> None:
-    text = format_srt(_segments())
+    text = format_srt(_segments__transcript_subtitles())
     assert text == (
         "1\n00:00:00,500 --> 00:00:02,000\nHello world\n"
         "\n"
@@ -39,7 +39,7 @@ def test_format_srt_skips_blank_and_numbers_positionally() -> None:
 
 
 def test_format_vtt_header_and_dot_separator() -> None:
-    text = format_vtt(_segments())
+    text = format_vtt(_segments__transcript_subtitles())
     assert text.startswith("WEBVTT\n\n")
     assert "00:00:00.500 --> 00:00:02.000\nHello world" in text
     assert "00:01:01.500 --> 00:01:02.250\nWhere were you?" in text
@@ -52,10 +52,10 @@ def test_format_empty_segments() -> None:
 
 
 def test_write_sidecars_idempotent(tmp_path: Path) -> None:
-    first_srt, first_vtt = write_sidecars(tmp_path, _segments())
+    first_srt, first_vtt = write_sidecars(tmp_path, _segments__transcript_subtitles())
     srt_bytes = first_srt.read_bytes()
     vtt_bytes = first_vtt.read_bytes()
-    second_srt, second_vtt = write_sidecars(tmp_path, _segments())
+    second_srt, second_vtt = write_sidecars(tmp_path, _segments__transcript_subtitles())
     assert second_srt == first_srt
     assert second_vtt == first_vtt
     assert second_srt.read_bytes() == srt_bytes
@@ -81,7 +81,7 @@ def test_stage_writes_sidecars_and_regenerates_on_cache_hit(tmp_path: Path) -> N
             self, audio_path: str | Path, *, language: str | None = None
         ) -> list[TranscriptSegment]:
             self.calls += 1
-            return _segments()
+            return _segments__transcript_subtitles()
 
         def unload(self) -> None:
             return None

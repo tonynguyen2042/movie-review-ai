@@ -6,14 +6,13 @@ from pathlib import Path
 import pytest
 
 from movie_review.characters.linking import link_speakers, save_links
-from movie_review.domain import DiarizedSegment, Job, Scene, SceneAnalysis
+from movie_review.domain import DiarizedSegment, Job, SceneAnalysis
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect, get_schema_version, migrate
 from movie_review.storage.schema import SCHEMA_VERSION
-
-
-def _scene(scene_id: str, start: float, end: float) -> Scene:
-    return Scene(scene_id=scene_id, start=start, end=end, duration=end - start)
+from tests.helpers import (
+    _scene,
+)
 
 
 def test_exclusive_scene_links() -> None:

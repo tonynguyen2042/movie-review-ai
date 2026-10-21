@@ -14,18 +14,9 @@ from movie_review.media.ingest import IngestError, ingest_movie
 from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
-
-
-def _fake_probe(path: str) -> MovieMetadata:
-    return MovieMetadata(
-        file=path,
-        sha256="a" * 64,
-        duration_seconds=60.0,
-        width=640,
-        height=480,
-        fps=25.0,
-        video_codec="h264",
-    )
+from tests.helpers import (
+    _fake_probe,
+)
 
 
 def _context(tmp_path: Path, job_id: str = "job_1") -> StageContext:

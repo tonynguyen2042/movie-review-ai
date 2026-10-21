@@ -32,7 +32,7 @@ def conn(tmp_path: Path) -> sqlite3.Connection:
     return connection
 
 
-def _analysis(scene_id: str = "scene_000001") -> SceneAnalysis:
+def _analysis__scene_analyses_repo(scene_id: str = "scene_000001") -> SceneAnalysis:
     return SceneAnalysis(
         scene_id=scene_id,
         location="Fury cargo hold",
@@ -80,7 +80,7 @@ def test_migration_is_idempotent(tmp_path: Path) -> None:
 
 def test_analysis_round_trips_exactly(conn: sqlite3.Connection) -> None:
     """Every field survives, including the five lists."""
-    original = _analysis()
+    original = _analysis__scene_analyses_repo()
     repo.save_scene_analysis(conn, "job_a", original)
 
     [loaded] = repo.list_scene_analyses(conn, "job_a")
@@ -115,8 +115,10 @@ def test_unicode_survives_the_json_columns(conn: sqlite3.Connection) -> None:
 
 def test_saving_twice_replaces_rather_than_duplicates(conn: sqlite3.Connection) -> None:
     """Re-running the vision stage must not leave two rows per scene."""
-    repo.save_scene_analysis(conn, "job_a", _analysis())
-    repo.save_scene_analysis(conn, "job_a", _analysis().model_copy(update={"location": "Deck"}))
+    repo.save_scene_analysis(conn, "job_a", _analysis__scene_analyses_repo())
+    repo.save_scene_analysis(
+        conn, "job_a", _analysis__scene_analyses_repo().model_copy(update={"location": "Deck"})
+    )
 
     analyses = repo.list_scene_analyses(conn, "job_a")
     assert len(analyses) == 1
@@ -126,7 +128,7 @@ def test_saving_twice_replaces_rather_than_duplicates(conn: sqlite3.Connection) 
 def test_analyses_come_back_in_scene_order(conn: sqlite3.Connection) -> None:
     """Downstream stages see them in the same order as the scene timeline."""
     for scene_id in ("scene_000009", "scene_000001", "scene_000005"):
-        repo.save_scene_analysis(conn, "job_a", _analysis(scene_id))
+        repo.save_scene_analysis(conn, "job_a", _analysis__scene_analyses_repo(scene_id))
 
     assert [a.scene_id for a in repo.list_scene_analyses(conn, "job_a")] == [
         "scene_000001",
@@ -137,8 +139,8 @@ def test_analyses_come_back_in_scene_order(conn: sqlite3.Connection) -> None:
 
 def test_analyses_are_scoped_to_their_job(conn: sqlite3.Connection) -> None:
     repo.save_job(conn, Job(job_id="job_b", input_file="other.mp4"))
-    repo.save_scene_analysis(conn, "job_a", _analysis("scene_000001"))
-    repo.save_scene_analysis(conn, "job_b", _analysis("scene_000001"))
+    repo.save_scene_analysis(conn, "job_a", _analysis__scene_analyses_repo("scene_000001"))
+    repo.save_scene_analysis(conn, "job_b", _analysis__scene_analyses_repo("scene_000001"))
 
     assert len(repo.list_scene_analyses(conn, "job_a")) == 1
     assert len(repo.list_scene_analyses(conn, "job_b")) == 1
@@ -147,7 +149,7 @@ def test_analyses_are_scoped_to_their_job(conn: sqlite3.Connection) -> None:
 
 
 def test_deleting_a_job_cascades(conn: sqlite3.Connection) -> None:
-    repo.save_scene_analysis(conn, "job_a", _analysis())
+    repo.save_scene_analysis(conn, "job_a", _analysis__scene_analyses_repo())
     with conn:
         conn.execute("DELETE FROM jobs WHERE job_id = 'job_a'")
 
@@ -164,7 +166,7 @@ def test_empty_job_returns_an_empty_list(conn: sqlite3.Connection) -> None:
 
 def test_foreign_key_rejects_an_unknown_job(conn: sqlite3.Connection) -> None:
     with pytest.raises(sqlite3.IntegrityError):
-        repo.save_scene_analysis(conn, "job_missing", _analysis())
+        repo.save_scene_analysis(conn, "job_missing", _analysis__scene_analyses_repo())
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +180,7 @@ def test_a_damaged_json_column_does_not_lose_the_analysis(conn: sqlite3.Connecti
     The alternative -- failing the stage -- would discard location, emotions and
     both scores over a column that is one of six.
     """
-    repo.save_scene_analysis(conn, "job_a", _analysis())
+    repo.save_scene_analysis(conn, "job_a", _analysis__scene_analyses_repo())
     with conn:
         conn.execute(
             "UPDATE scene_analyses SET actions_json = ? WHERE job_id = 'job_a'",
@@ -194,7 +196,7 @@ def test_a_damaged_json_column_does_not_lose_the_analysis(conn: sqlite3.Connecti
 
 
 def test_a_json_column_that_is_not_a_list_is_ignored(conn: sqlite3.Connection) -> None:
-    repo.save_scene_analysis(conn, "job_a", _analysis())
+    repo.save_scene_analysis(conn, "job_a", _analysis__scene_analyses_repo())
     with conn:
         conn.execute(
             "UPDATE scene_analyses SET objects_json = ? WHERE job_id = 'job_a'",
@@ -208,7 +210,7 @@ def test_a_json_column_that_is_not_a_list_is_ignored(conn: sqlite3.Connection) -
 
 def test_non_string_list_items_are_coerced(conn: sqlite3.Connection) -> None:
     """A number in a text column is a data problem, not a reason to fail."""
-    repo.save_scene_analysis(conn, "job_a", _analysis())
+    repo.save_scene_analysis(conn, "job_a", _analysis__scene_analyses_repo())
     with conn:
         conn.execute(
             "UPDATE scene_analyses SET emotions_json = ? WHERE job_id = 'job_a'",
@@ -237,7 +239,7 @@ class _FakeVLM(VLMPort):
 
     def analyze(self, analysis_input: AnalysisInput, prompt: str) -> SceneAnalysis:
         self.calls.append(analysis_input.scene_id)
-        return _analysis(analysis_input.scene_id)
+        return _analysis__scene_analyses_repo(analysis_input.scene_id)
 
     def unload(self) -> None:
         return None

@@ -23,12 +23,9 @@ import pytest
 from typer.testing import CliRunner
 
 from movie_review.cli.app import app
-
-
-def _movie(tmp_path: Path) -> Path:
-    movie = tmp_path / "movie.mp4"
-    movie.write_bytes(b"\x00\x00\x00\x18ftypmp42not-a-video")
-    return movie
+from tests.helpers import (
+    _movie,
+)
 
 
 def test_an_inverted_stage_range_is_a_usage_error(tmp_path: Path) -> None:

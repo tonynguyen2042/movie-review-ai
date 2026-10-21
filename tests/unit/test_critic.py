@@ -63,7 +63,7 @@ class _StubReasoner(ReasoningPort):
         return True
 
 
-def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
+def _ctx__critic(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo_job = Job(job_id="job_1", input_file="m.mp4")
@@ -93,7 +93,7 @@ def _ctx(tmp_path: Path) -> tuple[StageContext, sqlite3.Connection]:
     return ctx, conn
 
 
-def _script() -> ReviewScript:
+def _script__critic() -> ReviewScript:
     return ReviewScript(
         sections=[
             ReviewSection(
@@ -128,10 +128,10 @@ def test_the_prompt_is_registered() -> None:
 
 def test_a_disabled_critic_is_skipped(tmp_path: Path) -> None:
     """A profile that does not enable it gets an empty report."""
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__critic(tmp_path)
     try:
         spec = ModelSpec(model="qwen3.5-122b", enabled=False)
-        result = critique_script(_script(), ctx, spec)
+        result = critique_script(_script__critic(), ctx, spec)
         assert result.skipped is True
         assert result.issues == []
     finally:
@@ -139,7 +139,7 @@ def test_a_disabled_critic_is_skipped(tmp_path: Path) -> None:
 
 
 def test_the_critic_reports_the_issues(tmp_path: Path) -> None:
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__critic(tmp_path)
     try:
         reasoner = _StubReasoner(
             {
@@ -155,7 +155,7 @@ def test_the_critic_reports_the_issues(tmp_path: Path) -> None:
             }
         )
         result = critique_script(
-            _script(),
+            _script__critic(),
             ctx,
             ModelSpec(model="qwen3.5-122b"),
             reasoner=reasoner,
@@ -171,10 +171,10 @@ def test_the_critic_reports_the_issues(tmp_path: Path) -> None:
 
 
 def test_the_report_is_written(tmp_path: Path) -> None:
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__critic(tmp_path)
     try:
         critique_script(
-            _script(),
+            _script__critic(),
             ctx,
             ModelSpec(model="qwen3.5-122b"),
             reasoner=_StubReasoner({"issues": [], "summary": "It works."}),
@@ -210,7 +210,7 @@ def test_a_clean_script_is_not_padded_with_issues() -> None:
 
 
 def test_a_failing_critic_is_reported(tmp_path: Path) -> None:
-    ctx, conn = _ctx(tmp_path)
+    ctx, conn = _ctx__critic(tmp_path)
     try:
 
         class _Broken(_StubReasoner):
@@ -219,7 +219,7 @@ def test_a_failing_critic_is_reported(tmp_path: Path) -> None:
 
         with pytest.raises(CriticError):
             critique_script(
-                _script(),
+                _script__critic(),
                 ctx,
                 ModelSpec(model="qwen3.5-122b"),
                 reasoner=_Broken({}),

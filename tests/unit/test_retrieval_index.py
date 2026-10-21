@@ -32,7 +32,7 @@ from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 
 
-def _db(tmp_path: Path, segments: int) -> sqlite3.Connection:
+def _db__retrieval_index(tmp_path: Path, segments: int) -> sqlite3.Connection:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
     repo.save_transcript_segments(
@@ -71,7 +71,7 @@ def test_the_statement_count_does_not_grow_with_the_transcript(tmp_path: Path) -
     """One retrieval must not issue one query per segment."""
     counts: list[int] = []
     for segments in (100, 400):
-        conn = _db(tmp_path / str(segments), segments)
+        conn = _db__retrieval_index(tmp_path / str(segments), segments)
         try:
             statements = _count_statements(conn)
             retrieve_evidence("photograph drawer", conn, "job_1")
@@ -88,7 +88,7 @@ def test_the_statement_count_does_not_grow_with_the_transcript(tmp_path: Path) -
 
 def test_retrieval_over_a_long_transcript_is_fast(tmp_path: Path) -> None:
     """800 segments used to take nearly three seconds."""
-    conn = _db(tmp_path, 800)
+    conn = _db__retrieval_index(tmp_path, 800)
     try:
         started = time.perf_counter()
         results = retrieve_evidence("photograph drawer", conn, "job_1")
@@ -101,7 +101,7 @@ def test_retrieval_over_a_long_transcript_is_fast(tmp_path: Path) -> None:
 
 def test_checking_many_claims_reads_the_transcript_once(tmp_path: Path) -> None:
     """The fact checker must not re-read the transcript per claim."""
-    conn = _db(tmp_path, 200)
+    conn = _db__retrieval_index(tmp_path, 200)
     try:
         claims = [
             Claim(
@@ -126,7 +126,7 @@ def test_checking_many_claims_reads_the_transcript_once(tmp_path: Path) -> None:
 
 def test_the_index_answers_the_same_questions(tmp_path: Path) -> None:
     """Building the pool must not change what the retrieval returns."""
-    conn = _db(tmp_path, 50)
+    conn = _db__retrieval_index(tmp_path, 50)
     try:
         without = retrieve_evidence("photograph drawer", conn, "job_1")
         index = build_index(conn, "job_1")

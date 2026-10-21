@@ -57,7 +57,7 @@ class Harness:
         )
 
 
-def _harness(tmp_path: Path, outputs: list[object]) -> Harness:
+def _harness__event_extraction(tmp_path: Path, outputs: list[object]) -> Harness:
     conn = connect(bootstrap(tmp_path / "jobs.db"))
     manager = JobManager(conn)
     repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
@@ -111,7 +111,7 @@ def _later_first() -> list[object]:
 
 
 def test_stage_orders_and_ids_events(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, _later_first())
+    harness = _harness__event_extraction(tmp_path, _later_first())
     result = harness.stage()
     assert [(e.id, e.type.value) for e in result.events] == [
         ("event_00001", "DISCOVERY"),
@@ -129,7 +129,7 @@ def test_stage_orders_and_ids_events(tmp_path: Path) -> None:
 
 
 def test_stage_second_run_hits_cache(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, _later_first())
+    harness = _harness__event_extraction(tmp_path, _later_first())
     harness.stage()
     harness.reasoner = _FakeReasoner([])
     result = harness.stage()
@@ -137,21 +137,21 @@ def test_stage_second_run_hits_cache(tmp_path: Path) -> None:
 
 
 def test_stage_unknown_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, [[], []])
+    harness = _harness__event_extraction(tmp_path, [[], []])
     harness.ctx.job_id = "job_2"
     with pytest.raises(EventExtractionError, match="Unknown job"):
         harness.stage()
 
 
 def test_stage_failed_job_rejected(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, [[], []])
+    harness = _harness__event_extraction(tmp_path, [[], []])
     harness.ctx.manager.fail("job_1", "vision", "earlier")
     with pytest.raises(EventExtractionError, match="failed"):
         harness.stage()
 
 
 def test_stage_reasoner_failure_fails_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, [[{"type": "BROKEN"}]])
+    harness = _harness__event_extraction(tmp_path, [[{"type": "BROKEN"}]])
 
     class _Bad(_FakeReasoner):
         def complete(self, prompt: str, *, temperature: float = 0.4) -> str:
@@ -166,7 +166,9 @@ def test_stage_reasoner_failure_fails_job(tmp_path: Path) -> None:
 
 
 def test_stage_invalid_event_fails_job(tmp_path: Path) -> None:
-    harness = _harness(tmp_path, [[{"type": "NOPE", "timestamp": 1.0, "description": "x"}], []])
+    harness = _harness__event_extraction(
+        tmp_path, [[{"type": "NOPE", "timestamp": 1.0, "description": "x"}], []]
+    )
     with pytest.raises(EventExtractionError, match="Invalid extracted event"):
         harness.stage()
     assert harness.ctx.manager.get("job_1").status is JobStatus.FAILED
