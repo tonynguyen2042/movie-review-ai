@@ -149,6 +149,9 @@ def extract_twists(
             )
         twists.append(twist)
 
+    # The twists have a table of their own, so a query can reach them.
+    repo.save_twists(conn, job_id, twists)
+
     document = {
         "job_id": job_id,
         "stage": STAGE_NAME,

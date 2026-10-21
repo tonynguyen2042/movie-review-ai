@@ -141,6 +141,9 @@ def extract_story_arcs(
         if arc.applicable and not arc.event_ids:
             raise StoryArcError(f"Applicable arc {arc.element} cites no events")
 
+    # The arcs have a table of their own, so a query can reach them.
+    repo.save_story_arcs(conn, job_id, arcs)
+
     document = {
         "job_id": job_id,
         "stage": STAGE_NAME,
