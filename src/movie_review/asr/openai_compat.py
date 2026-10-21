@@ -15,6 +15,8 @@ reads for confidence.
 
 from __future__ import annotations
 
+import tempfile
+import wave
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,51 @@ from movie_review.domain.transcript import TranscriptSegment
 from movie_review.remote import http
 
 TRANSCRIPTIONS_PATH = "/audio/transcriptions"
+
+#: How much audio one request carries. Ten minutes of 16 kHz mono PCM is
+#: about 19 MB, which a remote endpoint can be asked for in one request.
+DEFAULT_SEGMENT_SECONDS = 600.0
+
+
+def split_wav(
+    path: str | Path,
+    dest_dir: str | Path,
+    segment_seconds: float = DEFAULT_SEGMENT_SECONDS,
+) -> list[tuple[Path, float]]:
+    """Split a WAV into segments; returns each file and its offset in seconds.
+
+    A 2 h film is 230 MB of 16 kHz mono PCM, and the whole thing used to be
+    posted in one request under a 120 s timeout. Over anything slower than a
+    LAN that times out, and the whole ASR stage fails with no way to retry a
+    fraction of the work.
+    """
+    source = Path(path)
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    written: list[tuple[Path, float]] = []
+
+    with wave.open(str(source), "rb") as wav:
+        params = wav.getparams()
+        rate = params.framerate
+        if rate <= 0:
+            raise ASRError(f"Invalid WAV rate in {source}")
+        frames_per_segment = max(1, int(rate * segment_seconds))
+        total = wav.getnframes()
+        index = 0
+        while wav.tell() < total:
+            frames = wav.readframes(frames_per_segment)
+            if not frames:
+                break
+            target = dest / f"{source.stem}_part_{index:03d}.wav"
+            with wave.open(str(target), "wb") as out:
+                out.setnchannels(params.nchannels)
+                out.setsampwidth(params.sampwidth)
+                out.setframerate(params.framerate)
+                out.writeframes(frames)
+            written.append((target, index * frames_per_segment / rate))
+            index += 1
+
+    return written
 
 
 class OpenAICompatASRAdapter(ASRPort):
@@ -38,6 +85,7 @@ class OpenAICompatASRAdapter(ASRPort):
         timeout_seconds: float = http.DEFAULT_TIMEOUT_SECONDS,
         transport: http.RawTransport | None = None,
         endpoint_path: str | None = None,
+        segment_seconds: float = DEFAULT_SEGMENT_SECONDS,
     ) -> None:
         if not base_url:
             raise ASRError("base_url is required for a remote ASR adapter")
@@ -47,6 +95,7 @@ class OpenAICompatASRAdapter(ASRPort):
         self._timeout = timeout_seconds
         self._transport = transport
         self._endpoint_path = endpoint_path
+        self._segment_seconds = segment_seconds
 
     @property
     def model(self) -> str:
@@ -66,7 +115,12 @@ class OpenAICompatASRAdapter(ASRPort):
     def transcribe(
         self, audio_path: str | Path, *, language: str | None = None
     ) -> list[TranscriptSegment]:
-        """Upload one audio file and return timestamped segments."""
+        """Upload the audio and return timestamped segments.
+
+        The audio is uploaded in bounded segments rather than in one
+        request, and the timestamps each returns are offset back to movie
+        time.
+        """
         source = Path(audio_path)
         if not source.is_file():
             raise ASRError(f"Audio file does not exist: {source}")
@@ -82,27 +136,36 @@ class OpenAICompatASRAdapter(ASRPort):
         if language:
             fields["language"] = language
 
-        try:
-            body = http.post_multipart(
-                url,
-                fields,
-                {"file": http.file_upload(source)},
-                api_key=self._api_key,
-                timeout=self._timeout,
-                transport=self._transport,
-            )
-            document = http.decode_json(body, url)
-        except http.RemoteUnavailableError as exc:
-            raise ModelUnavailableError(self._model, str(exc)) from exc
-        except http.RemoteProtocolError as exc:
-            raise ASRError(str(exc)) from exc
+        raw: list[dict[str, Any]] = []
+        with tempfile.TemporaryDirectory(prefix="movie-review-asr-") as tmp:
+            parts = split_wav(source, tmp, self._segment_seconds)
+            for path, offset in parts:
+                try:
+                    body = http.post_multipart(
+                        url,
+                        fields,
+                        {"file": http.file_upload(path)},
+                        api_key=self._api_key,
+                        timeout=self._timeout,
+                        transport=self._transport,
+                    )
+                    document = http.decode_json(body, url)
+                except http.RemoteUnavailableError as exc:
+                    raise ModelUnavailableError(self._model, str(exc)) from exc
+                except http.RemoteProtocolError as exc:
+                    raise ASRError(str(exc)) from exc
 
-        return self._segments_from(document, url, language)
+                for segment in self._raw_segments(document, url):
+                    # The endpoint timestamps its own segment, so the offset
+                    # of the segment within the movie has to be added back.
+                    segment["start"] = float(segment.get("start", 0.0)) + offset
+                    segment["end"] = float(segment.get("end", 0.0)) + offset
+                    raw.append(segment)
 
-    def _segments_from(
-        self, document: Any, url: str, language: str | None
-    ) -> list[TranscriptSegment]:
-        """Extract and validate segments, rejecting text-only replies."""
+        return map_segments(raw, language or DEFAULT_LANGUAGE)
+
+    def _raw_segments(self, document: Any, url: str) -> list[dict[str, Any]]:
+        """The raw segment list of a response, validated."""
         if not isinstance(document, dict):
             raise ASRError(f"ASR response from {url} is not a JSON object")
 
@@ -112,7 +175,13 @@ class OpenAICompatASRAdapter(ASRPort):
             if isinstance(document.get("text"), str) and document["text"].strip():
                 detail += "; request response_format=verbose_json"
             raise ASRError(f"ASR response from {url} {detail}")
-        return map_segments(raw_segments, language or DEFAULT_LANGUAGE)
+        return [segment for segment in raw_segments if isinstance(segment, dict)]
+
+    def _segments_from(
+        self, document: Any, url: str, language: str | None
+    ) -> list[TranscriptSegment]:
+        """Extract and validate segments, rejecting text-only replies."""
+        return map_segments(self._raw_segments(document, url), language or DEFAULT_LANGUAGE)
 
     def unload(self) -> None:
         """No local weights are held; the remote host owns the model."""

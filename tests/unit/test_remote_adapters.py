@@ -118,7 +118,9 @@ def test_asr_transcribe_uploads_multipart_and_maps_segments(tmp_path: Path) -> N
     assert b'name="response_format"' in body
     assert b"verbose_json" in body
     assert b'name="language"' in body and b"en" in body
-    assert b'name="file"; filename="audio.wav"' in body
+    # The audio is uploaded in bounded segments, so the file the endpoint
+    # receives is a part of the original.
+    assert b'name="file"; filename="audio_part_000.wav"' in body
 
     assert [s.text for s in segments] == ["Hello there.", "General Kenobi."]
     assert segments[0].start == 0.0
