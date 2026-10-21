@@ -262,6 +262,22 @@ class SourceVideoSettings(BaseModel):
     max_total_seconds: PositiveFloat = 420.0
 
 
+class MusicSettings(BaseModel):
+    """The optional music bed (README section 43).
+
+    The music tracks are local assets: nothing is fetched, and nothing about
+    the movie leaves the machine because of them. The bed is optional and
+    off by default.
+    """
+
+    enabled: bool = False
+    #: Path to a local audio file, relative to the data directory or
+    #: absolute.
+    track: str | None = None
+    #: How loud the bed is under the narration, before the ducking envelope.
+    gain: float = Field(default=1.0, ge=0.0, le=4.0)
+
+
 class PathsSettings(BaseModel):
     """Configurable data locations."""
 
@@ -427,6 +443,7 @@ class AppSettings(BaseSettings):
     pipeline: PipelineSettings = PipelineSettings()
     source_video: SourceVideoSettings = SourceVideoSettings()
     paths: PathsSettings = PathsSettings()
+    music: MusicSettings = MusicSettings()
     privacy: PrivacySettings = PrivacySettings()
     memory: MemorySettings = MemorySettings()
     prompts: PromptsSettings
