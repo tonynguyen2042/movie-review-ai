@@ -17,33 +17,28 @@ def test_timeline_editor_from_manifest(tmp_path: Path) -> None:
 
     # Create a minimal render-manifest.json
     manifest = {
-        "job_id": job_id,
-        "stage": "render",
-        "stage_version": "v1",
-        "manifest": {
-            "segments": [
-                {
-                    "paragraph_id": "p1",
-                    "scene_id": "scene_000001",
-                    "clip_start": 0.0,
-                    "clip_end": 10.0,
-                    "start": 0.0,
-                    "duration": 10.0,
-                    "loop_clip": False,
-                },
-                {
-                    "paragraph_id": "p2",
-                    "scene_id": "scene_000002",
-                    "clip_start": 5.0,
-                    "clip_end": 15.0,
-                    "start": 10.0,
-                    "duration": 15.0,
-                    "loop_clip": True,
-                },
-            ],
-            "total_seconds": 25.0,
-            "source_seconds": 20.0,
-        },
+        "segments": [
+            {
+                "paragraph_id": "p1",
+                "scene_id": "scene_000001",
+                "clip_start": 0.0,
+                "clip_end": 10.0,
+                "start": 0.0,
+                "duration": 10.0,
+                "loop_clip": False,
+            },
+            {
+                "paragraph_id": "p2",
+                "scene_id": "scene_000002",
+                "clip_start": 5.0,
+                "clip_end": 15.0,
+                "start": 10.0,
+                "duration": 15.0,
+                "loop_clip": True,
+            },
+        ],
+        "total_seconds": 25.0,
+        "source_seconds": 20.0,
     }
 
     (job_dir / "render").mkdir()
@@ -80,12 +75,7 @@ def test_timeline_editor_json_export(tmp_path: Path) -> None:
     job_dir = jobs_dir / job_id
     job_dir.mkdir()
 
-    manifest = {
-        "job_id": job_id,
-        "stage": "render",
-        "stage_version": "v1",
-        "manifest": {"segments": []},
-    }
+    manifest = {"segments": [], "total_seconds": 0.0, "source_seconds": 0.0}
     (job_dir / "render").mkdir()
     artifacts.write_json(job_dir / "render" / "render-manifest.json", manifest)
 
@@ -105,22 +95,19 @@ def test_timeline_editor_html_export(tmp_path: Path) -> None:
     job_dir.mkdir()
 
     manifest = {
-        "job_id": job_id,
-        "stage": "render",
-        "stage_version": "v1",
-        "manifest": {
-            "segments": [
-                {
-                    "paragraph_id": "p1",
-                    "scene_id": "s1",
-                    "clip_start": 0.0,
-                    "clip_end": 10.0,
-                    "start": 0.0,
-                    "duration": 10.0,
-                    "loop_clip": False,
-                }
-            ],
-        },
+        "segments": [
+            {
+                "paragraph_id": "p1",
+                "scene_id": "s1",
+                "clip_start": 0.0,
+                "clip_end": 10.0,
+                "start": 0.0,
+                "duration": 10.0,
+                "loop_clip": False,
+            }
+        ],
+        "total_seconds": 10.0,
+        "source_seconds": 10.0,
     }
     (job_dir / "render").mkdir()
     artifacts.write_json(job_dir / "render" / "render-manifest.json", manifest)

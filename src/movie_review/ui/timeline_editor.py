@@ -60,7 +60,13 @@ class VisualTimelineEditor:
 
     def _build_from_manifest(self, document: dict[str, Any]) -> dict[str, Any]:
         """Build editor data from render manifest."""
-        manifest_data = document.get("manifest", {})
+        # The manifest file holds the manifest itself, not the cache payload's
+        # `{"manifest": ...}` envelope. Reading the envelope here is why the
+        # editor rendered zero clips against a real manifest.
+        nested = document.get("manifest")
+        manifest_data = (
+            nested if isinstance(nested, dict) and "segments" not in document else document
+        )
         segments = manifest_data.get("segments", [])
 
         clips = []

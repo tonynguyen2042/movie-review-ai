@@ -759,16 +759,15 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         )
 
     def render_fn(ctx: PipelineContext) -> Any:
-        from movie_review.domain import RenderManifest
+        from movie_review.rendering.manifest import read_manifest
         from movie_review.rendering.renderer import render_job
 
         manifest_path = Path(ctx.jobs_dir) / ctx.job_id / "render" / "render-manifest.json"
-        import json
 
-        with manifest_path.open() as f:
-            manifest_data = json.load(f)
-
-        manifest = RenderManifest.model_validate(manifest_data["manifest"])
+        # The file holds the manifest itself. Reading `manifest_data["manifest"]`
+        # -- the cache payload's envelope -- raised KeyError on every real run,
+        # so the render stage had never once succeeded.
+        manifest = read_manifest(manifest_path)
 
         source_movie = ctx.movie_path
         narration_wav = Path(ctx.jobs_dir) / ctx.job_id / "tts" / "narration.wav"
