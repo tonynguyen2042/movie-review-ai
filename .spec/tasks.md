@@ -794,11 +794,11 @@ src/movie_review/cli/app.py
 
 **Acceptance criteria**
 
-- [ ] `--duration 5m` yields a 300 s target
-- [ ] `--style documentary` loads the documentary profile
-- [ ] `--spoilers none` reaches `write_script`
-- [ ] `--output` receives the exported output set
-- [ ] `pytest -q` passes
+- [x] `--duration 5m` yields a 300 s target
+- [x] `--style documentary` loads the documentary profile
+- [x] `--spoilers none` reaches `write_script`
+- [x] `--output` receives the exported output set
+- [x] `pytest -q` passes
 
 ---
 

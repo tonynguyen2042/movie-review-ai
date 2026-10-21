@@ -51,14 +51,19 @@ def save_job(conn: sqlite3.Connection, job: Job) -> None:
             """
             INSERT INTO jobs
                 (job_id, input_file, status, failed_stage, error,
-                 retry_count, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 retry_count, style, spoilers, target_seconds, output_dir,
+                 created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(job_id) DO UPDATE SET
                 input_file = excluded.input_file,
                 status = excluded.status,
                 failed_stage = excluded.failed_stage,
                 error = excluded.error,
                 retry_count = excluded.retry_count,
+                style = excluded.style,
+                spoilers = excluded.spoilers,
+                target_seconds = excluded.target_seconds,
+                output_dir = excluded.output_dir,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at
             """,
@@ -69,6 +74,10 @@ def save_job(conn: sqlite3.Connection, job: Job) -> None:
                 job.failed_stage,
                 job.error,
                 job.retry_count,
+                job.style,
+                job.spoilers,
+                job.target_seconds,
+                job.output_dir,
                 job.created_at.isoformat(),
                 job.updated_at.isoformat(),
             ),
@@ -86,6 +95,10 @@ def get_job(conn: sqlite3.Connection, job_id: str) -> Job | None:
         failed_stage=row["failed_stage"],
         error=row["error"],
         retry_count=row["retry_count"],
+        style=row["style"] if row["style"] is not None else "youtube",
+        spoilers=row["spoilers"] if row["spoilers"] is not None else "full",
+        target_seconds=row["target_seconds"],
+        output_dir=row["output_dir"],
         created_at=_parse_dt(row["created_at"]),
         updated_at=_parse_dt(row["updated_at"]),
     )

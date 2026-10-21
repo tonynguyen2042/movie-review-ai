@@ -5,7 +5,7 @@ artifacts. Later tasks add their tables as new migration versions; existing
 statements are append-only history and must not be edited.
 """
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 MIGRATION_1 = [
     """
@@ -213,6 +213,26 @@ MIGRATION_9 = [
     """,
 ]
 
+MIGRATION_10 = [
+    # The review options the operator chose when the job was accepted. They
+    # used to be logged and then discarded, so `--duration 5m --style
+    # documentary` produced a 20-minute youtube-style review and reported
+    # success. The job row is the only place that survives a resume, so the
+    # options have to live there.
+    """
+    ALTER TABLE jobs ADD COLUMN style TEXT NOT NULL DEFAULT 'youtube'
+    """,
+    """
+    ALTER TABLE jobs ADD COLUMN spoilers TEXT NOT NULL DEFAULT 'full'
+    """,
+    """
+    ALTER TABLE jobs ADD COLUMN target_seconds REAL
+    """,
+    """
+    ALTER TABLE jobs ADD COLUMN output_dir TEXT
+    """,
+]
+
 MIGRATIONS: dict[int, list[str]] = {
     1: MIGRATION_1,
     2: MIGRATION_2,
@@ -223,4 +243,5 @@ MIGRATIONS: dict[int, list[str]] = {
     7: MIGRATION_7,
     8: MIGRATION_8,
     9: MIGRATION_9,
+    10: MIGRATION_10,
 }
