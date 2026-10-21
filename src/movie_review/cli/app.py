@@ -759,7 +759,7 @@ def publish(
             result = generate_publishing_metadata(
                 script,
                 ctx,
-                movie_title=job.input_file.rsplit("/", 1)[-1].rsplit(".", 1)[0],
+                movie_title=_movie_title(job.input_file),
                 platform=platform,
                 target_language=language,
                 spec=settings.models.reasoning,
@@ -821,6 +821,18 @@ def publish(
         raise typer.Exit(code=1) from exc
 
     typer.echo(f"Uploaded: {receipt.url or receipt.video_id} (status={receipt.status})")
+
+
+def _movie_title(input_file: str) -> str:
+    """The movie's title from its path: the file stem, whatever the separator.
+
+    The title is sent to the model and embedded in the published YouTube,
+    Facebook and TikTok metadata, so it must not carry the operator's
+    directory layout. Splitting on "/" alone did that on Windows, where a
+    path has no forward slash: `D:\\Movies\\film.mkv` became
+    `D:\\Movies\\film`.
+    """
+    return Path(input_file).stem
 
 
 def _with_title(metadata: VideoMetadata, title: str) -> VideoMetadata:

@@ -931,9 +931,9 @@ tests/unit/test_publishing_metadata.py
 
 **Acceptance criteria**
 
-- [ ] a Windows-style path yields the bare file stem
-- [ ] the generated title contains no path separator
-- [ ] `pytest -q` passes
+- [x] a Windows-style path yields the bare file stem
+- [x] the generated title contains no path separator
+- [x] `pytest -q` passes
 
 ---
 
