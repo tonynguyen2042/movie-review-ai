@@ -11,6 +11,7 @@ stale claim fails here instead of misleading someone at the terminal.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -20,6 +21,19 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = ROOT / "docs" / "GETTING-STARTED.md"
+
+#: The environment every CLI subprocess runs in. The child's stdout encoding
+#: is pinned to UTF-8 so the parent's decode always matches it, whatever the
+#: developer's locale happens to be.
+CHILD_ENV = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+
+#: Rich draws its help tables with U+2502 when the output encoding can carry
+#: it, and falls back to an ASCII pipe when it cannot. Because the child's
+#: encoding is pinned to UTF-8, it always draws U+2502 - so an assertion that
+#: looks for a table row must not depend on which glyph Rich chose. Python
+#: 3.15 makes UTF-8 mode the default, which turns that dependence into a
+#: break for everyone.
+BOX_SEPARATOR = "\u2502"
 
 COMMANDS = [
     "process",
@@ -39,13 +53,37 @@ def guide() -> str:
     return GUIDE.read_text(encoding="utf-8")
 
 
+def _normalise(text: str) -> str:
+    """Render Rich's box separator as an ASCII pipe.
+
+    The command table is what the assertions below read, and its column
+    separator is a glyph Rich picks per output encoding. Normalising it keeps
+    the assertions about the command surface rather than about typography.
+    """
+    return text.replace(BOX_SEPARATOR, "|")
+
+
 def cli(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    """Run the CLI and return its result, decoded as UTF-8.
+
+    The decode is pinned rather than left to the locale. Under cp1252 the
+    child's UTF-8 output raises `UnicodeDecodeError`, which makes
+    `result.stdout` `None` - and every assertion that reads it then fails
+    with a `TypeError` about `NoneType` instead of checking the thing it
+    claims to check.
+    """
+    result = subprocess.run(
         ["uv", "run", "movie-review", *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=ROOT,
+        env=CHILD_ENV,
     )
+    result.stdout = _normalise(result.stdout)
+    result.stderr = _normalise(result.stderr)
+    return result
 
 
 @pytest.fixture
@@ -80,6 +118,31 @@ def test_every_documented_command_exists(guide: str) -> None:
         assert f"`{command}`" in guide or f"movie-review {command}" in guide, (
             f"guide never mentions `{command}`"
         )
+
+
+def test_command_table_is_read_under_either_table_glyph() -> None:
+    """The command table must be found however Rich draws its separator.
+
+    Rich uses U+2502 when the output encoding can carry it and an ASCII pipe
+    when it cannot. The assertions above look for a table row, so they have to
+    hold under both - otherwise the suite passes on a cp1252 developer and
+    fails on a UTF-8 one, and fails for everyone once Python 3.15 makes
+    UTF-8 mode the default.
+    """
+    unicode_table = "\n".join(
+        [
+            "┌──────────────┬──────────────┐",
+            "│ process      │ does things  │",
+            "│ inspect      │ shows a job  │",
+            "└──────────────┴──────────────┘",
+        ]
+    )
+    ascii_table = unicode_table.replace(BOX_SEPARATOR, "|")
+
+    for table in (unicode_table, ascii_table):
+        normalised = _normalise(table)
+        assert re.search(r"\|\s*process\s", normalised), repr(table)
+        assert re.search(r"\|\s*inspect\s", normalised), repr(table)
 
 
 def test_documented_flags_exist() -> None:
@@ -206,7 +269,13 @@ def test_progress_appears_when_a_terminal_is_present(fake_movie: Path, tmp_path:
         "rep.close()\n"
     )
     result = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True, cwd=ROOT
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=ROOT,
+        env=CHILD_ENV,
     )
     combined = result.stdout + result.stderr
     assert "-> transcript" in combined, combined[-200:]

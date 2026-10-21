@@ -663,10 +663,10 @@ tests/docs/test_getting_started.py      helper `cli()` + 2 assertions
 
 **Acceptance criteria**
 
-- [ ] `pytest -q` passes with `PYTHONIOENCODING=utf-8`
-- [ ] `pytest -q` passes with `PYTHONUTF8=1`
-- [ ] `pytest -q` passes with neither set
-- [ ] the command assertion matches under both ASCII and Unicode table rendering
+- [x] `pytest -q` passes with `PYTHONIOENCODING=utf-8`
+- [x] `pytest -q` passes with `PYTHONUTF8=1`
+- [x] `pytest -q` passes with neither set
+- [x] the command assertion matches under both ASCII and Unicode table rendering
 
 ---
 
