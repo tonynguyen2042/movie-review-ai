@@ -174,9 +174,9 @@ def test_the_output_set_is_copied_to_the_output_directory(tmp_path: Path) -> Non
     (job_dir / "tts" / "narration.wav").write_bytes(b"audio")
 
     out = tmp_path / "out"
-    written = export_output(tmp_path / "jobs", "job_1", out)
+    result = export_output(tmp_path / "jobs", "job_1", out)
 
-    assert {p.name for p in written} == {"review.mp4", "narration.wav"}
+    assert {p.name for p in result.files} == {"review.mp4", "narration.wav"}
     assert (out / "review.mp4").read_bytes() == b"video"
     assert (out / "narration.wav").read_bytes() == b"audio"
 
