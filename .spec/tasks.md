@@ -1074,9 +1074,9 @@ tests/unit/test_detection.py
 
 **Acceptance criteria**
 
-- [ ] re-running the scenes stage produces the same cuts
-- [ ] no scene from a previous run survives a re-run
-- [ ] `pytest -q` passes
+- [x] re-running the scenes stage produces the same cuts
+- [x] no scene from a previous run survives a re-run
+- [x] `pytest -q` passes
 
 ---
 

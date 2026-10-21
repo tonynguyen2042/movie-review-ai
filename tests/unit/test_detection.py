@@ -36,8 +36,17 @@ class Harness:
     ctx: StageContext
     source: Path
 
-    def stage(self, detect_fn: Callable[..., DetectionResult] | None = None) -> ScenesResult:
-        return detect_scenes_stage(self.source, self.ctx, detect_fn=detect_fn or _fake_detect)
+    def stage(
+        self,
+        detect_fn: Callable[..., DetectionResult] | None = None,
+        prefer_proxy: bool = False,
+    ) -> ScenesResult:
+        return detect_scenes_stage(
+            self.source,
+            self.ctx,
+            prefer_proxy=prefer_proxy,
+            detect_fn=detect_fn or _fake_detect,
+        )
 
 
 def _fake_detect(path: str | Path, **kwargs: object) -> DetectionResult:
@@ -92,13 +101,20 @@ def test_stage_second_run_hits_cache(tmp_path: Path) -> None:
     assert result.cache_hit is True
 
 
-def test_stage_prefers_proxy(tmp_path: Path) -> None:
+def test_stage_uses_the_source_by_default(tmp_path: Path) -> None:
+    """The analysed file must not depend on how far a previous run got.
+
+    The proxy is built in the vision stage, which runs after this one. So
+    preferring it made the first run detect on the source and any later run
+    detect on the proxy -- different cuts for the same movie, and a cache
+    miss every time.
+    """
     harness = _harness(tmp_path)
     proxy = tmp_path / "jobs" / "job_1" / "media" / "proxy.mp4"
     proxy.parent.mkdir(parents=True, exist_ok=True)
     proxy.write_bytes(b"proxy-bytes")
     result = harness.stage()
-    assert result.analyzed_file == proxy
+    assert result.analyzed_file == harness.source
     assert (
         resolve_analysis_file(
             harness.source,
@@ -108,6 +124,15 @@ def test_stage_prefers_proxy(tmp_path: Path) -> None:
         )
         == harness.source
     )
+
+
+def test_stage_uses_the_proxy_when_it_is_asked_for(tmp_path: Path) -> None:
+    harness = _harness(tmp_path)
+    proxy = tmp_path / "jobs" / "job_1" / "media" / "proxy.mp4"
+    proxy.parent.mkdir(parents=True, exist_ok=True)
+    proxy.write_bytes(b"proxy-bytes")
+    result = harness.stage(prefer_proxy=True)
+    assert result.analyzed_file == proxy
 
 
 def test_stage_unknown_job(tmp_path: Path) -> None:

@@ -218,6 +218,20 @@ def save_scene(conn: sqlite3.Connection, job_id: str, scene: Scene) -> None:
         )
 
 
+def delete_scenes(conn: sqlite3.Connection, job_id: str) -> int:
+    """Remove a job's scene rows; returns how many were removed.
+
+    The scene list for a job is the whole set, not an accumulation. Writing
+    the new rows over the old ones leaves any scene that the new detection
+    does not contain still in the table, with its old boundaries, so a
+    re-run leaves a mix of two timelines. The stage clears the set before it
+    writes it.
+    """
+    with conn:
+        cursor = conn.execute("DELETE FROM scenes WHERE job_id = ?", (job_id,))
+    return cursor.rowcount
+
+
 def save_scene_analysis(conn: sqlite3.Connection, job_id: str, analysis: SceneAnalysis) -> None:
     """Persist one scene's visual analysis.
 
