@@ -22,6 +22,7 @@ from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.config.prompts import Prompt, load_prompt, render
 from movie_review.domain import Artifact, JobStatus, Scene, SceneAnalysis, TranscriptSegment
 from movie_review.jobs.state_machine import JobNotFoundError
+from movie_review.models.resources import run_with_oom_recovery
 from movie_review.pipeline.context import StageContext
 from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.storage import repositories as repo
@@ -98,14 +99,19 @@ def _analyse_one(
         return _BatchEntry(analysis=analysis, cache_hit=True)
 
     try:
-        analysis = active.analyze(
-            AnalysisInput(
-                scene_id=scene.scene_id,
-                frames=scene_frames,
-                dialogue=dialogue,
-                previous_summary=input_summary,
+        analysis = run_with_oom_recovery(
+            lambda: active.analyze(
+                AnalysisInput(
+                    scene_id=scene.scene_id,
+                    frames=scene_frames,
+                    dialogue=dialogue,
+                    previous_summary=input_summary,
+                ),
+                text,
             ),
-            text,
+            active.unload,
+            attempts=2,
+            stage=STAGE_NAME,
         )
     except Exception as exc:
         raise VisualAnalysisError(f"Cannot analyze {scene.scene_id}: {exc}") from exc

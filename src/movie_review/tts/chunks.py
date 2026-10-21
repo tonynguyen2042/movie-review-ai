@@ -15,6 +15,7 @@ from pathlib import Path
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.domain import ReviewScript, SpeechAudio, TTSRequest
+from movie_review.models.resources import run_with_oom_recovery
 from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.tts.port import TTSPort
 from movie_review.utils import logging as ulog
@@ -120,8 +121,13 @@ def synthesize_chunk(
     job_id: str,
 ) -> ChunkResult:
     """Synthesize one chunk to its deterministic file."""
-    audio = port.synthesize(
-        TTSRequest(text=chunk.text, voice=chunk.voice, emotion=chunk.emotion, speed=chunk.speed)
+    audio = run_with_oom_recovery(
+        lambda: port.synthesize(
+            TTSRequest(text=chunk.text, voice=chunk.voice, emotion=chunk.emotion, speed=chunk.speed)
+        ),
+        port.unload,
+        attempts=2,
+        stage="tts",
     )
     path = write_wav(
         artifacts.artifact_path(jobs_dir, job_id, _CHUNK_DIR, chunk_filename(chunk.chunk_id)),
