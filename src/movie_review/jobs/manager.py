@@ -95,3 +95,15 @@ class JobManager:
     def fail(self, job_id: str, stage: str, error: str) -> Job:
         """Record a stage failure with its cause."""
         return self.transition(job_id, JobStatus.FAILED, stage, error)
+
+    def record_retry(self, job_id: str) -> Job:
+        """Count one retry of the job's current stage.
+
+        The count is the number of times the stage has been attempted
+        beyond the first. It is kept on the job so an operator can see that
+        a stage is failing intermittently rather than once.
+        """
+        job = self.get(job_id)
+        job = job.model_copy(update={"retry_count": job.retry_count + 1})
+        repo.save_job(self._conn, job)
+        return job

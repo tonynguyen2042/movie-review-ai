@@ -23,6 +23,7 @@ from movie_review.jobs.manager import JobManager
 from movie_review.jobs.recovery import recovery_plan
 from movie_review.pipeline.context import StageContext
 from movie_review.pipeline.progress import ProgressReporter, WorkProgress
+from movie_review.pipeline.retry import RetryPolicy, run_with_retry
 from movie_review.utils import logging as ulog
 
 _logger = logging.getLogger(__name__)
@@ -73,6 +74,56 @@ class ResumeError(Exception):
     not have is a usage problem, and the CLI contract says the command
     exits non-zero with a message rather than printing a traceback.
     """
+
+
+#: The failures worth another attempt. A network blip, a server that is
+#: briefly busy, a model that is momentarily unreachable -- those pass on
+#: their own. A schema violation, a missing input or a refusal does not,
+#: and repeating it only wastes the time.
+TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    TimeoutError,
+    ConnectionError,
+)
+
+#: How many times a stage is attempted before it is reported as failed.
+STAGE_RETRY_POLICY = RetryPolicy(max_attempts=3, backoff_seconds=2.0)
+
+
+def _record_retry(ctx: PipelineContext) -> None:
+    """Count one retry on the job."""
+    ctx.manager.record_retry(ctx.job_id)
+
+
+def _is_transient(exc: BaseException) -> bool:
+    """Whether a stage failure is worth another attempt.
+
+    The stage errors wrap the cause that says what went wrong, so the
+    chain is walked: a model that was momentarily unreachable is retryable
+    even though the stage's own error type is not. The chain is guarded
+    against a cycle, and the context is only followed when there is no
+    explicit cause.
+    """
+    from movie_review.asr.port import ModelUnavailableError
+    from movie_review.reasoning.port import ReasoningUnavailableError
+    from movie_review.tts.port import TTSUnavailableError
+    from movie_review.vision.port import VLMUnavailableError
+
+    transient: tuple[type[Exception], ...] = TRANSIENT_ERRORS + (
+        ModelUnavailableError,
+        ReasoningUnavailableError,
+        TTSUnavailableError,
+        VLMUnavailableError,
+    )
+
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, transient):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 @dataclass
@@ -169,7 +220,18 @@ def run_stage(
         try:
             # The stage's return value is intentionally unused: stages persist
             # their own artifacts and the caller reads StageResult only.
-            fn(ctx)
+            #
+            # A transient failure is retried. One network blip used to abort
+            # a run that had been going for hours, and the work the stage had
+            # already done was not lost -- it was in the cache -- but the
+            # operator still had to start the run again.
+            run_with_retry(
+                lambda: fn(ctx),
+                STAGE_RETRY_POLICY,
+                stage=name,
+                should_retry=_is_transient,
+                on_retry=lambda _attempt, _exc: _record_retry(ctx),
+            )
             duration_ms = int((time.perf_counter() - started) * 1000)
             ulog.log_event(
                 stage_logger,

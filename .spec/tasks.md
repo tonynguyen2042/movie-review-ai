@@ -1310,10 +1310,10 @@ tests/unit/test_retry.py
 
 **Acceptance criteria**
 
-- [ ] a transient failure inside a stage is retried and the stage then succeeds
-- [ ] a permanent failure still fails the stage
-- [ ] the retry count is recorded on the job
-- [ ] `pytest -q` passes
+- [x] a transient failure inside a stage is retried and the stage then succeeds
+- [x] a permanent failure still fails the stage
+- [x] the retry count is recorded on the job
+- [x] `pytest -q` passes
 
 ---
 
