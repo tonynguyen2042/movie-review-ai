@@ -1786,10 +1786,10 @@ tests/unit/test_prompts.py
 
 **Acceptance criteria**
 
-- [ ] every name in the registry has a file on disk
-- [ ] a pinned version is loaded instead of the newest
-- [ ] an unpinned prompt still loads the newest
-- [ ] `pytest -q` passes
+- [x] every name in the registry has a file on disk
+- [x] a pinned version is loaded instead of the newest
+- [x] an unpinned prompt still loads the newest
+- [x] `pytest -q` passes
 
 ---
 

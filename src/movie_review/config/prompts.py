@@ -89,9 +89,34 @@ def list_versions(name: str, base: str | Path | None = None) -> list[str]:
     return sorted(versions)
 
 
+def pinned_version(name: str) -> str | None:
+    """The version the configuration pins for a prompt, if it pins one.
+
+    The registry is the configuration's answer to "which version of this
+    prompt does this deployment use". It used to be decorative: the loader
+    always took the newest file, so a version could never be pinned and a
+    rollback to an earlier prompt was impossible.
+    """
+    try:
+        from movie_review.config.settings import load_settings
+
+        return load_settings().prompts.versions.get(name)
+    except Exception:
+        # A configuration that cannot be read is not a reason to fail a
+        # prompt load: the newest version is a safe fallback.
+        return None
+
+
 def load_prompt(name: str, version: str | None = None, base: str | Path | None = None) -> Prompt:
-    """Load a prompt; ``version`` None selects the latest available version."""
+    """Load a prompt.
+
+    ``version`` selects a version explicitly. When it is None the
+    configuration's pinned version is used, and a prompt the registry does
+    not name falls back to its newest available version.
+    """
     directory = prompts_dir(base)
+    if version is None:
+        version = pinned_version(name)
     if version is None:
         available = list_versions(name, directory)
         if not available:
