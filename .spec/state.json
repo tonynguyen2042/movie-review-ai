@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T12:53:22.788150+00:00",
+  "updated_at": "2026-10-21T13:00:37.645715+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1617,12 +1617,14 @@
       "title": "verify stage: claims\u2192fact-check\u2192repair",
       "type": "feat",
       "branch": "T142-verify-stage",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T13:00:37.645715+00:00",
+      "updated_at": "2026-10-21T13:00:37.645715+00:00"
     },
     "T143": {
       "title": "subtitles stage",

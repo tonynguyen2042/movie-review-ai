@@ -119,6 +119,7 @@ def test_stages_reports_the_full_pipeline_sequence(capsys: pytest.CaptureFixture
         "twists",
         "story",
         "review",
+        "verify",
         "review-translate",
         "tts-chunks",
         "tts-concat",
