@@ -311,13 +311,21 @@ def test_the_render_manifest_fails_loudly_without_measured_narration(
 ) -> None:
     """A missing chunk must be reported, not silently timed at 10 seconds."""
     ctx, _ = _render_manifest_harness(tmp_path)
-    (ctx.jobs_dir / "job_1" / "tts" / "tts_002.wav").unlink()
+    # The chunk ids are content-derived, so the missing file is named by the
+    # plan rather than by a position.
+    from movie_review.review.translate import load_script
+    from movie_review.tts.chunks import plan_chunks
+
+    script = load_script(ctx.jobs_dir / "job_1" / "review" / "review-script.json")
+    planned = plan_chunks(script, voice="default")
+    missing = ctx.jobs_dir / "job_1" / "tts" / f"{planned[1].chunk_id}.wav"
+    missing.unlink()
 
     stage = _get_stage_function("render-manifest")
     assert stage is not None
     with pytest.raises(Exception) as excinfo:
         stage(ctx)
-    assert "tts_002" in str(excinfo.value)
+    assert planned[1].chunk_id in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------

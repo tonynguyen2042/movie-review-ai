@@ -198,8 +198,9 @@ def test_segment_durations_match_their_own_files(ctx: _Ctx) -> None:
         json.dumps({"script": script.model_dump(mode="json")}), encoding="utf-8"
     )
     expected: dict[str, float] = {}
-    for chunk in plan_chunks(script, voice=DEFAULT_VOICE):
-        seconds = 1.0 + int(chunk.chunk_id[-1])
+    # The chunk id is content-derived, so the position comes from the plan.
+    for index, chunk in enumerate(plan_chunks(script, voice=DEFAULT_VOICE)):
+        seconds = 1.0 + index
         expected[chunk.paragraph_id] = seconds
         _write_chunk(
             artifacts.artifact_path(ctx.ctx.jobs_dir, "job_c", "tts", f"{chunk.chunk_id}.wav"),
@@ -222,20 +223,24 @@ def test_segment_durations_match_their_own_files(ctx: _Ctx) -> None:
 
 def test_missing_chunk_fails_the_stage(ctx: _Ctx) -> None:
     _write_all_chunks(ctx)
-    missing = artifacts.artifact_path(ctx.ctx.jobs_dir, "job_c", "tts", "tts_002.wav")
+    planned = plan_chunks(_script(paragraphs=2), voice=DEFAULT_VOICE)
+    missing = artifacts.artifact_path(
+        ctx.ctx.jobs_dir, "job_c", "tts", f"{planned[1].chunk_id}.wav"
+    )
     missing.unlink()
 
     stage_result = run_stage("tts-concat", _stage(), ctx.ctx)
 
     assert stage_result.success is False
-    assert "tts_002" in (stage_result.error or "")
+    assert planned[1].chunk_id in (stage_result.error or "")
 
 
 def test_narration_is_not_written_when_a_chunk_is_missing(ctx: _Ctx) -> None:
     """No partial narration: a short file is worse than none."""
     _write_all_chunks(ctx)
+    planned = plan_chunks(_script(paragraphs=2), voice=DEFAULT_VOICE)
     narration = ctx.ctx.jobs_dir / "job_c" / "tts" / NARRATION_FILENAME
-    artifacts.artifact_path(ctx.ctx.jobs_dir, "job_c", "tts", "tts_002.wav").unlink()
+    artifacts.artifact_path(ctx.ctx.jobs_dir, "job_c", "tts", f"{planned[1].chunk_id}.wav").unlink()
 
     run_stage("tts-concat", _stage(), ctx.ctx)
 
@@ -280,14 +285,14 @@ def test_collect_names_the_missing_paragraph(ctx: _Ctx) -> None:
     planned = plan_chunks(_script(paragraphs=2), voice=DEFAULT_VOICE)
     _write_all_chunks(ctx)
 
-    artifacts.artifact_path(ctx.ctx.jobs_dir, "job_c", "tts", "tts_002.wav").unlink()
+    artifacts.artifact_path(ctx.ctx.jobs_dir, "job_c", "tts", f"{planned[1].chunk_id}.wav").unlink()
 
     with pytest.raises(ChunkCollectionError) as excinfo:
         collect_chunk_results(planned, ctx.ctx.jobs_dir, "job_c")
 
-    # Chunk IDs are 1-based, so tts_002 is the second paragraph.
+    # The second paragraph is the one that is missing.
     assert "par_001" in str(excinfo.value)
-    assert "tts_002" in str(excinfo.value)
+    assert planned[1].chunk_id in str(excinfo.value)
 
 
 def test_planning_is_deterministic(ctx: _Ctx) -> None:
@@ -296,7 +301,8 @@ def test_planning_is_deterministic(ctx: _Ctx) -> None:
     second = plan_chunks(_script(paragraphs=3), voice=DEFAULT_VOICE)
 
     assert first == second
-    assert [c.chunk_id for c in first] == ["tts_001", "tts_002", "tts_003"]
+    # The ids are content-derived, so the plan is what carries the order.
+    assert [c.paragraph_id for c in first] == ["par_000", "par_001", "par_002"]
 
 
 def test_voice_constant_is_shared_by_both_stages() -> None:
@@ -312,7 +318,7 @@ def test_concat_rejects_mismatched_chunk_formats(ctx: _Ctx, tmp_path: Path) -> N
     planned = plan_chunks(_script(paragraphs=2), voice=DEFAULT_VOICE)
     _write_all_chunks(ctx)
     _write_chunk(
-        artifacts.artifact_path(ctx.ctx.jobs_dir, "job_c", "tts", "tts_002.wav"),
+        artifacts.artifact_path(ctx.ctx.jobs_dir, "job_c", "tts", f"{planned[1].chunk_id}.wav"),
         seconds=1.0,
         rate=8000,
     )
