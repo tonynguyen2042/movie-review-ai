@@ -12,13 +12,14 @@ from __future__ import annotations
 import json
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
-from movie_review.config.prompts import load_prompt, render
+from movie_review.config.prompts import Prompt, load_prompt, render
 from movie_review.domain import (
     Artifact,
     Character,
@@ -42,6 +43,97 @@ STAGE_NAME = "events"
 STAGE_VERSION = "v1"
 EVENTS_FILENAME = "events.json"
 MAX_PRIOR_EVENTS = 20
+
+#: How many scenes are extracted at once. The scenes in a batch run
+#: concurrently; the batch before it supplies the continuity context.
+DEFAULT_BATCH_SIZE = 8
+
+#: How many scenes are extracted at the same time.
+DEFAULT_CONCURRENCY = 4
+
+
+def _batches(scenes: list[Scene], size: int) -> list[list[Scene]]:
+    """Split the scenes into batches of at most ``size``."""
+    if size <= 1:
+        return [[scene] for scene in scenes]
+    return [scenes[index : index + size] for index in range(0, len(scenes), size)]
+
+
+def _extract_one(
+    scene: Scene,
+    analysis: SceneAnalysis,
+    dialogue: str,
+    prior: list[dict[str, object]],
+    prompt: Prompt,
+    model: str,
+    character_lines: str,
+    active: ReasoningPort,
+    ctx: StageContext,
+) -> tuple[list[dict[str, object]], bool]:
+    """Extract one scene's events: cache lookup, then the model."""
+    text = render(
+        prompt,
+        scenes=f"{scene.scene_id} ({scene.start:.1f}-{scene.end:.1f}s): "
+        f"{analysis.location}; {'; '.join(analysis.actions)}",
+        dialogue=dialogue or "(no dialogue)",
+        characters=character_lines,
+        prior_events=_prior_lines(prior),
+    )
+    spec = CacheSpec(
+        stage=STAGE_NAME,
+        stage_version=STAGE_VERSION,
+        input_hash=_scene_input_hash(scene, dialogue, prior),
+        model_id=model,
+        prompt_version=prompt.cache_version,
+    )
+    key = cache_key(spec)
+    cached = ctx.cache.lookup_json(key)
+    if cached is not None:
+        if not isinstance(cached, list):
+            raise EventExtractionError(f"Cached events corrupt for {scene.scene_id}")
+        return cached, True
+
+    try:
+        entries = active.complete_json(text)
+    except Exception as exc:
+        raise EventExtractionError(f"Cannot extract events for {scene.scene_id}: {exc}") from exc
+    if not isinstance(entries, list):
+        raise EventExtractionError(f"Expected event array for {scene.scene_id}")
+    ctx.cache.store_json(key, entries)
+    return entries, False
+
+
+def _extract_batch(
+    batch: list[Scene],
+    analyses: dict[str, SceneAnalysis],
+    segments: list[TranscriptSegment],
+    prompt: Prompt,
+    model: str,
+    character_lines: str,
+    prior: list[dict[str, object]],
+    active: ReasoningPort,
+    ctx: StageContext,
+) -> list[tuple[list[dict[str, object]], bool]]:
+    """Extract a batch of scenes concurrently, preserving their order."""
+    if not batch:
+        return []
+
+    def work(scene: Scene) -> tuple[list[dict[str, object]], bool]:
+        analysis = analyses.get(scene.scene_id)
+        if analysis is None:
+            raise EventExtractionError(f"No analysis for {scene.scene_id}")
+        dialogue = scene_dialogue(segments, scene.start, scene.end)
+        return _extract_one(
+            scene, analysis, dialogue, prior, prompt, model, character_lines, active, ctx
+        )
+
+    if len(batch) == 1 or DEFAULT_CONCURRENCY <= 1:
+        return [work(scene) for scene in batch]
+
+    with ThreadPoolExecutor(max_workers=min(DEFAULT_CONCURRENCY, len(batch))) as pool:
+        # `map` keeps the order of the input, so the results line up with the
+        # scenes no matter which finished first.
+        return list(pool.map(work, batch))
 
 
 class EventExtractionError(Exception):
@@ -75,6 +167,7 @@ def run_event_extraction(
     ctx: StageContext,
     reasoner: ReasoningPort | None = None,
     prompt_version: str | None = None,
+    batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> EventsResult:
     """Extract story events for ``ctx.job_id`` through to ``EVENTS_READY``."""
     started = time.perf_counter()
@@ -98,56 +191,43 @@ def run_event_extraction(
 
     raw_entries: list[dict[str, object]] = []
     cache_hits = 0
+    # The continuity context: each scene is told which events came before it.
+    # Extracting one scene per round trip, strictly in order, made the stage
+    # as slow as the number of scenes -- hundreds of sequential calls for a
+    # feature film.
+    #
+    # The scenes are extracted in batches instead. Within a batch they run
+    # concurrently and each one is told about the batch before it, so the
+    # continuity still crosses the scenes; the scene immediately before it
+    # inside the same batch is not in the context, which is the trade.
     prior: list[dict[str, object]] = []
     try:
-        for scene in scenes:
-            analysis = analyses.get(scene.scene_id)
-            if analysis is None:
-                raise EventExtractionError(f"No analysis for {scene.scene_id}")
-            dialogue = scene_dialogue(segments, scene.start, scene.end)
-            text = render(
+        for batch in _batches(scenes, batch_size):
+            results = _extract_batch(
+                batch,
+                analyses,
+                segments,
                 prompt,
-                scenes=f"{scene.scene_id} ({scene.start:.1f}-{scene.end:.1f}s): "
-                f"{analysis.location}; {'; '.join(analysis.actions)}",
-                dialogue=dialogue or "(no dialogue)",
-                characters=character_lines,
-                prior_events=_prior_lines(prior),
+                model,
+                character_lines,
+                prior,
+                active,
+                ctx,
             )
-            spec = CacheSpec(
-                stage=STAGE_NAME,
-                stage_version=STAGE_VERSION,
-                input_hash=_scene_input_hash(scene, dialogue, prior),
-                model_id=model,
-                prompt_version=prompt.cache_version,
-            )
-            key = cache_key(spec)
-            cached = ctx.cache.lookup_json(key)
-            if cached is not None:
-                if not isinstance(cached, list):
-                    if owns_completion:
-                        ctx.manager.fail(ctx.job_id, STAGE_NAME, "cached events corrupt")
-                    raise EventExtractionError(f"Cached events corrupt for {scene.scene_id}")
-                entries = cached
-                cache_hits += 1
-            else:
-                try:
-                    entries = active.complete_json(text)
-                except Exception as exc:
-                    if owns_completion:
-                        ctx.manager.fail(ctx.job_id, STAGE_NAME, f"{scene.scene_id}: {exc}")
-                    raise EventExtractionError(
-                        f"Cannot extract events for {scene.scene_id}: {exc}"
-                    ) from exc
-                if not isinstance(entries, list):
-                    raise EventExtractionError(f"Expected event array for {scene.scene_id}")
-                ctx.cache.store_json(key, entries)
-            for entry in entries:
-                if not isinstance(entry, dict):
-                    if owns_completion:
-                        ctx.manager.fail(ctx.job_id, STAGE_NAME, "malformed event entry")
-                    raise EventExtractionError(f"Malformed event entry for {scene.scene_id}")
-                prior.append(entry)
-            raw_entries.extend(entries)
+            for entries, hit in results:
+                if hit:
+                    cache_hits += 1
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        raise EventExtractionError("Malformed event entry")
+                    prior.append(entry)
+                raw_entries.extend(entries)
+    except Exception as exc:
+        if owns_completion:
+            # The workers raise; the failure is recorded here, from the
+            # thread that owns the connection.
+            ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
+        raise
     finally:
         active.unload()
 

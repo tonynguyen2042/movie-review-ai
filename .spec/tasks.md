@@ -1370,10 +1370,10 @@ tests/unit/test_events_parallel.py   (new)
 
 **Acceptance criteria**
 
-- [ ] event extraction for a batch runs concurrently
-- [ ] events are still ordered by timestamp
-- [ ] prior-event context is preserved at batch boundaries
-- [ ] `pytest -q` passes
+- [x] event extraction for a batch runs concurrently
+- [x] events are still ordered by timestamp
+- [x] prior-event context is preserved at batch boundaries
+- [x] `pytest -q` passes
 
 ---
 
