@@ -2378,8 +2378,8 @@ tests/unit/test_orchestrator.py
 
 **Acceptance criteria**
 
-- [ ] the eleven duplicated blocks collapse to one method
-- [ ] the stage closures use it
-- [ ] `pytest -q` passes
+- [x] the eleven duplicated blocks collapse to one method
+- [x] the stage closures use it
+- [x] `pytest -q` passes
 
 ---
