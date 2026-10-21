@@ -169,6 +169,24 @@ def run_verification(
             continuity_issues=len(issues),
         )
 
+    # The second pass: the critic reads the repaired script and reports on
+    # it. It is optional -- a profile that does not enable it gets an empty
+    # report rather than a failure.
+    from movie_review.review.critic import critique_script
+
+    try:
+        critique_script(repaired.script, ctx, ctx.settings.models.critic)
+    except Exception:
+        # A critic that cannot run must not fail a review that is already
+        # verified. The report is a second opinion, not a gate.
+        with ulog.logging_context(job_id=ctx.job_id, stage=STAGE_NAME):
+            ulog.log_event(
+                _logger,
+                event="critic.skipped",
+                status="error",
+                error="the critic could not run",
+            )
+
     if owns_completion:
         ctx.manager.transition(ctx.job_id, JobStatus.SCRIPT_VERIFIED)
 

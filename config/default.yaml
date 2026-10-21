@@ -64,6 +64,7 @@ prompts:
   # config/prompts/; the registry used to name five prompts that were never
   # written, and the five that were written were not listed.
   versions:
+    critic: v1
     event_extraction: v1
     publishing_metadata: v1
     scene_analysis: v1

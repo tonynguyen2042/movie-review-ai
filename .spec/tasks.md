@@ -2000,10 +2000,10 @@ tests/unit/test_critic.py   (new)
 
 **Acceptance criteria**
 
-- [ ] the critic runs when its slot is enabled and is skipped when it is not
-- [ ] the issues it raises reach the quality report
-- [ ] the prompt follows the ?63 contract
-- [ ] `pytest -q` passes
+- [x] the critic runs when its slot is enabled and is skipped when it is not
+- [x] the issues it raises reach the quality report
+- [x] the prompt follows the ?63 contract
+- [x] `pytest -q` passes
 
 ---
 
