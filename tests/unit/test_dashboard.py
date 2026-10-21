@@ -1,7 +1,6 @@
 """T089 acceptance: job dashboard serves job data."""
 
 import json
-import time
 from pathlib import Path
 
 from movie_review.ui.dashboard import JobDashboard
@@ -104,39 +103,24 @@ def test_dashboard_start_stop(tmp_path: Path) -> None:
     from movie_review.storage.database import bootstrap
 
     conn = sqlite3.connect(str(bootstrap(db_path)))
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            job_id TEXT PRIMARY KEY,
-            input_file TEXT,
-            status TEXT,
-            failed_stage TEXT,
-            error TEXT,
-            retry_count INTEGER DEFAULT 0,
-            created_at TEXT,
-            updated_at TEXT
-        )
-    """)
     conn.commit()
     conn.close()
 
-    dashboard = JobDashboard(host="127.0.0.1", port=0, db_path=str(db_path))  # port 0 = auto
-    # Get actual port
-    import socket
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
-
-    # Use a different approach - just test the server starts
-    dashboard = JobDashboard(host="127.0.0.1", port=port, db_path=str(db_path))
+    # Port 0 lets the operating system pick a free port, and the server
+    # reports the one it got. Taking a port, releasing it and hoping nobody
+    # else takes it in between was a race.
+    dashboard = JobDashboard(host="127.0.0.1", port=0, db_path=str(db_path))
     dashboard.start()
-    time.sleep(0.2)  # Give server time to start
 
-    # Test API endpoint
+    # The server is listening by the time start() returns: the socket is
+    # bound and listening before the thread is started, so there is nothing
+    # to wait for.
     import urllib.request
 
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/jobs") as resp:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{dashboard.port}/api/jobs", timeout=10
+        ) as resp:
             data = json.loads(resp.read().decode())
             assert isinstance(data, list)
     finally:

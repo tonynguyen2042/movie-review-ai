@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import importlib
 import sqlite3
-import threading
 import time
 from pathlib import Path
 
@@ -115,10 +114,25 @@ def test_progress_callback_is_optional(ctx) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _wait_for_heartbeat(lines: list[str], timeout: float = 5.0) -> None:
+    """Wait until the heartbeat has actually fired.
+
+    Sleeping a fixed interval and hoping the timer fired in that window is a
+    coin toss on a loaded machine. This waits for the line instead, with a
+    deadline, so the test is about the behaviour rather than the scheduler.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if any("still running" in line for line in lines):
+            return
+        time.sleep(0.01)
+    raise AssertionError(f"no heartbeat within {timeout}s: {lines}")
+
+
 def test_heartbeat_fires_while_a_stage_is_running(reporter, lines) -> None:
     """The heartbeat is what distinguishes 'working' from 'hung'."""
     reporter("tts-chunks", None)
-    time.sleep(0.5)
+    _wait_for_heartbeat(lines)
     reporter("tts-chunks", StageResult(stage="tts-chunks", success=True, duration_ms=500))
     reporter.close()
 
@@ -137,8 +151,13 @@ def test_reporter_orders_lines_start_then_finish(reporter, lines) -> None:
 
 
 def test_heartbeat_stops_when_the_stage_ends(reporter, lines) -> None:
-    """A leaked timer would print a heartbeat after the pipeline finished."""
+    """A leaked timer would print a heartbeat after the pipeline finished.
+
+    The heartbeat has to have fired at least once first, or the test proves
+    nothing: no heartbeat and no leaked heartbeat look the same.
+    """
     reporter("arcs", None)
+    _wait_for_heartbeat(lines)
     reporter("arcs", StageResult(stage="arcs", success=True, duration_ms=1))
     count_at_end = len(lines)
     time.sleep(0.5)
@@ -176,13 +195,17 @@ def test_close_is_idempotent(reporter) -> None:
 
 
 def test_heartbeat_thread_does_not_outlive_the_stage(reporter) -> None:
-    """No stray timer threads left running after the reporter is done."""
-    before = threading.active_count()
+    """No stray timer threads left running after the reporter is done.
+
+    The reporter's own timer is checked, not the number of threads in the
+    process: another library starting a thread during the test would fail a
+    count of every thread without saying anything about this one.
+    """
     reporter("twists", None)
+    assert reporter._timer is not None, "no heartbeat was armed"
     reporter("twists", StageResult(stage="twists", success=True, duration_ms=1))
     reporter.close()
-    time.sleep(0.4)
-    assert threading.active_count() <= before
+    assert reporter._timer is None, "the heartbeat timer was not cancelled"
 
 
 # ---------------------------------------------------------------------------
