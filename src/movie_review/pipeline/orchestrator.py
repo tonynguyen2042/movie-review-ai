@@ -400,6 +400,19 @@ def run_pipeline(
         ctx.conn.close()
 
 
+def _regroup_frames(added: list[Any], frames: dict[str, list[Path]]) -> dict[str, list[Path]]:
+    """The frame mapping with the feedback's extra frames folded in."""
+    from movie_review.media.frames import Frame
+
+    merged = {scene_id: list(paths) for scene_id, paths in frames.items()}
+    for frame in added:
+        if isinstance(frame, Frame):
+            merged.setdefault(frame.scene_id, []).append(frame.path)
+    for paths in merged.values():
+        paths.sort()
+    return merged
+
+
 def job_target_seconds(ctx: PipelineContext) -> float:
     """The review length this job is aiming at, in seconds.
 
@@ -496,7 +509,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         from movie_review.media.frames import sample_movie, sampling_config_from
         from movie_review.media.proxy import generate_proxy
         from movie_review.storage import repositories as repo
-        from movie_review.vision.analysis import run_visual_analysis
+        from movie_review.vision.analysis import run_visual_analysis, scene_dialogue
 
         scenes = repo.list_scenes(ctx.conn, ctx.job_id)
         segments = repo.list_transcript_segments(ctx.conn, ctx.job_id)
@@ -556,9 +569,61 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         for frame in sampled.frames:
             frames.setdefault(frame.scene_id, []).append(frame.path)
 
-        return run_visual_analysis(
+        result = run_visual_analysis(
             scenes,
             frames,
+            segments,
+            StageContext(
+                job_id=ctx.job_id,
+                jobs_dir=ctx.jobs_dir,
+                conn=ctx.conn,
+                manager=ctx.manager,
+                cache=ctx.cache,
+                settings=ctx.settings,
+            ),
+            on_progress=_sub_step(ctx),
+        )
+
+        # The frame budget is feedback-driven, not a pure function of the
+        # scene's length. A scene that matters gets more frames; a scene
+        # with nothing in it gets fewer. README section 12 asks for this and
+        # the feedback module was written and never called.
+        from movie_review.media.feedback import apply_feedback
+
+        # The analyses are read from the database rather than from the
+        # stage's return value, because that is where every other stage
+        # reads them from too.
+        analyses = {
+            analysis.scene_id: analysis
+            for analysis in repo.list_scene_analyses(ctx.conn, ctx.job_id)
+        }
+        items = {
+            scene.scene_id: (
+                analyses[scene.scene_id],
+                scene_dialogue(segments, scene.start, scene.end),
+            )
+            for scene in scenes
+            if scene.scene_id in analyses
+        }
+        feedback = apply_feedback(
+            proxy.path,
+            items,
+            job_id=ctx.job_id,
+            jobs_dir=ctx.jobs_dir,
+            conn=ctx.conn,
+            cache=ctx.cache,
+            sampling_config=sampling_config_from(ctx.settings.pipeline.visual_sampling),
+            ffmpeg=ctx.settings.media.ffmpeg,
+        )
+        if not feedback.added:
+            return result
+
+        # The extra frames are analysed too. The scenes that were already
+        # analysed hit the cache, so only the boosted ones cost a call.
+        boosted = _regroup_frames(feedback.added, frames)
+        return run_visual_analysis(
+            scenes,
+            boosted,
             segments,
             StageContext(
                 job_id=ctx.job_id,
