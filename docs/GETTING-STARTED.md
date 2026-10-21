@@ -340,6 +340,7 @@ uv run movie-review stages
   twists: Detect twists
   story: Build movie-analysis.json
   review: Write review script
+  verify: Verify the script's claims
   review-translate: Translate script to the target language
   tts-chunks: Plan and synthesize TTS chunks
   tts-concat: Concatenate narration
@@ -365,7 +366,7 @@ Stage names are validated up front. An unknown name is rejected as a usage error
 $ uv run movie-review process ./my-movie.mp4 --stage-from nope
 Invalid value for '--stage-from': 'nope' is not one of 'ingest', 'scenes',
 'transcript', 'vision', 'characters', 'locations', 'events', 'arcs', 'themes',
-'twists', 'story', 'review', 'review-translate', 'tts-chunks', 'tts-concat',
+'twists', 'story', 'review', 'verify', 'review-translate', 'tts-chunks', 'tts-concat',
 'tts-reconcile', 'render-manifest', 'render', 'quality'
 $ echo $?
 2

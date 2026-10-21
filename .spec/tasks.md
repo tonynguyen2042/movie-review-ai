@@ -1479,11 +1479,11 @@ tests/unit/test_verify_stage.py   (new)
 
 **Acceptance criteria**
 
-- [ ] a `verify` stage appears in `movie-review stages`
-- [ ] the claims table is populated after the stage runs
-- [ ] a contradicted claim is removed or qualified by the repair rules
-- [ ] the job reaches `SCRIPT_VERIFIED`
-- [ ] `pytest -q` passes
+- [x] a `verify` stage appears in `movie-review stages`
+- [x] the claims table is populated after the stage runs
+- [x] a contradicted claim is removed or qualified by the repair rules
+- [x] the job reaches `SCRIPT_VERIFIED`
+- [x] `pytest -q` passes
 
 ---
 

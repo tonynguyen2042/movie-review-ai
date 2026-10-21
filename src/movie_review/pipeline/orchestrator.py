@@ -46,6 +46,7 @@ STAGE_SEQUENCE: list[tuple[str, str]] = [
     ("twists", "Detect twists"),
     ("story", "Build movie-analysis.json"),
     ("review", "Write review script"),
+    ("verify", "Verify the script's claims"),
     ("review-translate", "Translate script to the target language"),
     ("tts-chunks", "Plan and synthesize TTS chunks"),
     ("tts-concat", "Concatenate narration"),
@@ -719,6 +720,13 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             spoilers=job.spoilers,
         )
 
+    def verify_fn(ctx: PipelineContext) -> Any:
+        from movie_review.pipeline.verify import run_verification
+        from movie_review.review.translate import effective_script_path
+
+        script_path = effective_script_path(ctx.jobs_dir, ctx.job_id, ctx.target_language)
+        return run_verification(script_path, ctx)
+
     def review_translate_fn(ctx: PipelineContext) -> Any:
         from movie_review.review.translate import (
             load_script,
@@ -1025,6 +1033,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         "twists": twists_fn,
         "story": story_fn,
         "review": review_fn,
+        "verify": verify_fn,
         "review-translate": review_translate_fn,
         "tts-chunks": tts_chunks_fn,
         "tts-concat": tts_concat_fn,
