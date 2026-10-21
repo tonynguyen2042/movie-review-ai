@@ -18,6 +18,7 @@ from typer.testing import CliRunner
 
 cliapp = importlib.import_module("movie_review.cli.app")
 from movie_review.cli.app import _resolve_languages, app  # noqa: E402
+from movie_review.pipeline.orchestrator import StageResult  # noqa: E402
 
 runner = CliRunner()
 
@@ -120,7 +121,7 @@ def test_languages_reach_run_pipeline(tmp_path: Path, monkeypatch: pytest.Monkey
         job_id: str, movie_path: str, db_path: str | None = None, **kwargs: Any
     ) -> list[Any]:
         seen.update(kwargs)
-        return []
+        return [StageResult(stage="ingest", success=True, duration_ms=0)]
 
     monkeypatch.setattr(cliapp, "run_pipeline", fake_run)
 
@@ -153,7 +154,7 @@ def test_omitted_target_is_passed_as_the_source(
         job_id: str, movie_path: str, db_path: str | None = None, **kwargs: Any
     ) -> list[Any]:
         seen.update(kwargs)
-        return []
+        return [StageResult(stage="ingest", success=True, duration_ms=0)]
 
     monkeypatch.setattr(cliapp, "run_pipeline", _fake_run)
 

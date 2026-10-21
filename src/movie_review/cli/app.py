@@ -466,6 +466,15 @@ def process(
     for flag, value in (("--stage-from", stage_from), ("--stage-to", stage_to)):
         if value is not None and value not in order:
             raise typer.BadParameter(f"Invalid value for '{flag}': {value!r} is not one of {order}")
+    # An inverted range used to run nothing and exit 0: the pipeline returns
+    # an empty result list, and `any` over an empty list is False. A command
+    # that did nothing has to say so, not report success.
+    if stage_from is not None and stage_to is not None:
+        if order.index(stage_to) < order.index(stage_from):
+            raise typer.BadParameter(
+                f"Invalid stage range: {stage_to!r} comes before {stage_from!r}. "
+                f"Expected --stage-from at or before --stage-to."
+            )
     minutes = _parse_duration(duration)
     # An omitted target means "speak the source language", so the fallback is the
     # source rather than any fixed default: no translation, no extra model calls.
@@ -529,10 +538,17 @@ def process(
             target_language=narration_language,
         )
     except KeyboardInterrupt:
-        reporter.close()
         typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)
         raise typer.Exit(code=130) from None
+    finally:
+        # The heartbeat is a timer thread. Closing it only on KeyboardInterrupt
+        # left it running after any other failure, so the command printed
+        # "... <stage> still running" lines long after it had given up.
+        reporter.close()
 
+    if not results:
+        typer.echo("The stage range ran no stages.", err=True)
+        raise typer.Exit(code=1)
     if any(not r.success for r in results):
         raise typer.Exit(code=1)
 
@@ -618,13 +634,18 @@ def resume(
             target_language=narration_language,
         )
     except KeyboardInterrupt:
-        reporter.close()
         typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)
         raise typer.Exit(code=130) from None
     except ResumeError as exc:
-        reporter.close()
         typer.echo(f"Cannot resume {job_id}: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    finally:
+        # The heartbeat is a timer thread; it has to be stopped on every
+        # exit path, not only on an interrupt.
+        reporter.close()
+    if not results:
+        typer.echo("The resume ran no stages.", err=True)
+        raise typer.Exit(code=1)
     if any(not r.success for r in results):
         raise typer.Exit(code=1)
 
