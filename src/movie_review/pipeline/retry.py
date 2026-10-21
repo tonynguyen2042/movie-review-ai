@@ -42,15 +42,30 @@ class RetryResult:
 
 
 def run_with_retry(
-    operation: Callable[[], Any], policy: RetryPolicy | None = None, *, stage: str = "stage"
+    operation: Callable[[], Any],
+    policy: RetryPolicy | None = None,
+    *,
+    stage: str = "stage",
+    should_retry: Callable[[BaseException], bool] | None = None,
+    on_retry: Callable[[int, BaseException], None] | None = None,
 ) -> RetryResult:
-    """Run ``operation`` until success or policy exhaustion (then raise)."""
+    """Run ``operation`` until success or policy exhaustion (then raise).
+
+    ``should_retry`` decides whether a given failure is worth another
+    attempt. It defaults to the policy's ``retry_on`` types. A predicate is
+    needed where the failure that matters is not the one that was raised --
+    a stage wraps its cause, and the cause is what says whether the
+    failure was transient.
+    """
     active = policy or RetryPolicy()
     last_error: Exception | None = None
     for attempt in range(1, active.max_attempts + 1):
         try:
             return RetryResult(value=operation(), attempts=attempt)
-        except active.retry_on as exc:
+        except Exception as exc:
+            retryable = should_retry(exc) if should_retry else isinstance(exc, active.retry_on)
+            if not retryable:
+                raise
             last_error = exc
             with ulog.logging_context(stage=stage):
                 ulog.log_event(
@@ -60,6 +75,8 @@ def run_with_retry(
                     attempt=attempt,
                     error=str(exc),
                 )
+            if on_retry is not None:
+                on_retry(attempt, exc)
             if attempt < active.max_attempts and active.backoff_seconds > 0:
                 time.sleep(active.backoff_seconds)
     assert last_error is not None
