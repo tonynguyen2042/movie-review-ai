@@ -25,6 +25,10 @@ its own merge, and every one passed `pytest -q`, `ruff check .`,
 The suite has gone from **1214 passed / 7 failed** to **1255 passed / 0
 failed**, and `mypy .` from 107 errors to none.
 
+The three P0 blockers are gone, the operator's flags reach the pipeline, and the
+verify stage now makes the constitution's P1 (Evidence First) real: a claim
+the evidence does not support is removed, converted or qualified.
+
 The three P0 blockers are gone: the render stage can now read a manifest,
 the render manifest is timed by the narration that was synthesized, and the
 quality gate can fail a job.
@@ -121,16 +125,16 @@ repair the gate itself; the middle waves repair the wiring.
 
 | ID | Type | Title | Branch |
 |---|---|---|---|
-| T142 | feat | verify stage: claims→fact-check→repair | `task/T142-verify-stage` |
-| T143 | feat | subtitles stage | `task/T143-subtitles-stage` |
+| T142 | feat | verify stage: claims→fact-check→repair | `task/T142-verify-stage` | **DONE** |
+| T143 | feat | subtitles stage | `task/T143-subtitles-stage` | **DONE** |
 | T144 | feat | diarization + speaker linking | `task/T144-diarization-stage` |
 | T145 | feat | story graph relationships | `task/T145-story-graph` |
 | T146 | feat | adaptive frame sampling feedback | `task/T146-sampling-feedback` |
 | T147 | feat | music bed + ducking | `task/T147-music-ducking` |
 | T148 | feat | thumbnail generation | `task/T148-thumbnail-generation` |
 | T149 | feat | OOM recovery wired in | `task/T149-oom-recovery-wiring` |
-| T150 | feat | privacy.cloud_ai enforced | `task/T150-privacy-cloud-ai` |
-| T151 | feat | output set (md, manifest, --output) | `task/T151-output-set` |
+| T150 | feat | privacy.cloud_ai enforced | `task/T150-privacy-cloud-ai` | **DONE** |
+| T151 | feat | output set (md, manifest, --output) | `task/T151-output-set` | **DONE** |
 | T152 | feat | prompt registry matches reality | `task/T152-prompt-registry` |
 
 ### Wave 5 — Spec gaps (README §49/§52/§53/§56/§74/§77/§96)
