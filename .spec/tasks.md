@@ -904,9 +904,9 @@ src/movie_review/cli/app.py
 
 **Acceptance criteria**
 
-- [ ] resuming a job with an unknown failed stage exits non-zero without a traceback
-- [ ] `resume` still works for every real stage name
-- [ ] `pytest -q` passes
+- [x] resuming a job with an unknown failed stage exits non-zero without a traceback
+- [x] `resume` still works for every real stage name
+- [x] `pytest -q` passes
 
 ---
 

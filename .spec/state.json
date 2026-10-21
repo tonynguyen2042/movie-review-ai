@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T04:58:52.492550+00:00",
+  "updated_at": "2026-10-21T05:04:09.808778+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1368,12 +1368,14 @@
       "title": "resume validates the stage name",
       "type": "fix",
       "branch": "T123-resume-stage-validation",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T05:04:09.808778+00:00",
+      "updated_at": "2026-10-21T05:04:09.808778+00:00"
     },
     "T124": {
       "title": "publish title path leak",

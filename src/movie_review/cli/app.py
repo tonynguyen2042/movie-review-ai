@@ -27,6 +27,7 @@ from movie_review.jobs.manager import JobManager
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.orchestrator import (
     STAGE_SEQUENCE,
+    ResumeError,
     StageResult,
     resume_job,
     run_pipeline,
@@ -324,6 +325,20 @@ def _resolve_languages(source: str, target: str | None) -> tuple[str, str]:
     return source_tag, target_tag
 
 
+def _validate_stage(value: str) -> str:
+    """Check a stage name against the pipeline, as a usage error.
+
+    A stage name the pipeline does not have used to reach `run_pipeline`,
+    which raised a ValueError that escaped as a raw traceback. The stage may
+    also come from a job's recorded `failed_stage`, which need not name a
+    stage this build has.
+    """
+    order = [name for name, _ in STAGE_SEQUENCE]
+    if value not in order:
+        raise typer.BadParameter(f"Unknown stage {value!r}; expected one of {order}")
+    return value
+
+
 def _manager(db_path: str | None) -> tuple[JobManager, sqlite3.Connection]:
     settings = load_settings()
     resolved = Path(db_path) if db_path else Path(settings.paths.data_dir) / "jobs.db"
@@ -579,6 +594,10 @@ def resume(
         reporter.close()
         typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)
         raise typer.Exit(code=130) from None
+    except ResumeError as exc:
+        reporter.close()
+        typer.echo(f"Cannot resume {job_id}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     if any(not r.success for r in results):
         raise typer.Exit(code=1)
 
@@ -616,7 +635,7 @@ def retry(
 
     # Get recovery plan to find failed stage
     plan = recovery_plan(manager, job_id)
-    target_stage = stage or plan.resume_stage
+    target_stage = _validate_stage(stage or plan.resume_stage)
 
     typer.echo(f"Retrying stage: {target_stage}")
 
