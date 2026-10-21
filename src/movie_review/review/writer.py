@@ -49,20 +49,64 @@ class ScriptResult:
     word_count: int
 
 
-def _story_brief(analysis: dict[str, Any]) -> str:
+#: How many characters the brief names. The character list used to be the
+#: raw repr of the parsed objects, which for a feature film was several
+#: thousand characters of dict syntax in every section prompt.
+MAX_BRIEF_CHARACTERS = 40
+
+#: How many events the brief names. Sixty event descriptions is about
+#: 12000 characters -- a prompt of that size exceeds the context of a 14B
+#: model, and it was repeated in every section prompt.
+MAX_BRIEF_EVENTS = 24
+
+
+def _story_brief(
+    analysis: dict[str, Any],
+    event_ids: list[str] | None = None,
+) -> str:
+    """The story the writer is told about.
+
+    ``event_ids`` narrows the brief to the events a section is about, so
+    each section prompt carries the events it needs rather than the whole
+    story. The character list is formatted compactly: the raw repr of the
+    parsed objects was several thousand characters of dict syntax, repeated
+    in every section prompt.
+    """
     events = analysis.get("events", [])
     if not isinstance(events, list):
         events = []
-    lines = []
-    for event in sorted(events, key=lambda e: float(e.get("timestamp", 0.0)))[:MAX_EVENTS]:
-        if not isinstance(event, dict):
-            continue
-        lines.append(f"{event.get('id')}: {event.get('description', '')}")
+    ordered = sorted(
+        (event for event in events if isinstance(event, dict)),
+        key=lambda e: float(e.get("timestamp", 0.0)),
+    )
+    if event_ids:
+        wanted = set(event_ids)
+        selected = [event for event in ordered if event.get("id") in wanted]
+        # A section may cite no event at all; the whole story is better than
+        # nothing.
+        ordered = selected or ordered
+    lines = [
+        f"{event.get('id')}: {event.get('description', '')}" for event in ordered[:MAX_BRIEF_EVENTS]
+    ]
+
     characters = analysis.get("characters", [])
+    names: list[str] = []
+    if isinstance(characters, list):
+        for character in characters:
+            if isinstance(character, dict):
+                name = str(character.get("name") or character.get("id") or "")
+            else:
+                name = str(character)
+            if name:
+                names.append(name)
+    character_lines = ", ".join(names[:MAX_BRIEF_CHARACTERS])
+    if len(names) > MAX_BRIEF_CHARACTERS:
+        character_lines += f", ... and {len(names) - MAX_BRIEF_CHARACTERS} more"
+
     themes = [t["theme"] if isinstance(t, dict) else t for t in analysis.get("themes", [])]
     twists = [t["description"] if isinstance(t, dict) else t for t in analysis.get("twists", [])]
     return (
-        "events:\n" + "\n".join(lines) + f"\ncharacters: {characters}\nthemes: {themes}\n"
+        "events:\n" + "\n".join(lines) + f"\ncharacters: {character_lines}\nthemes: {themes}\n"
         f"twists: {twists}"
     )
 
@@ -102,11 +146,8 @@ def write_script(
     # remote model the same cache entry, so switching models silently reuses the
     # previous model's output.
     model_id = active.model
-    story = _story_brief(analysis)
     total_seconds = sum(section.target_seconds for section in outline.sections)
-    run_hash = artifacts.sha256_bytes(
-        f"{outline.model_dump_json()}|{story}|{target_words}".encode()
-    )
+    run_hash = artifacts.sha256_bytes(f"{outline.model_dump_json()}|{target_words}".encode())
 
     if owns_completion:
         ctx.manager.transition(ctx.job_id, JobStatus.REVIEW_PLAN_READY)
@@ -116,6 +157,11 @@ def write_script(
     try:
         for section in outline.sections:
             share = max(1, round(target_words * section.target_seconds / total_seconds))
+            # The brief is built per section, from the events that section is
+            # about. It used to be the whole story in every prompt: 83 554
+            # characters, about 21 000 tokens, repeated eight times -- and a
+            # prompt that size exceeds the context of a 14B model.
+            story = _story_brief(analysis, list(section.event_ids))
             text = render(
                 prompt,
                 outline=(

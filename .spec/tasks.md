@@ -1403,10 +1403,10 @@ tests/unit/test_prompt_size.py   (new)
 
 **Acceptance criteria**
 
-- [ ] the character roster in a per-scene prompt is bounded by a configured limit
-- [ ] no single writer prompt exceeds the configured token budget
-- [ ] the writer brief is built per section
-- [ ] `pytest -q` passes
+- [x] the character roster in a per-scene prompt is bounded by a configured limit
+- [x] no single writer prompt exceeds the configured token budget
+- [x] the writer brief is built per section
+- [x] `pytest -q` passes
 
 ---
 

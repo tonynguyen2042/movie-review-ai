@@ -52,6 +52,44 @@ DEFAULT_BATCH_SIZE = 8
 DEFAULT_CONCURRENCY = 4
 
 
+#: How many characters are named in a per-scene prompt. The whole roster
+#: used to be sent to every scene: 532 discovered candidates made an 11.9
+#: KB block, and a thousand scene prompts carried about three million tokens
+#: of the same names.
+MAX_SCENE_CHARACTERS = 12
+
+
+def _scene_character_lines(
+    characters: list[Character],
+    analysis: SceneAnalysis,
+    limit: int = MAX_SCENE_CHARACTERS,
+) -> str:
+    """The characters worth naming for one scene.
+
+    The characters the scene's own analysis mentions come first, then the
+    most important of the rest, and the list is capped. The whole roster
+    was sent to every scene before, which for a feature film was three
+    million tokens of the same names.
+    """
+    if not characters:
+        return "none yet"
+
+    mentioned = {name.strip().lower() for name in analysis.characters if name.strip()}
+    named = [c for c in characters if c.name.strip().lower() in mentioned]
+    others = [c for c in characters if c.name.strip().lower() not in mentioned]
+
+    chosen = named[:limit]
+    if len(chosen) < limit:
+        chosen = chosen + others[: limit - len(chosen)]
+    if not chosen:
+        return "none yet"
+
+    lines = [f"{c.id}: {c.name}" for c in chosen]
+    if len(named) > limit:
+        lines.append(f"... and {len(named) - limit} more named in this scene")
+    return "\n".join(lines)
+
+
 def _batches(scenes: list[Scene], size: int) -> list[list[Scene]]:
     """Split the scenes into batches of at most ``size``."""
     if size <= 1:
@@ -111,6 +149,7 @@ def _extract_batch(
     model: str,
     character_lines: str,
     prior: list[dict[str, object]],
+    characters: list[Character],
     active: ReasoningPort,
     ctx: StageContext,
 ) -> list[tuple[list[dict[str, object]], bool]]:
@@ -124,7 +163,15 @@ def _extract_batch(
             raise EventExtractionError(f"No analysis for {scene.scene_id}")
         dialogue = scene_dialogue(segments, scene.start, scene.end)
         return _extract_one(
-            scene, analysis, dialogue, prior, prompt, model, character_lines, active, ctx
+            scene,
+            analysis,
+            dialogue,
+            prior,
+            prompt,
+            model,
+            _scene_character_lines(characters, analysis),
+            active,
+            ctx,
         )
 
     if len(batch) == 1 or DEFAULT_CONCURRENCY <= 1:
@@ -211,6 +258,7 @@ def run_event_extraction(
                 model,
                 character_lines,
                 prior,
+                characters,
                 active,
                 ctx,
             )
@@ -288,13 +336,20 @@ def run_event_extraction(
 
 
 def _scene_input_hash(scene: Scene, dialogue: str, prior: list[dict[str, object]]) -> str:
+    """The identity of one scene's extraction.
+
+    Only the events the prompt carries are hashed. The whole prior list
+    used to be hashed, although the prompt shows the last twenty of them,
+    so the key grew with the length of the film and a change to an early
+    event invalidated every later scene's entry.
+    """
     material = "|".join(
         [
             scene.scene_id,
             f"{scene.start:.3f}",
             f"{scene.end:.3f}",
             dialogue,
-            json.dumps(prior, sort_keys=True),
+            json.dumps(prior[-MAX_PRIOR_EVENTS:], sort_keys=True),
         ]
     )
     return artifacts.sha256_bytes(material.encode("utf-8"))
