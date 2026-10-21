@@ -822,9 +822,9 @@ src/movie_review/pipeline/orchestrator.py   review_fn
 
 **Acceptance criteria**
 
-- [ ] the writer's word target follows `target_wpm`
-- [ ] changing `target_wpm` changes the requested word count
-- [ ] `pytest -q` passes
+- [x] the writer's word target follows `target_wpm`
+- [x] changing `target_wpm` changes the requested word count
+- [x] `pytest -q` passes
 
 ---
 

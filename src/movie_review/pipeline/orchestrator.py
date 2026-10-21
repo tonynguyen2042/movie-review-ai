@@ -17,6 +17,7 @@ from typing import Any
 from movie_review.artifacts import ArtifactRecord, IntegrityReport
 from movie_review.artifacts import manager as artifacts_manager
 from movie_review.cache.manager import CacheManager
+from movie_review.config.settings import AppSettings
 from movie_review.domain import JobStatus, ReviewScript
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.recovery import recovery_plan
@@ -293,6 +294,22 @@ def run_pipeline(
             break
 
     return results
+
+
+def review_target_words(settings: AppSettings) -> int:
+    """The writer's word target: the configured duration at the configured rate.
+
+    The speech rate comes from the configuration, not from a literal. A
+    hard-coded 150 contradicted ``settings.pipeline.review.target_wpm``,
+    which the reconciliation stage two stages later does use: with a
+    different rate the writer was asked for 150-WPM word counts while the
+    reconciler measured against the configured one, so the script came out
+    systematically short and never stopped asking to be expanded.
+    """
+    from movie_review.review.duration import target_words
+
+    target_seconds = settings.pipeline.review.target_duration_minutes * 60
+    return target_words(target_seconds, settings.pipeline.review.target_wpm)
 
 
 def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | None:
@@ -577,6 +594,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         events = repo.list_events(ctx.conn, ctx.job_id)
         style = load_style("youtube")  # default, could come from job config
         target_seconds = ctx.settings.pipeline.review.target_duration_minutes * 60
+        target_words = review_target_words(ctx.settings)
 
         outline = plan_review(events, style, target_seconds=target_seconds)
 
@@ -584,7 +602,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             outline,
             analysis,
             style,
-            target_seconds * 150 // 60,
+            target_words,
             StageContext(
                 job_id=ctx.job_id,
                 jobs_dir=ctx.jobs_dir,
