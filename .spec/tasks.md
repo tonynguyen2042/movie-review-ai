@@ -1661,10 +1661,10 @@ tests/unit/test_thumbnail.py
 
 **Acceptance criteria**
 
-- [ ] a thumbnail command exists and writes a 1280x720 image
-- [ ] the publish command attaches the generated thumbnail
-- [ ] the command is optional and does not run as a pipeline stage
-- [ ] `pytest -q` passes
+- [x] a thumbnail command exists and writes a 1280x720 image
+- [x] the publish command attaches the generated thumbnail
+- [x] the command is optional and does not run as a pipeline stage
+- [x] `pytest -q` passes
 
 ---
 

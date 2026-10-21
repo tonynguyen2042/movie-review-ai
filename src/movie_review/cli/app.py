@@ -728,6 +728,62 @@ def retry(
         reporter.close()
 
 
+@app.command()
+def thumbnail(
+    job_id: Annotated[str, typer.Argument(help="Job ID.")],
+    db_path: DbOption = None,
+    position: Annotated[
+        float,
+        typer.Option(
+            "--position",
+            help="Where in the timeline to take the frame, 0 to 1 (default 0.5).",
+        ),
+    ] = 0.5,
+) -> None:
+    """Generate the thumbnail for a job.
+
+    README section 48 makes this a separate optional stage: it is not part of
+    the pipeline, and a job does not need one. The publish command attaches
+    the thumbnail when it exists.
+    """
+    from movie_review.pipeline.context import StageContext
+    from movie_review.publishing.thumbnail import (
+        ThumbnailError,
+        generate_thumbnail,
+        thumbnail_path,
+    )
+    from movie_review.rendering.manifest import read_manifest
+
+    settings = load_settings()
+    manager, conn = _manager(db_path)
+    with conn:
+        job = _load_job(manager, job_id)
+    ctx = StageContext.from_settings(settings, conn, job_id)
+
+    manifest_path = Path(ctx.jobs_dir) / job_id / "render" / "render-manifest.json"
+    if not manifest_path.is_file():
+        typer.echo(
+            f"No render manifest for {job_id}. Run the pipeline through the render stage first.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    dest = thumbnail_path(ctx.jobs_dir, job_id)
+    try:
+        result = generate_thumbnail(
+            job.input_file,
+            read_manifest(manifest_path),
+            dest,
+            position_ratio=position,
+            ffmpeg=settings.media.ffmpeg,
+        )
+    except ThumbnailError as exc:
+        typer.echo(f"Cannot generate the thumbnail: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"thumbnail={result.path} at {result.plan.timestamp:.1f}s")
+
+
 @app.command("publish-platforms")
 def publish_platforms() -> None:
     """List supported publishing platforms and whether each can upload here."""
