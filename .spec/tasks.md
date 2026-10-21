@@ -2029,10 +2029,10 @@ requirements: pytest-cov in the dev extra
 
 **Acceptance criteria**
 
-- [ ] CI runs on push and on pull requests
-- [ ] the workflow fails on a lint, type or test failure
-- [ ] a coverage threshold is enforced and does not regress
-- [ ] `pytest -q` passes locally
+- [x] CI runs on push and on pull requests
+- [x] the workflow fails on a lint, type or test failure
+- [x] a coverage threshold is enforced and does not regress
+- [x] `pytest -q` passes locally
 
 ---
 

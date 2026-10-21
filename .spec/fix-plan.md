@@ -15,14 +15,14 @@ plus direct verification by the reviewer.
 | 3 - Performance | **done** | T132-T141 |
 | 4 - Missing wiring | **done** | T142-T152 |
 | 5 - Spec gaps | 0 of 7 | - |
-| 6 - Test infrastructure | 0 of 9 | - |
+| 6 - Test infrastructure | 1 of 9 | T160 |
 | 7 - Docs and cleanup | 0 of 4 | - |
 
-**41 of 60 tasks merged.** Every one landed as its own branch, its own PR and
+**42 of 60 tasks merged.** Every one landed as its own branch, its own PR and
 its own merge, and every one passed `pytest -q`, `ruff check .`,
 `ruff format --check .` and `mypy .` before it merged.
 
-The suite has gone from **1214 passed / 7 failed** to **1400 passed / 0
+The suite has gone from **1214 passed / 7 failed** to **1409 passed / 0
 failed**, and `mypy .` from 107 errors to none.
 
 The three P0 blockers are gone, the operator's flags reach the pipeline, and
@@ -142,19 +142,19 @@ repair the gate itself; the middle waves repair the wiring.
 
 | ID | Type | Title | Branch |
 |---|---|---|---|
-| T153 | feat | CLI read-only commands | `task/T153-cli-read-commands` |
-| T154 | feat | CLI benchmark command | `task/T154-cli-benchmark` |
-| T155 | feat | CLI flags | `task/T155-cli-flags` |
-| T156 | feat | model_runs + token usage | `task/T156-model-runs` |
-| T157 | feat | missing DB tables | `task/T157-missing-db-tables` |
-| T158 | feat | JSON Schemas + validation | `task/T158-json-schemas` |
-| T159 | feat | second-pass critic model | `task/T159-critic-model` |
+| T153 | feat | CLI read-only commands | `task/T153-cli-read-commands` | **DONE** |
+| T154 | feat | CLI benchmark command | `task/T154-cli-benchmark` | **DONE** |
+| T155 | feat | CLI flags | `task/T155-cli-flags` | **DONE** |
+| T156 | feat | model_runs + token usage | `task/T156-model-runs` | **DONE** |
+| T157 | feat | missing DB tables | `task/T157-missing-db-tables` | **DONE** |
+| T158 | feat | JSON Schemas + validation | `task/T158-json-schemas` | **DONE** |
+| T159 | feat | second-pass critic model | `task/T159-critic-model` | **DONE** |
 
 ### Wave 6 — Test infrastructure
 
 | ID | Type | Title | Branch |
 |---|---|---|---|
-| T160 | test | CI + coverage gate | `task/T160-ci-coverage-gate` |
+| T160 | test | CI + coverage gate | `task/T160-ci-coverage-gate` | **DONE** |
 | T161 | test | root conftest + de-duplicate helpers | `task/T161-root-conftest` |
 | T162 | test | markers, strict config, timeout | `task/T162-pytest-markers` |
 | T163 | test | end-to-end pipeline test | `task/T163-pipeline-e2e-test` |
