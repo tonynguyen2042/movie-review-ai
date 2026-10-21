@@ -126,6 +126,11 @@ class JobDashboard:
                 pass
 
         self._server = http.server.HTTPServer((self.host, self.port), DashboardHandler)
+        # A server bound to port 0 is given a free port by the operating
+        # system. The test can then ask the server which one it got, instead
+        # of taking a port, releasing it, and hoping nobody else takes it in
+        # between.
+        self.port = int(self._server.server_address[1])
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
 

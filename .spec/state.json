@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T19:50:08.177175+00:00",
+  "updated_at": "2026-10-21T19:58:34.292456+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1949,12 +1949,14 @@
       "title": "de-flaky timing tests",
       "type": "test",
       "branch": "T168-deflake-timing-tests",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T19:58:34.292456+00:00",
+      "updated_at": "2026-10-21T19:58:34.292456+00:00"
     },
     "T169": {
       "title": "the 5 missing `docs/` files",

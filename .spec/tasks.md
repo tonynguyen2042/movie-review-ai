@@ -2261,10 +2261,10 @@ tests/unit/test_orchestrator.py
 
 **Acceptance criteria**
 
-- [ ] the dashboard test uses an ephemeral port and never races
-- [ ] no test depends on machine load
-- [ ] the suite passes when run repeatedly
-- [ ] `pytest -q` passes
+- [x] the dashboard test uses an ephemeral port and never races
+- [x] no test depends on machine load
+- [x] the suite passes when run repeatedly
+- [x] `pytest -q` passes
 
 ---
 
