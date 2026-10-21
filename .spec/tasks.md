@@ -1162,9 +1162,9 @@ tests/unit/test_retrieval.py
 
 **Acceptance criteria**
 
-- [ ] SQL statement count no longer grows with the transcript length
-- [ ] retrieval over 800 segments is under 50 ms
-- [ ] `pytest -q` passes
+- [x] SQL statement count no longer grows with the transcript length
+- [x] retrieval over 800 segments is under 50 ms
+- [x] `pytest -q` passes
 
 ---
 
