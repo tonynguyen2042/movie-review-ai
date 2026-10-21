@@ -151,16 +151,15 @@ export MOVIE_REVIEW_MODELS__PROFILE=quality
 | Setting | Default | What it means |
 |---|---|---|
 | `models.profile` | `balanced` | Model profile: `fast`, `balanced`, `quality`, or `remote`. Selects the model set from `config/models.yaml`. |
-| `runtime.backend` | `mlx` | Local MLX runtime. |
 | `paths.data_dir` | `data` | Where the job database and artifacts are written. |
 | `paths.output_dir` | `data/output` | Where finished videos are written. |
 | `pipeline.review.target_duration_minutes` | `20` | Target review length. |
 | `pipeline.review.target_wpm` | `150` | Narration words per minute. |
 | `source_video.max_clip_seconds` | `8.0` | Longest single source clip used. |
 | `source_video.max_source_ratio` | `0.35` | Cap on source footage as a share of runtime. |
-| `logging.level` | `INFO` | Use `DEBUG` when troubleshooting. |
-| `logging.json_output` | `true` | Machine-readable log lines. Set `false` for human-readable output. |
+| `logging.level` | `INFO` | Use `DEBUG` when troubleshooting. The log lines are always JSON. |
 | `privacy.cloud_ai` | `false` | Keep everything local. Leave this `false`. |
+| `pipeline.diarization` | `true` | Whether the speaker-attribution stage runs. |
 | `media.ffmpeg` / `media.ffprobe` | `ffmpeg` / `ffprobe` | Absolute paths if not on `PATH`. |
 
 ### About `source_video` limits
@@ -723,11 +722,14 @@ The file is not a complete, readable video — often a truncated download, a `.p
 
 ### Log lines look noisy
 
-JSON logging is intentional and machine-readable. For human-readable output:
+JSON logging is intentional and machine-readable: the dashboard and the
+desktop app both read it. There is no second format.
+
+For less of it, raise the level:
 
 ```yaml
 logging:
-  json_output: false
+  level: WARNING
 ```
 
 ### The dashboard shows no jobs
@@ -747,6 +749,11 @@ uv run pytest -q
 
 - [`README.md`](../README.md) — full product and architecture specification
 - [`AGENTS.md`](../AGENTS.md) — contribution workflow and task rules
+- [`architecture.md`](architecture.md) — how the code is arranged, and why
+- [`pipeline.md`](pipeline.md) — the stages, what each one writes
+- [`schemas.md`](schemas.md) — the published JSON Schemas
+- [`model-selection.md`](model-selection.md) — the profiles, and how to measure before choosing
+- [`troubleshooting.md`](troubleshooting.md) — what to do when something fails
 - [`DESKTOP-APP.md`](DESKTOP-APP.md) — the Electron GUI (T111)
 - [`config/default.yaml`](../config/default.yaml) — all settings with comments
 - [`config/models.yaml`](../config/models.yaml) — model profiles, including `remote`
