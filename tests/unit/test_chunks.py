@@ -52,7 +52,8 @@ def test_split_sentences() -> None:
 
 def test_plan_chunks_ids_and_split() -> None:
     chunks = plan_chunks(_script(), voice="Ryan", emotion="dramatic")
-    assert chunks[0].chunk_id == "tts_001"
+    # The id is derived from the content, not from the position.
+    assert chunks[0].chunk_id.startswith("tts_")
     assert chunks[0].paragraph_id == "p1"
     assert chunks[0].voice == "Ryan"
     assert chunks[0].emotion == "dramatic"
@@ -92,7 +93,7 @@ def test_synthesize_writes_valid_wav(tmp_path: Path) -> None:
         with wave.open(str(result.path), "rb") as wav:
             assert (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) == (1, 2, 16000)
             assert wav.getnframes() > 0
-    assert results[0].path.name == "tts_001.wav"
+    assert results[0].path.name == f"{results[0].chunk.chunk_id}.wav"
 
 
 def test_synthesize_single_chunk_retry(tmp_path: Path) -> None:

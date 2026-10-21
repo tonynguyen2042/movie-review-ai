@@ -7,6 +7,7 @@ chunk synthesizes independently through any :class:`TTSPort`.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import wave
@@ -66,6 +67,28 @@ def split_sentences(text: str) -> list[str]:
     return [part.strip() for part in _SENTENCE_RE.split(text.strip()) if part.strip()]
 
 
+def split_long_text(text: str, max_words: int) -> list[str]:
+    """Break a text into pieces of at most ``max_words`` words.
+
+    The sentence split alone is not enough: a paragraph of four hundred words
+    with no end punctuation is one piece, and one piece is one request to the
+    TTS endpoint with a four hundred word body. The words are broken on a
+    boundary, so no word is cut in half.
+    """
+    if len(text.split()) <= max_words:
+        return [text]
+    pieces: list[str] = []
+    current: list[str] = []
+    for word in text.split():
+        current.append(word)
+        if len(current) >= max_words:
+            pieces.append(" ".join(current))
+            current = []
+    if current:
+        pieces.append(" ".join(current))
+    return pieces
+
+
 def plan_chunks(
     script: ReviewScript,
     voice: str,
@@ -73,19 +96,30 @@ def plan_chunks(
     speed: float = 1.0,
     max_words: int = WORDS_PER_60S,
 ) -> list[TTSChunk]:
-    """Plan one chunk per paragraph, splitting overlong ones by sentence."""
+    """Plan one chunk per paragraph, splitting overlong ones by sentence.
+
+    The chunk id is derived from the text, not from the position. It used to
+    be a counter, so inserting a paragraph shifted every later id -- and the
+    concatenation stage, which re-plans and assumes the ids match, silently
+    joined the wrong audio files. A content-derived id means an edit only
+    changes the chunks it touched, and the audio that is still valid is
+    still reused.
+    """
     chunks: list[TTSChunk] = []
-    counter = 0
+    # The same text may appear more than once. The occurrence number keeps
+    # the two apart without making the identity depend on where they sit.
+    occurrences: dict[str, int] = {}
     for section in script.sections:
         for paragraph in section.paragraphs:
             texts = [paragraph.text]
             if len(paragraph.text.split()) > max_words:
-                texts = split_sentences(paragraph.text)
+                texts = split_long_text(paragraph.text, max_words)
             for text in texts:
-                counter += 1
+                occurrence = occurrences.get(text, 0)
+                occurrences[text] = occurrence + 1
                 chunks.append(
                     TTSChunk(
-                        chunk_id=f"tts_{counter:03d}",
+                        chunk_id=chunk_id_for(text, occurrence),
                         paragraph_id=paragraph.id,
                         section_id=section.id,
                         text=text,
@@ -95,6 +129,20 @@ def plan_chunks(
                     )
                 )
     return chunks
+
+
+def chunk_id_for(text: str, occurrence: int = 0) -> str:
+    """The identity of one chunk: its text, and which copy of it this is.
+
+    The paragraph is deliberately not part of it. The paragraph ids are
+    positional too, so including one would make an edit shift the ids again
+    -- and the concatenation stage, which re-plans and assumes the ids
+    match, would silently join the wrong audio files.
+
+    The occurrence number keeps two paragraphs with the same text apart.
+    """
+    digest = hashlib.sha256(f"{text}\x00{occurrence}".encode()).hexdigest()
+    return f"tts_{digest[:12]}"
 
 
 def chunk_filename(chunk_id: str) -> str:

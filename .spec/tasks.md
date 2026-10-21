@@ -2232,10 +2232,10 @@ tests/unit/test_chunks.py
 
 **Acceptance criteria**
 
-- [ ] the same script always produces the same chunk ids
-- [ ] inserting a paragraph does not change the id of an unchanged chunk
-- [ ] a single long sentence is split into chunks within the word budget
-- [ ] `pytest -q` passes
+- [x] the same script always produces the same chunk ids
+- [x] inserting a paragraph does not change the id of an unchanged chunk
+- [x] a single long sentence is split into chunks within the word budget
+- [x] `pytest -q` passes
 
 ---
 
