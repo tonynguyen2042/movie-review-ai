@@ -479,8 +479,8 @@ def save_transcript_segments(
         conn.executemany(
             """
             INSERT INTO transcript_segments
-                (job_id, segment_id, start, end, text, language, confidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (job_id, segment_id, start, end, text, language, confidence, speaker)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -491,6 +491,7 @@ def save_transcript_segments(
                     segment.text,
                     segment.language,
                     segment.confidence,
+                    segment.speaker,
                 )
                 for segment in segments
             ],
@@ -509,6 +510,7 @@ def list_transcript_segments(conn: sqlite3.Connection, job_id: str) -> list[Tran
             text=row["text"],
             language=row["language"],
             confidence=row["confidence"],
+            speaker=row["speaker"] if "speaker" in row.keys() else None,
         )
         for row in rows
     ]

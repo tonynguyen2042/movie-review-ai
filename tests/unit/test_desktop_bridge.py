@@ -112,6 +112,7 @@ def test_stages_reports_the_full_pipeline_sequence(capsys: pytest.CaptureFixture
         "transcript",
         "vision",
         "characters",
+        "diarization",
         "locations",
         "events",
         "arcs",
