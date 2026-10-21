@@ -1844,10 +1844,10 @@ tests/unit/test_benchmark.py
 
 **Acceptance criteria**
 
-- [ ] `movie-review benchmark --mode model` runs a measurement
-- [ ] `--mode pipeline` reports per-stage timings
-- [ ] `--mode memory` reports the memory figures
-- [ ] `pytest -q` passes
+- [x] `movie-review benchmark --mode model` runs a measurement
+- [x] `--mode pipeline` reports per-stage timings
+- [x] `--mode memory` reports the memory figures
+- [x] `pytest -q` passes
 
 ---
 

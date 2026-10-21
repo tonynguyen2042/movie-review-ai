@@ -465,6 +465,34 @@ uv run movie-review --verbose inspect job_20261006_001
 
 ---
 
+## 7a. Benchmarking
+
+```bash
+uv run movie-review benchmark --mode model --slot reasoning
+uv run movie-review benchmark --mode pipeline --movie ./reference.mkv
+```
+
+| Mode | Measures |
+|---|---|
+| `--mode model` | one model slot: load time, throughput, peak memory |
+| `--mode pipeline` | the whole pipeline on a reference movie, stage by stage |
+
+`--slot` picks the model: `reasoning`, `tts`, `asr` or `vision`. The vision benchmark needs `--movie`, because it takes a frame from a real movie.
+
+The output is JSON. The pipeline mode reports the total time and the time each stage took, which is where the time actually goes:
+
+```console
+$ movie-review benchmark --mode pipeline --movie ./reference.mkv
+{
+  "mode": "pipeline",
+  "total_seconds": 812.4,
+  "slowest": { "stage": "vision", "seconds": 411.8, "success": true },
+  "stages": [ ... ]
+}
+```
+
+Use a short reference movie — ten to fifteen minutes. A full-length movie takes hours to benchmark and tells you no more.
+
 ## 8. The job dashboard
 
 ```bash

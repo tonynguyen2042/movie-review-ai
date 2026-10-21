@@ -51,6 +51,7 @@ COMMANDS = [
     "script",
     "render",
     "thumbnail",
+    "benchmark",
 ]
 
 
