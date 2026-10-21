@@ -1,6 +1,7 @@
 """T-NEW: remote (OpenAI-compatible) reasoning endpoint configuration and adapter."""
 
 import json
+from email.message import Message
 from typing import Any
 
 import pytest
@@ -44,7 +45,7 @@ def _ok_body(content: str = '{"answer": 42}') -> bytes:
     ).encode()
 
 
-def _settings_dir(tmp_path, profile: dict, selected: str = "remote") -> Any:
+def _settings_dir(tmp_path, profile: dict[str, Any], selected: str = "remote") -> Any:
     (tmp_path / "models.yaml").write_text(
         yaml.safe_dump({"profiles": {"remote": profile}}), encoding="utf-8"
     )
@@ -60,7 +61,7 @@ def _settings_dir(tmp_path, profile: dict, selected: str = "remote") -> Any:
     return tmp_path
 
 
-def _profile(**reasoning: Any) -> dict:
+def _profile(**reasoning: Any) -> dict[str, Any]:
     return {
         "asr": {"model": "whisper-large-v3-turbo"},
         "vision": {"model": "qwen3-vl"},
@@ -317,7 +318,7 @@ def test_http_error_is_classified_without_leaking_the_token() -> None:
     from urllib.error import HTTPError
 
     def transport(request: Any, timeout: float) -> FakeResponse:
-        raise HTTPError("http://gpu:8000/v1/chat/completions", 500, "boom", {}, None)
+        raise HTTPError("http://gpu:8000/v1/chat/completions", 500, "boom", Message(), None)
 
     adapter = OpenAICompatAdapter(
         "m", "http://gpu:8000/v1", api_key="super-secret", transport=transport
@@ -374,7 +375,7 @@ def test_non_string_content_is_rejected() -> None:
 def test_unload_is_a_noop_and_available_reports_true() -> None:
     """The remote adapter holds no local resources."""
     adapter = OpenAICompatAdapter("m", "http://gpu:8000/v1")
-    assert adapter.unload() is None
+    adapter.unload()
     assert adapter.available() is True
 
 

@@ -173,10 +173,11 @@ def test_asr_unreachable_is_model_unavailable(tmp_path: Path) -> None:
 
 
 def test_asr_http_error_classified_without_token(tmp_path: Path) -> None:
+    from email.message import Message
     from urllib.error import HTTPError
 
     def transport(request: Any, timeout: float) -> FakeResponse:
-        raise HTTPError("http://g", 503, "down", {}, None)
+        raise HTTPError("http://g", 503, "down", Message(), None)
 
     adapter = OpenAICompatASRAdapter(
         "whisper", "http://g/v1", api_key="s3cret", transport=transport
@@ -577,4 +578,5 @@ def test_factories_pass_api_key_from_env(monkeypatch) -> None:
         api_key_env="TOK",
     )
     adapter = build_vlm_adapter(spec)
+    assert isinstance(adapter, OpenAICompatVLMAdapter)
     assert adapter._api_key == "abc123"

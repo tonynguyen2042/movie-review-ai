@@ -111,7 +111,12 @@ def test_upload_forwards_thumbnail_when_present(tmp_path: Path) -> None:
 def test_upload_rejects_missing_video(tmp_path: Path) -> None:
     """A missing video file is rejected before the backend is called."""
     calls: list[RawUpload] = []
-    adapter = YouTubeAdapter(backend=lambda p: (calls.append(p), ("id", "url"))[1])
+
+    def backend(p: RawUpload) -> tuple[str, str]:
+        calls.append(p)
+        return ("id", "url")
+
+    adapter = YouTubeAdapter(backend=backend)
 
     with pytest.raises(PublishingError):
         adapter.upload(UploadRequest(video_path=tmp_path / "absent.mp4", metadata=FakeMetadata()))

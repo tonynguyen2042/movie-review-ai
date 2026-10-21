@@ -6,12 +6,13 @@ Field names follow the canonical schema produced by
 
 import json
 from pathlib import Path
+from typing import Any
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.ui.graph import StoryGraph
 
 
-def _analysis() -> dict:
+def _analysis() -> dict[str, Any]:
     return {
         "movie": {"id": "movie_x", "title": "Blackrock"},
         "characters": [
@@ -72,7 +73,7 @@ def _analysis() -> dict:
     }
 
 
-def _seed(tmp_path: Path, job_id: str = "job_x", doc: dict | None = None) -> Path:
+def _seed(tmp_path: Path, job_id: str = "job_x", doc: dict[str, Any] | None = None) -> Path:
     jobs_dir = tmp_path / "jobs"
     job_dir = jobs_dir / job_id
     job_dir.mkdir(parents=True)

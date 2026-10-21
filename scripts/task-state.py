@@ -1,30 +1,39 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import argparse
 import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 TASKS_FILE = ROOT / ".spec" / "tasks.yaml"
 STATE_FILE = ROOT / ".spec" / "state.json"
 
+#: The on-disk task state. It is a JSON document whose shape grows as tasks
+#: are added, so it is read and written as plain mappings rather than as a
+#: fixed structure: the script is a helper for the task workflow, not a
+#: schema owner.
+State = dict[str, Any]
+Task = dict[str, Any]
 
-def now():
+
+def now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def load_state():
+def load_state() -> State:
     if not STATE_FILE.exists():
         print(f"ERROR: {STATE_FILE} does not exist", file=sys.stderr)
         sys.exit(1)
 
     with STATE_FILE.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        loaded: State = json.load(f)
+        return loaded
 
 
-def save_state(state):
+def save_state(state: State) -> None:
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     tmp = STATE_FILE.with_suffix(".json.tmp")
@@ -36,8 +45,9 @@ def save_state(state):
     tmp.replace(STATE_FILE)
 
 
-def get_task(state, task_id):
-    task = state.get("tasks", {}).get(task_id)
+def get_task(state: State, task_id: str) -> Task:
+    tasks: dict[str, Task] = state.get("tasks", {})
+    task = tasks.get(task_id)
 
     if task is None:
         print(f"ERROR: Unknown task: {task_id}", file=sys.stderr)
@@ -46,13 +56,13 @@ def get_task(state, task_id):
     return task
 
 
-def dependencies_done(state, task):
+def dependencies_done(state: State, task: Task) -> bool:
     return all(
         state["tasks"].get(dep, {}).get("status") == "done" for dep in task.get("depends_on", [])
     )
 
 
-def cmd_next(state):
+def cmd_next(state: State) -> None:
     for task_id, task in state["tasks"].items():
         if task.get("status") != "pending":
             continue
@@ -64,7 +74,7 @@ def cmd_next(state):
     print("NONE")
 
 
-def cmd_start(state, task_id):
+def cmd_start(state: State, task_id: str) -> None:
     task = get_task(state, task_id)
 
     if task["status"] == "done":
@@ -96,7 +106,7 @@ def cmd_start(state, task_id):
     print(f"STARTED {task_id}")
 
 
-def cmd_implementation_passed(state, task_id):
+def cmd_implementation_passed(state: State, task_id: str) -> None:
     task = get_task(state, task_id)
 
     task["implementation"] = "passed"
@@ -111,7 +121,7 @@ def cmd_implementation_passed(state, task_id):
     print(f"IMPLEMENTATION_PASSED {task_id}")
 
 
-def cmd_implementation_failed(state, task_id):
+def cmd_implementation_failed(state: State, task_id: str) -> None:
     task = get_task(state, task_id)
 
     task["implementation"] = "failed"
@@ -123,7 +133,7 @@ def cmd_implementation_failed(state, task_id):
     print(f"IMPLEMENTATION_FAILED {task_id}")
 
 
-def cmd_test_passed(state, task_id):
+def cmd_test_passed(state: State, task_id: str) -> None:
     task = get_task(state, task_id)
 
     if task.get("implementation") != "passed":
@@ -142,7 +152,7 @@ def cmd_test_passed(state, task_id):
     print(f"TEST_PASSED {task_id}")
 
 
-def cmd_test_failed(state, task_id):
+def cmd_test_failed(state: State, task_id: str) -> None:
     task = get_task(state, task_id)
 
     task["tests"] = "failed"
@@ -154,7 +164,7 @@ def cmd_test_failed(state, task_id):
     print(f"TEST_FAILED {task_id}")
 
 
-def cmd_review_approved(state, task_id):
+def cmd_review_approved(state: State, task_id: str) -> None:
     task = get_task(state, task_id)
 
     if task.get("tests") != "passed":
@@ -174,7 +184,7 @@ def cmd_review_approved(state, task_id):
     print(f"DONE {task_id}")
 
 
-def cmd_review_rejected(state, task_id):
+def cmd_review_rejected(state: State, task_id: str) -> None:
     task = get_task(state, task_id)
 
     task["review"] = "changes_required"
@@ -186,7 +196,7 @@ def cmd_review_rejected(state, task_id):
     print(f"REVIEW_FAILED {task_id}")
 
 
-def cmd_status(state, task_id=None):
+def cmd_status(state: State, task_id: str | None = None) -> None:
     if task_id:
         task = get_task(state, task_id)
 
@@ -197,7 +207,7 @@ def cmd_status(state, task_id=None):
     print(json.dumps(state, indent=2))
 
 
-def build_parser():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage OpenCode task execution state.")
 
     sub = parser.add_subparsers(dest="command", required=True)
@@ -240,7 +250,7 @@ def build_parser():
     return parser
 
 
-def main():
+def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
@@ -251,6 +261,8 @@ def main():
     else:
         args.func(state)
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

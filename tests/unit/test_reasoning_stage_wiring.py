@@ -148,7 +148,7 @@ def _run(
     monkeypatch: pytest.MonkeyPatch,
     spec: ModelSpec,
     reasoner: ReasoningPort | None = None,
-) -> tuple[Any, list[ModelSpec], str]:
+) -> tuple[Any, list[ModelSpec], str | None]:
     """Run one stage with the reasoning factory answering ``spec``.
 
     Returns the result, the specs the factory was asked for, and the model id the

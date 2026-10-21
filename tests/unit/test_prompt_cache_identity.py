@@ -17,6 +17,7 @@ vision stage actually computes.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -95,7 +96,7 @@ def test_cache_version_carries_enough_of_the_digest_to_be_collision_resistant(
 
 
 @pytest.fixture
-def vision_ctx(tmp_path: Path) -> sqlite3.Connection:
+def vision_ctx(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     yield conn

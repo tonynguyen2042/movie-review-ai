@@ -8,6 +8,7 @@ docs/GETTING-STARTED.md, since that guide documents the exit code.
 
 import tempfile
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -19,10 +20,11 @@ from movie_review.artifacts.integrity import (
 )
 from movie_review.artifacts.manager import sha256_file, write_json
 from movie_review.benchmark.memory import benchmark_memory
-from movie_review.domain import JobStatus
+from movie_review.domain import Job, JobStatus
 from movie_review.eval.coverage_eval import evaluate_coverage
 from movie_review.eval.hallucination import evaluate_hallucinations
 from movie_review.eval.regression import run_regression
+from movie_review.jobs.manager import JobManager
 from movie_review.jobs.recovery import _RESUME_STAGE, RecoveryMappingError
 
 MAJOR = {"type": "PLOT_FACT"}
@@ -359,12 +361,18 @@ class _StubJob:
         self.error = None
 
 
-class _StubManager:
-    def __init__(self, status: JobStatus) -> None:
+class _StubManager(JobManager):
+    """A JobManager that answers `get` from a fixed status.
+
+    It is a real JobManager with only `get` replaced, because
+    `recovery_plan` takes a JobManager and only ever calls `get`.
+    """
+
+    def __init__(self, status: JobStatus) -> None:  # noqa: D107 - no super().__init__
         self._status = status
 
-    def get(self, job_id: str) -> _StubJob:
-        return _StubJob(self._status)
+    def get(self, job_id: str) -> Job:
+        return cast(Job, _StubJob(self._status))
 
 
 def test_recovery_mapping_gap_raises_its_own_error(monkeypatch) -> None:

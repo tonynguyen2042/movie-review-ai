@@ -34,7 +34,7 @@ from movie_review.publishing import facebook as fb
 from movie_review.publishing import registry
 from movie_review.publishing import tiktok as tt
 from movie_review.publishing import youtube as yt
-from movie_review.publishing.metadata import VideoMetadata
+from movie_review.publishing.metadata import TITLE_MAX_CHARS, VideoMetadata
 from movie_review.publishing.port import (
     PublishingError,
     PublishingPort,
@@ -197,7 +197,7 @@ def test_a_title_longer_than_the_limit_is_truncated(tmp_path: Path) -> None:
 
     result = _generate(ctx, {**GOOD_OUTPUT, "title": long_title})
 
-    assert len(result.metadata.title) <= aim.TITLE_MAX_CHARS
+    assert len(result.metadata.title) <= TITLE_MAX_CHARS
 
 
 def test_hashtags_in_tags_are_normalized(tmp_path: Path) -> None:

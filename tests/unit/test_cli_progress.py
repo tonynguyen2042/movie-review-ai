@@ -98,6 +98,7 @@ def test_failure_is_reported_live_too(ctx, reporter) -> None:
     assert len(seen) == 2
     assert seen[0] == ("vision", None)
     assert seen[1][1] is not None and seen[1][1].success is False
+    assert result.error is not None
     assert "kaboom" in result.error
 
 
