@@ -2174,10 +2174,10 @@ tests/unit/test_remote_http.py   (new)
 
 **Acceptance criteria**
 
-- [ ] each error mode maps to the documented exception
-- [ ] the `TimeoutError` branch is exercised
-- [ ] the multipart body is well formed and the filename is sanitised
-- [ ] `pytest -q` passes
+- [x] each error mode maps to the documented exception
+- [x] the `TimeoutError` branch is exercised
+- [x] the multipart body is well formed and the filename is sanitised
+- [x] `pytest -q` passes
 
 ---
 
