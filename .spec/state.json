@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T04:53:35.949048+00:00",
+  "updated_at": "2026-10-21T04:56:21.004378+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1355,12 +1355,14 @@
       "title": "render-manifest stage name",
       "type": "fix",
       "branch": "T122-render-manifest-stage-name",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T04:56:21.004378+00:00",
+      "updated_at": "2026-10-21T04:56:21.004378+00:00"
     },
     "T123": {
       "title": "resume validates the stage name",

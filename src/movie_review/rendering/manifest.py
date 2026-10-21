@@ -31,7 +31,15 @@ from movie_review.utils import logging as ulog
 
 _logger = logging.getLogger(__name__)
 
-STAGE_NAME = "render"
+#: The pipeline stage this manifest belongs to. The stage is "render-manifest"
+#: and not "render", because a failure here has to be recorded against the
+#: stage that failed: recording it as "render" made a resume re-run the
+#: render stage, which then failed on a manifest file that had never been
+#: written, and the job could not be recovered.
+STAGE_NAME = "render-manifest"
+#: The directory the manifest lives in. It is shared with the other render
+#: outputs, so it is not the same thing as the stage name.
+STAGE_DIRNAME = "render"
 STAGE_VERSION = "v1"
 MANIFEST_FILENAME = "render-manifest.json"
 
@@ -185,7 +193,9 @@ def assemble_manifest(
         )
     )
     cached = ctx.cache.lookup_json(key)
-    manifest_path = artifacts.artifact_path(ctx.jobs_dir, ctx.job_id, STAGE_NAME, MANIFEST_FILENAME)
+    manifest_path = artifacts.artifact_path(
+        ctx.jobs_dir, ctx.job_id, STAGE_DIRNAME, MANIFEST_FILENAME
+    )
     if cached is not None:
         try:
             manifest = RenderManifest.model_validate(cached["manifest"])
