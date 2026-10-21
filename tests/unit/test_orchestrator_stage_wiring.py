@@ -22,9 +22,19 @@ import pytest
 from movie_review.artifacts import manager as artifacts
 from movie_review.cache.manager import CacheManager
 from movie_review.config.settings import load_settings
-from movie_review.domain import Job, JobStatus, ReviewParagraph
+from movie_review.domain import (
+    Job,
+    JobStatus,
+    Movie,
+    MovieMetadata,
+    ReviewParagraph,
+    ReviewScript,
+    ReviewSection,
+    Scene,
+)
 from movie_review.jobs.manager import JobManager
 from movie_review.pipeline.context import StageContext
+from movie_review.pipeline.orchestrator import PipelineContext, _get_stage_function
 from movie_review.rendering.clips import SelectedClip
 from movie_review.rendering.manifest import (
     ManifestError,
@@ -34,6 +44,7 @@ from movie_review.rendering.manifest import (
 )
 from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
+from movie_review.tts.chunks import plan_chunks
 from movie_review.ui.timeline_editor import VisualTimelineEditor
 
 
@@ -161,3 +172,144 @@ def test_an_invalid_manifest_is_reported_as_a_manifest_error(tmp_path: Path) -> 
     artifacts.write_json(path, {"segments": "not a list"})
     with pytest.raises(ManifestError, match="Invalid render manifest"):
         read_manifest(path)
+
+
+# ---------------------------------------------------------------------------
+# The render manifest must be timed by the narration that was synthesized
+# ---------------------------------------------------------------------------
+
+
+def _script(paragraph_ids: list[str]) -> ReviewScript:
+    return ReviewScript(
+        sections=[
+            ReviewSection(
+                id="sec_001",
+                type="hook",
+                paragraphs=[
+                    ReviewParagraph(
+                        id=pid,
+                        text="Narration for this paragraph.",
+                        target_seconds=10,
+                        claims=[],
+                        visual_intent="s",
+                    )
+                    for pid in paragraph_ids
+                ],
+            )
+        ]
+    )
+
+
+def _write_wav(path: Path, seconds: float, rate: int = 8000) -> None:
+    """A silent mono WAV of the given length."""
+    import wave
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(b"\x00\x00" * int(rate * seconds))
+
+
+def _render_manifest_harness(tmp_path: Path) -> tuple[PipelineContext, list[str]]:
+    """A job at AUDIO_READY with a script and synthesized chunk files."""
+    conn = connect(bootstrap(tmp_path / "jobs.db"))
+    manager = JobManager(conn)
+    repo.save_job(conn, Job(job_id="job_1", input_file="m.mp4"))
+    for state in (
+        JobStatus.INGESTING,
+        JobStatus.MEDIA_READY,
+        JobStatus.SCENES_READY,
+        JobStatus.TRANSCRIPT_READY,
+        JobStatus.VISUAL_ANALYSIS_READY,
+        JobStatus.CHARACTERS_READY,
+        JobStatus.EVENTS_READY,
+        JobStatus.STORY_READY,
+        JobStatus.REVIEW_PLAN_READY,
+        JobStatus.SCRIPT_READY,
+        JobStatus.SCRIPT_VERIFIED,
+        JobStatus.AUDIO_READY,
+    ):
+        manager.transition("job_1", state)
+
+    paragraph_ids = ["p1", "p2"]
+    script = _script(paragraph_ids)
+    jobs_dir = tmp_path / "jobs"
+    artifacts.write_json(
+        jobs_dir / "job_1" / "review" / "review-script.json",
+        {"script": script.model_dump(mode="json")},
+    )
+
+    repo.save_scene(
+        conn,
+        "job_1",
+        Scene(scene_id="scene_000001", start=0.0, end=60.0, duration=60.0),
+    )
+    repo.save_movie(
+        conn,
+        "job_1",
+        Movie(
+            id="movie_1",
+            metadata=MovieMetadata(
+                file="m.mp4",
+                sha256="a" * 64,
+                duration_seconds=600.0,
+                width=1920,
+                height=1080,
+                fps=30.0,
+                video_codec="h264",
+            ),
+        ),
+    )
+
+    # One chunk per paragraph, each with a known length.
+    for chunk in plan_chunks(script, voice="default"):
+        _write_wav(
+            jobs_dir / "job_1" / "tts" / f"{chunk.chunk_id}.wav",
+            3.0 if chunk.paragraph_id == "p1" else 7.0,
+        )
+
+    ctx = PipelineContext(
+        job_id="job_1",
+        jobs_dir=jobs_dir,
+        conn=conn,
+        manager=manager,
+        cache=CacheManager(tmp_path / "cache"),
+        settings=load_settings(),
+        movie_path=tmp_path / "movie.mp4",
+    )
+    return ctx, paragraph_ids
+
+
+def test_the_render_manifest_uses_the_measured_narration(tmp_path: Path) -> None:
+    """Regression: every paragraph was timed at a hard-coded 10 seconds.
+
+    The measured durations are the only source of the segment durations, so
+    the timeline, the source-footage controls and the renderer's own duration
+    check were all computed against a fiction.
+    """
+    ctx, paragraph_ids = _render_manifest_harness(tmp_path)
+    stage = _get_stage_function("render-manifest")
+    assert stage is not None
+    result = stage(ctx)
+
+    manifest = result.manifest
+    durations = {s.paragraph_id: s.duration for s in manifest.segments}
+    assert durations == {"p1": 3.0, "p2": 7.0}
+    assert manifest.total_seconds == 10.0
+    assert set(durations) == set(paragraph_ids)
+
+
+def test_the_render_manifest_fails_loudly_without_measured_narration(
+    tmp_path: Path,
+) -> None:
+    """A missing chunk must be reported, not silently timed at 10 seconds."""
+    ctx, _ = _render_manifest_harness(tmp_path)
+    (ctx.jobs_dir / "job_1" / "tts" / "tts_002.wav").unlink()
+
+    stage = _get_stage_function("render-manifest")
+    assert stage is not None
+    with pytest.raises(Exception) as excinfo:
+        stage(ctx)
+    assert "tts_002" in str(excinfo.value)
