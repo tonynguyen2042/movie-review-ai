@@ -1571,10 +1571,10 @@ tests/unit/test_story_graph.py
 
 **Acceptance criteria**
 
-- [ ] `movie-analysis.json` carries a non-empty relationships list
-- [ ] every relationship is persisted
-- [ ] the graph exposes more than the three current edge types
-- [ ] `pytest -q` passes
+- [x] `movie-analysis.json` carries a non-empty relationships list
+- [x] every relationship is persisted
+- [x] the graph exposes more than the three current edge types
+- [x] `pytest -q` passes
 
 ---
 
