@@ -44,26 +44,25 @@ class JobManager:
         were discarded.
         """
         stamp = datetime.now(UTC).strftime("%Y%m%d")
-        job_id = ""
         for seq in range(1, 1000):
             candidate = f"job_{stamp}_{seq:03d}"
-            if repo.get_job(self._conn, candidate) is None:
-                job_id = candidate
-                break
-        if not job_id:
-            raise RuntimeError(f"Job ID space exhausted for {stamp}")
-        job = Job(
-            job_id=job_id,
-            input_file=input_file,
-            style=style,
-            spoilers=spoilers,
-            target_seconds=target_seconds,
-            output_dir=output_dir,
-        )
-        repo.save_job(self._conn, job)
-        with ulog.logging_context(job_id=job_id):
-            ulog.log_event(_logger, event="job.created", status="ok")
-        return job
+            job = Job(
+                job_id=candidate,
+                input_file=input_file,
+                style=style,
+                spoilers=spoilers,
+                target_seconds=target_seconds,
+                output_dir=output_dir,
+            )
+            # The insert is the test, not a separate lookup. Checking for a
+            # free id and then inserting is not atomic, so two concurrent
+            # runs could pick the same id -- and an upsert would have
+            # overwritten the first job's input file and status.
+            if repo.insert_job(self._conn, job):
+                with ulog.logging_context(job_id=candidate):
+                    ulog.log_event(_logger, event="job.created", status="ok")
+                return job
+        raise RuntimeError(f"Job ID space exhausted for {stamp}")
 
     def get(self, job_id: str) -> Job:
         """Load a job or raise :class:`JobNotFoundError`."""
