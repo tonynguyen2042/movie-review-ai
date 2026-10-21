@@ -182,8 +182,9 @@ def run_visual_analysis(
     # these analyses and every one of them used to reopen vision.json and
     # re-validate the same objects; a query is both cheaper and the reason a
     # job's visual analysis survives a deleted or moved artifact directory.
-    for analysis in analyses:
-        repo.save_scene_analysis(ctx.conn, ctx.job_id, analysis)
+    # One transaction for the whole stage: the vision stage writes one row
+    # per scene, and each write was its own commit.
+    repo.save_scene_analyses(ctx.conn, ctx.job_id, analyses)
     repo.save_artifact(
         ctx.conn,
         Artifact(

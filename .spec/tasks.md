@@ -1219,10 +1219,10 @@ tests/integration/test_storage.py
 
 **Acceptance criteria**
 
-- [ ] `journal_mode` is `wal` and `synchronous` is `1`
-- [ ] indexes exist for `character_mentions`, `relationships` and `artifacts.job_id`
-- [ ] mention writes are batched
-- [ ] `pytest -q` passes
+- [x] `journal_mode` is `wal` and `synchronous` is `1`
+- [x] indexes exist for `character_mentions`, `relationships` and `artifacts.job_id`
+- [x] mention writes are batched
+- [x] `pytest -q` passes
 
 ---
 

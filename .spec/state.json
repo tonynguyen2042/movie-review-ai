@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T12:10:41.321154+00:00",
+  "updated_at": "2026-10-21T12:14:54.640177+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1513,12 +1513,14 @@
       "title": "SQLite WAL + indexes",
       "type": "perf",
       "branch": "T134-sqlite-wal-indexes",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T12:14:54.640177+00:00",
+      "updated_at": "2026-10-21T12:14:54.640177+00:00"
     },
     "T135": {
       "title": "chunked ASR upload",

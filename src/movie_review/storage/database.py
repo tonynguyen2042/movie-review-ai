@@ -10,9 +10,24 @@ from movie_review.storage.schema import MIGRATIONS, SCHEMA_VERSION
 
 
 def connect(path: str | Path) -> sqlite3.Connection:
-    """Open a SQLite connection with foreign keys and Row access enforced."""
+    r"""Open a SQLite connection with foreign keys and Row access enforced.
+
+    The journal is in WAL mode and the synchronous level is NORMAL. The
+    default -- a rollback journal with FULL synchronisation -- makes every
+    commit two fsyncs, and the repository writes one row per commit. The
+    database was verified to be on \`journal_mode=delete\` with
+    \`synchronous=2\`, so a feature-length run paid thousands of fsyncs.
+
+    WAL is safe against an application crash with NORMAL, and it lets
+    readers run while a writer is active, which the dashboard needs.
+    """
     conn = sqlite3.connect(str(path))
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL is a property of the file, not the connection, so setting it on
+    # every connection is cheap and keeps a connection opened directly --
+    # rather than through bootstrap -- in the same mode.
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
     conn.row_factory = sqlite3.Row
     return conn
 
