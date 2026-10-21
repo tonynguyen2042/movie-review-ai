@@ -129,11 +129,12 @@ def write_script(
             cache_spec = CacheSpec(
                 stage=STAGE_NAME,
                 stage_version=STAGE_VERSION,
-                input_hash=artifacts.sha256_bytes(
-                    "|".join(
-                        [section.id, story, str(share), style.name, spoilers or style.spoilers]
-                    ).encode()
-                ),
+                # The whole rendered prompt is the input, not a fragment of it.
+                # The prompt carries the section's purpose and event ids, the
+                # style's tone and the spoiler level; hashing only the style
+                # *name* left a re-run with a different tone serving the
+                # previous model's answer.
+                input_hash=artifacts.sha256_bytes(text.encode("utf-8")),
                 model_id=model_id,
                 prompt_version=prompt.cache_version,
             )

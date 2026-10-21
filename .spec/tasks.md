@@ -1104,10 +1104,10 @@ tests/unit/test_cache_key_inputs.py   (new)
 
 **Acceptance criteria**
 
-- [ ] changing the character set misses the cache
-- [ ] changing the style tone misses the cache
-- [ ] an unchanged input still hits
-- [ ] `pytest -q` passes
+- [x] changing the character set misses the cache
+- [x] changing the style tone misses the cache
+- [x] an unchanged input still hits
+- [x] `pytest -q` passes
 
 ---
 

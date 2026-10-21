@@ -82,7 +82,12 @@ def extract_themes(
     cache_spec = CacheSpec(
         stage="themes",
         stage_version=STAGE_VERSION,
-        input_hash=artifacts.sha256_bytes(event_lines.encode("utf-8")),
+        # The whole rendered prompt is the input, not a fragment of it.
+        # The prompt carries the character roster as well as the events, so
+        # hashing only the events left a re-run with a different roster
+        # serving the previous model's answer -- one generated against the
+        # old roster.
+        input_hash=artifacts.sha256_bytes(text.encode("utf-8")),
         model_id=model_id,
         prompt_version=prompt.cache_version,
     )

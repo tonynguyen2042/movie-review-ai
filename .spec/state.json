@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T11:55:08.447090+00:00",
+  "updated_at": "2026-10-21T11:59:20.798159+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1461,12 +1461,14 @@
       "title": "cache keys bind every input",
       "type": "fix",
       "branch": "T130-cache-key-inputs",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T11:59:20.798159+00:00",
+      "updated_at": "2026-10-21T11:59:20.798159+00:00"
     },
     "T131": {
       "title": "CLI exit codes and reporter cleanup",
