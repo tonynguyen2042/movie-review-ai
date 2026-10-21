@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T05:16:16.463495+00:00",
+  "updated_at": "2026-10-21T11:42:11.618751+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1318,12 +1318,14 @@
       "title": "CLI options reach the pipeline",
       "type": "fix",
       "branch": "T119-cli-options-plumbing",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T11:42:11.618751+00:00",
+      "updated_at": "2026-10-21T11:42:11.618751+00:00"
     },
     "T120": {
       "title": "configured WPM replaces hard-coded 150",

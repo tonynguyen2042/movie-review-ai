@@ -477,9 +477,20 @@ def process(
     # acceptance log states the profile and backends that actually run.
     effective = load_settings(profile=selected_profile)
     _warn_unusable_backends(effective)
+    # The options are stored on the job, not just written to the log: the
+    # pipeline reads the length and the style from the job, so this is the
+    # only place the operator's flags can reach it. They used to stop at the
+    # log line, and the run reported success with a 20-minute youtube-style
+    # review whatever was asked for.
     with _session(db_path) as (manager, conn):
         with conn:
-            job = manager.create(movie)
+            job = manager.create(
+                movie,
+                style=style,
+                spoilers=spoilers,
+                target_seconds=minutes * 60,
+                output_dir=output,
+            )
     with ulog.logging_context(job_id=job.job_id, stage="cli"):
         ulog.log_event(
             ulog.get_logger("cli"),

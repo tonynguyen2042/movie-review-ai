@@ -27,8 +27,22 @@ class JobManager:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
 
-    def create(self, input_file: str) -> Job:
-        """Persist a new job in ``CREATED`` with a unique daily-sequenced ID."""
+    def create(
+        self,
+        input_file: str,
+        *,
+        style: str = "youtube",
+        spoilers: str = "full",
+        target_seconds: float | None = None,
+        output_dir: str | None = None,
+    ) -> Job:
+        """Persist a new job in ``CREATED`` with a unique daily-sequenced ID.
+
+        The review options are stored on the job because they are the only
+        record that survives a resume: the pipeline used to read its length
+        and style from the configuration instead, so the operator's flags
+        were discarded.
+        """
         stamp = datetime.now(UTC).strftime("%Y%m%d")
         job_id = ""
         for seq in range(1, 1000):
@@ -38,7 +52,14 @@ class JobManager:
                 break
         if not job_id:
             raise RuntimeError(f"Job ID space exhausted for {stamp}")
-        job = Job(job_id=job_id, input_file=input_file)
+        job = Job(
+            job_id=job_id,
+            input_file=input_file,
+            style=style,
+            spoilers=spoilers,
+            target_seconds=target_seconds,
+            output_dir=output_dir,
+        )
         repo.save_job(self._conn, job)
         with ulog.logging_context(job_id=job_id):
             ulog.log_event(_logger, event="job.created", status="ok")

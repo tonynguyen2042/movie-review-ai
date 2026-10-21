@@ -43,10 +43,14 @@ def _of_types(events: list[Event], types: set[EventType], count: int) -> list[Ev
 
 
 def plan_review(
-    events: list[Event], style: StyleProfile, target_seconds: int | None = None
+    events: list[Event], style: StyleProfile, target_seconds: float | None = None
 ) -> ReviewPlan:
-    """Build a timed outline referencing the strongest evidence."""
-    total = style.target_duration_seconds if target_seconds is None else target_seconds
+    """Build a timed outline referencing the strongest evidence.
+
+    The total is whole seconds: the sections are measured in seconds, and a
+    fractional total would leave the last section a fraction long.
+    """
+    total = int(style.target_duration_seconds if target_seconds is None else target_seconds)
     if total <= 0:
         raise ValueError(f"Target duration must be positive: {total}")
     ranked = _top(events, len(events))

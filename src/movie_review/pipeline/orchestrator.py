@@ -312,8 +312,21 @@ def run_pipeline(
         ctx.conn.close()
 
 
-def review_target_words(settings: AppSettings) -> int:
-    """The writer's word target: the configured duration at the configured rate.
+def job_target_seconds(ctx: PipelineContext) -> float:
+    """The review length this job is aiming at, in seconds.
+
+    The job's own target wins, because that is where the operator's
+    ``--duration`` was recorded. The configured default is the fallback for
+    a job created before the option existed.
+    """
+    job = ctx.manager.get(ctx.job_id)
+    if job.target_seconds:
+        return job.target_seconds
+    return ctx.settings.pipeline.review.target_duration_minutes * 60
+
+
+def review_target_words(settings: AppSettings, target_seconds: float | None = None) -> int:
+    """The writer's word target: the target length at the configured rate.
 
     The speech rate comes from the configuration, not from a literal. A
     hard-coded 150 contradicted ``settings.pipeline.review.target_wpm``,
@@ -321,11 +334,18 @@ def review_target_words(settings: AppSettings) -> int:
     different rate the writer was asked for 150-WPM word counts while the
     reconciler measured against the configured one, so the script came out
     systematically short and never stopped asking to be expanded.
+
+    ``target_seconds`` overrides the configured length, which is how the
+    operator's ``--duration`` reaches the writer.
     """
     from movie_review.review.duration import target_words
 
-    target_seconds = settings.pipeline.review.target_duration_minutes * 60
-    return target_words(target_seconds, settings.pipeline.review.target_wpm)
+    seconds = (
+        target_seconds
+        if target_seconds is not None
+        else settings.pipeline.review.target_duration_minutes * 60
+    )
+    return target_words(seconds, settings.pipeline.review.target_wpm)
 
 
 def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | None:
@@ -600,7 +620,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         from movie_review.storage import repositories as repo
 
         # Existence guard: raises JobNotFoundError if the job is gone.
-        ctx.manager.get(ctx.job_id)
+        job = ctx.manager.get(ctx.job_id)
         analysis_path = Path(ctx.jobs_dir) / ctx.job_id / "movie-analysis.json"
         import json
 
@@ -608,9 +628,15 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             analysis = json.load(f)
 
         events = repo.list_events(ctx.conn, ctx.job_id)
-        style = load_style("youtube")  # default, could come from job config
-        target_seconds = ctx.settings.pipeline.review.target_duration_minutes * 60
-        target_words = review_target_words(ctx.settings)
+        # The style and the length come from the job, which is where the
+        # operator's flags were recorded. Reading them from the configuration
+        # instead is what made `--style documentary --duration 5m` produce a
+        # 20-minute youtube-style review and report success.
+        style = load_style(job.style)
+        target_seconds = job.target_seconds or (
+            ctx.settings.pipeline.review.target_duration_minutes * 60
+        )
+        target_words = review_target_words(ctx.settings, target_seconds)
 
         outline = plan_review(events, style, target_seconds=target_seconds)
 
@@ -628,6 +654,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
                 settings=ctx.settings,
             ),
             spec=ctx.settings.models.reasoning,
+            spoilers=job.spoilers,
         )
 
     def review_translate_fn(ctx: PipelineContext) -> Any:
@@ -723,7 +750,8 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
         script = load_effective_script(ctx)
         narration_path = Path(ctx.jobs_dir) / ctx.job_id / "tts" / "narration.wav"
-        target_seconds = ctx.settings.pipeline.review.target_duration_minutes * 60
+        # The length the operator asked for, not the configured default.
+        target_seconds = job_target_seconds(ctx)
         wpm = ctx.settings.pipeline.review.target_wpm
 
         return run_reconciliation(
@@ -841,6 +869,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
 
     def quality_fn(ctx: PipelineContext) -> Any:
         from movie_review.domain import QualityMetric
+        from movie_review.pipeline.export import export_output
         from movie_review.quality.characters import character_consistency
         from movie_review.quality.coverage import evidence_coverage
         from movie_review.quality.gates import run_quality_gate
@@ -888,7 +917,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         narration_wav = job_dir / "tts" / "narration.wav"
         actual_seconds = measure_wav(narration_wav) if narration_wav.is_file() else 0.0
 
-        target_seconds = ctx.settings.pipeline.review.target_duration_minutes * 60
+        target_seconds = job_target_seconds(ctx)
 
         gate = run_quality_gate(metrics, actual_seconds, target_seconds, ctx)
 
@@ -912,6 +941,13 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             ctx.jobs_dir,
             ctx.conn,
         )
+
+        # The output set goes where the operator asked for it. The flag used
+        # to reach nothing but a log line, and `paths.output_dir` was never
+        # read by any code, so a run buried its results under the job
+        # directory.
+        output_dir = ctx.manager.get(ctx.job_id).output_dir or (ctx.settings.paths.output_dir)
+        export_output(ctx.jobs_dir, ctx.job_id, output_dir)
         return gate
 
     return {
