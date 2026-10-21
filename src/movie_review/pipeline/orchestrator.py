@@ -65,6 +65,16 @@ class StageResult:
     error: str | None = None
 
 
+class ResumeError(Exception):
+    """A job cannot be resumed from where it says it failed.
+
+    The failure is reported rather than raised as a raw ValueError from
+    deep inside the pipeline: a resume that names a stage the pipeline does
+    not have is a usage problem, and the CLI contract says the command
+    exits non-zero with a message rather than printing a traceback.
+    """
+
+
 @dataclass
 class PipelineContext(StageContext):
     """Runtime state for pipeline execution.
@@ -952,6 +962,17 @@ def resume_job(
         return [
             StageResult(stage=plan.resume_stage, success=True, duration_ms=0, error=plan.reason)
         ]
+
+    # The stage to resume from has to be one the pipeline knows. A failed job
+    # whose `failed_stage` was never recorded -- or that names a stage this
+    # build does not have -- used to reach run_pipeline, which raised a
+    # ValueError that escaped the CLI as a raw traceback.
+    order = [name for name, _ in STAGE_SEQUENCE]
+    if plan.resume_stage not in order:
+        raise ResumeError(
+            f"Cannot resume {job_id}: {plan.resume_stage!r} is not a pipeline stage. "
+            f"Expected one of: {', '.join(order)}"
+        )
 
     # Get the movie path from the job
     job = manager.get(job_id)
