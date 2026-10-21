@@ -113,9 +113,9 @@ repair the gate itself; the middle waves repair the wiring.
 | T136 | perf | HTTP reuse + transport retry | `task/T136-http-pooling-retry` | **DONE** |
 | T137 | perf | stage-level retry policy | `task/T137-stage-retry-policy` | **DONE** |
 | T138 | perf | parallelise the vision stage | `task/T138-parallel-vision-stage` | **DONE** |
-| T139 | perf | parallelise the events stage | `task/T139-parallel-events-stage` |
-| T140 | perf | cut prompt token duplication | `task/T140-prompt-token-duplication` |
-| T141 | perf | remaining hot paths | `task/T141-hot-path-cleanups` |
+| T139 | perf | parallelise the events stage | `task/T139-parallel-events-stage` | **DONE** |
+| T140 | perf | cut prompt token duplication | `task/T140-prompt-token-duplication` | **DONE** |
+| T141 | perf | remaining hot paths | `task/T141-hot-path-cleanups` | **DONE** |
 
 ### Wave 4 — Missing wiring (written, never called)
 
