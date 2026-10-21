@@ -384,9 +384,40 @@ Stages are **idempotent**: re-running one overwrites its artifacts rather than d
 
 ```bash
 uv run movie-review inspect job_20261006_001
+uv run movie-review inspect ./my-movie.mkv
 ```
 
-Prints the whole job record as JSON — the quickest way to see status, `error`, `failed_stage`, and `retry_count`.
+With a job id, prints the whole job record as JSON — the quickest way to see status, `error`, `failed_stage`, and `retry_count`.
+
+With a movie file, reads the movie itself and prints its media metadata: duration, fps, resolution, codecs and streams. That is the first thing worth checking before a long run.
+
+### Reading a job's results
+
+The commands below print JSON, so they pipe into `jq` and into anything else that reads JSON:
+
+```bash
+uv run movie-review scenes job_20261006_001
+uv run movie-review transcript job_20261006_001
+uv run movie-review story job_20261006_001
+uv run movie-review script job_20261006_001
+uv run movie-review render job_20261006_001
+```
+
+| Command | Prints |
+|---|---|
+| `scenes` | the scene timeline |
+| `transcript` | the transcript, with the speaker of each line |
+| `story` | the events, the characters, the relationships, the arcs, the themes and the twists |
+| `script` | the review script |
+| `render` | the render manifest — the timeline that was rendered |
+
+### Analyze
+
+```bash
+uv run movie-review analyze ./my-movie.mkv
+```
+
+Runs the pipeline from the start up to the story and prints `movie-analysis.json`. It is the command that answers "what did the pipeline make of this movie?" without waiting for the narration and the render.
 
 ### Validate
 
@@ -566,6 +597,15 @@ Nothing leaves the machine until you add `--confirm`. To edit the packaging befo
 ```console
 $ movie-review publish job_20261007_001 --title "Your own title" --confirm
 ```
+
+### The thumbnail
+
+```console
+$ movie-review thumbnail job_20261007_001
+thumbnail=data/jobs/job_20261007_001/qc/thumbnail.png at 601.2s
+```
+
+A thumbnail is a separate, optional step — the pipeline does not produce one, and a job does not need one. The publish command attaches it to the upload when the job has one. `--position` chooses where in the timeline the frame comes from: `0` is the start, `1` the end, and `0.5` (the default) the middle.
 
 ### Credentials
 

@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
@@ -555,13 +555,45 @@ def process(
 
 @app.command()
 def inspect(
-    job_id: Annotated[str, typer.Argument(help="Job ID.")], db_path: DbOption = None
+    job_or_movie: Annotated[str, typer.Argument(help="Job ID, or a movie file to read.")],
+    db_path: DbOption = None,
 ) -> None:
-    """Print a job record as JSON."""
+    """Print a job record, or a movie's media metadata, as JSON.
+
+    README section 96 makes `movie-review inspect movie.mp4` the Phase 0
+    acceptance command: it reads the movie's duration, fps, resolution,
+    codecs and streams. A job id prints the job record instead.
+    """
+    candidate = Path(job_or_movie)
+    if candidate.is_file():
+        _inspect_movie(candidate, db_path)
+        return
+
     with _session(db_path) as (manager, conn):
         with conn:
-            job = _load_job(manager, job_id)
+            job = _load_job(manager, job_id=job_or_movie)
     typer.echo(json.dumps(job.model_dump(mode="json"), indent=2, sort_keys=True))
+
+
+def _inspect_movie(movie: Path, db_path: str | None) -> None:
+    """Ingest a movie and print its media metadata."""
+    settings = load_settings()
+    manager, conn = _manager(db_path)
+    with conn:
+        job = manager.create(str(movie))
+    try:
+        run_pipeline(
+            job.job_id,
+            str(movie),
+            db_path,
+            start_stage="ingest",
+            end_stage="ingest",
+        )
+    finally:
+        conn.close()
+
+    document = _job_document(job.job_id, _jobs_dir(settings), "media/media.json")
+    _print_json(document)
 
 
 @app.command()
@@ -973,6 +1005,171 @@ def _with_description(metadata: VideoMetadata, description: str) -> VideoMetadat
     from dataclasses import replace
 
     return replace(metadata, description=description)
+
+
+def _jobs_dir(settings: AppSettings) -> Path:
+    """The per-job root, the same one every other command uses."""
+    return Path(settings.paths.data_dir) / "jobs"
+
+
+def _print_json(document: object) -> None:
+    """Print a document as JSON, for the machine to read."""
+    typer.echo(json.dumps(document, indent=2, sort_keys=True, default=str))
+
+
+def _job_document(job_id: str, jobs_dir: Path, name: str) -> dict[str, Any]:
+    """A job artifact as a document, or a classified failure."""
+    path = jobs_dir / job_id / name
+    if not path.is_file():
+        raise typer.BadParameter(f"No {name} for {job_id}. Run the pipeline first.")
+    from movie_review.artifacts import manager as artifacts
+
+    document = artifacts.read_json(path)
+    if not isinstance(document, dict):
+        raise typer.BadParameter(f"{path} is not a JSON object")
+    return document
+
+
+@app.command()
+def analyze(
+    movie: Annotated[str, typer.Argument(help="Movie file.")],
+    db_path: DbOption = None,
+    profile: ProfileOption = None,
+    language: Annotated[str, typer.Option(help="Source language of the movie.")] = "en",
+) -> None:
+    """Analyze a movie up to the story, and print the result.
+
+    README section 96 makes this the Phase 1 acceptance command: a movie
+    becomes movie-analysis.json. The pipeline runs from the start, so a job
+    that already exists is resumed rather than repeated.
+    """
+    if not Path(movie).is_file():
+        raise typer.BadParameter(f"Input file not found: {movie}")
+    selected_profile = _resolve_profile(profile, None)
+    source_language, narration_language = _resolve_languages(language, None)
+
+    manager, conn = _manager(db_path)
+    with conn:
+        job = manager.create(movie)
+    try:
+        run_pipeline(
+            job.job_id,
+            movie,
+            db_path,
+            end_stage="story",
+            profile=selected_profile,
+            source_language=source_language,
+            target_language=narration_language,
+        )
+    finally:
+        conn.close()
+
+    settings = load_settings(profile=selected_profile)
+    document = _job_document(job.job_id, _jobs_dir(settings), "movie-analysis.json")
+    _print_json(document)
+
+
+@app.command()
+def scenes(
+    job_id: Annotated[str, typer.Argument(help="Job ID.")],
+    db_path: DbOption = None,
+) -> None:
+    """Print a job's scene timeline."""
+    from movie_review.storage import repositories as repo
+
+    manager, conn = _manager(db_path)
+    with conn:
+        _load_job(manager, job_id)
+        rows = repo.list_scenes(conn, job_id)
+    _print_json(
+        {
+            "job_id": job_id,
+            "scenes": [
+                {
+                    "scene_id": scene.scene_id,
+                    "start": scene.start,
+                    "end": scene.end,
+                    "duration": scene.duration,
+                    "shot_count": scene.shot_count,
+                }
+                for scene in rows
+            ],
+        }
+    )
+
+
+@app.command()
+def transcript(
+    job_id: Annotated[str, typer.Argument(help="Job ID.")],
+    db_path: DbOption = None,
+) -> None:
+    """Print a job's transcript."""
+    from movie_review.storage import repositories as repo
+
+    manager, conn = _manager(db_path)
+    with conn:
+        _load_job(manager, job_id)
+        rows = repo.list_transcript_segments(conn, job_id)
+    _print_json(
+        {
+            "job_id": job_id,
+            "segments": [
+                {
+                    "segment_id": segment.segment_id,
+                    "start": segment.start,
+                    "end": segment.end,
+                    "text": segment.text,
+                    "language": segment.language,
+                    "speaker": segment.speaker,
+                }
+                for segment in rows
+            ],
+        }
+    )
+
+
+@app.command()
+def story(
+    job_id: Annotated[str, typer.Argument(help="Job ID.")],
+    db_path: DbOption = None,
+) -> None:
+    """Print a job's story: the events, the characters and the relationships."""
+    settings = load_settings()
+    document = _job_document(job_id, _jobs_dir(settings), "movie-analysis.json")
+    _print_json(
+        {
+            "job_id": job_id,
+            "events": document.get("events", []),
+            "characters": document.get("characters", []),
+            "locations": document.get("locations", []),
+            "relationships": document.get("relationships", []),
+            "story_arcs": document.get("story_arcs", []),
+            "themes": document.get("themes", []),
+            "twists": document.get("twists", []),
+        }
+    )
+
+
+@app.command()
+def script(
+    job_id: Annotated[str, typer.Argument(help="Job ID.")],
+    db_path: DbOption = None,
+) -> None:
+    """Print a job's review script."""
+    settings = load_settings()
+    document = _job_document(job_id, _jobs_dir(settings), "review/review-script.json")
+    _print_json(document.get("script", document))
+
+
+@app.command()
+def render(
+    job_id: Annotated[str, typer.Argument(help="Job ID.")],
+    db_path: DbOption = None,
+) -> None:
+    """Print a job's render manifest: the timeline that was rendered."""
+    settings = load_settings()
+    document = _job_document(job_id, _jobs_dir(settings), "render/render-manifest.json")
+    _print_json(document)
 
 
 @app.command()

@@ -44,6 +44,13 @@ COMMANDS = [
     "stages",
     "version",
     "dashboard",
+    "analyze",
+    "scenes",
+    "transcript",
+    "story",
+    "script",
+    "render",
+    "thumbnail",
 ]
 
 
