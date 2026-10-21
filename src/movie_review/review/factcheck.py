@@ -14,8 +14,7 @@ from dataclasses import dataclass, field
 
 from movie_review.asr.normalize import normalize_text
 from movie_review.domain import Claim, ClaimStatus, ClaimType
-from movie_review.review.retrieval import retrieve_evidence
-from movie_review.storage import repositories as repo
+from movie_review.review.retrieval import EvidenceIndex, build_index, retrieve_evidence
 
 _QUOTED_RE = re.compile(r'"([^"]+)"')
 
@@ -33,20 +32,18 @@ class ClaimVerdict:
     reasons: list[str] = field(default_factory=list)
 
 
-def _resolves(conn: sqlite3.Connection, job_id: str, ref: str) -> bool:
-    if repo.get_event(conn, job_id, ref) is not None:
-        return True
-    if repo.get_character(conn, job_id, ref) is not None:
-        return True
-    if repo.get_scene(conn, job_id, ref) is not None:
-        return True
-    segments = repo.list_transcript_segments(conn, job_id)
-    return any(segment.segment_id == ref for segment in segments)
+def _resolves(index: EvidenceIndex, ref: str) -> bool:
+    """Whether a claim's reference names something the job actually has.
+
+    The index carries the ids of every segment, event, character and scene,
+    so the check is a set lookup. It used to be four queries per reference,
+    one of them a full transcript read.
+    """
+    return ref in index.known_ids
 
 
-def _dialogue_texts(conn: sqlite3.Connection, job_id: str, refs: list[str]) -> list[str]:
-    segments = {s.segment_id: s.text for s in repo.list_transcript_segments(conn, job_id)}
-    return [segments[ref] for ref in refs if ref in segments]
+def _dialogue_texts(index: EvidenceIndex, refs: list[str]) -> list[str]:
+    return [index.segment_texts[ref] for ref in refs if ref in index.segment_texts]
 
 
 def _misquoted(claim_text: str, dialogue_texts: list[str]) -> bool:
@@ -64,8 +61,17 @@ def _misquoted(claim_text: str, dialogue_texts: list[str]) -> bool:
     return any(all(quote not in haystack for haystack in haystacks) for quote in quotes)
 
 
-def check_claim(claim: Claim, conn: sqlite3.Connection, job_id: str) -> ClaimVerdict:
-    """Verify one claim; never upgrades uncertainty without evidence."""
+def check_claim(
+    claim: Claim,
+    conn: sqlite3.Connection,
+    job_id: str,
+    index: EvidenceIndex | None = None,
+) -> ClaimVerdict:
+    """Verify one claim; never upgrades uncertainty without evidence.
+
+    ``index`` lets a caller that checks many claims resolve the evidence
+    pool once instead of once per claim.
+    """
     if claim.type in NON_FACTUAL:
         return ClaimVerdict(
             claim_id=claim.claim_id,
@@ -80,7 +86,8 @@ def check_claim(claim: Claim, conn: sqlite3.Connection, job_id: str) -> ClaimVer
             evidence=[],
             reasons=["no evidence cited"],
         )
-    dangling = [ref for ref in claim.evidence if not _resolves(conn, job_id, ref)]
+    active = index if index is not None else build_index(conn, job_id)
+    dangling = [ref for ref in claim.evidence if not _resolves(active, ref)]
     if dangling:
         return ClaimVerdict(
             claim_id=claim.claim_id,
@@ -89,7 +96,7 @@ def check_claim(claim: Claim, conn: sqlite3.Connection, job_id: str) -> ClaimVer
             reasons=[f"dangling references: {dangling}"],
         )
     if claim.type is ClaimType.DIALOGUE_REFERENCE and _misquoted(
-        claim.text, _dialogue_texts(conn, job_id, claim.evidence)
+        claim.text, _dialogue_texts(active, claim.evidence)
     ):
         return ClaimVerdict(
             claim_id=claim.claim_id,
@@ -97,7 +104,7 @@ def check_claim(claim: Claim, conn: sqlite3.Connection, job_id: str) -> ClaimVer
             evidence=list(claim.evidence),
             reasons=["quoted dialogue absent from cited segments"],
         )
-    top = retrieve_evidence(claim.text, conn, job_id, limit=1)
+    top = retrieve_evidence(claim.text, conn, job_id, limit=1, index=index)
     coverage = top[0].score if top else 0.0
     if coverage >= SUPPORT_COVERAGE:
         status = ClaimStatus.SUPPORTED
@@ -114,5 +121,12 @@ def check_claim(claim: Claim, conn: sqlite3.Connection, job_id: str) -> ClaimVer
 
 
 def check_claims(claims: list[Claim], conn: sqlite3.Connection, job_id: str) -> list[ClaimVerdict]:
-    """Verify claims in order."""
-    return [check_claim(claim, conn, job_id) for claim in claims]
+    """Verify claims in order.
+
+    The evidence pool is built once for the whole script. It used to be
+    rebuilt for every claim, and each rebuild re-read the entire transcript
+    once per candidate -- so a script with sixty claims cost sixty times the
+    transcript, per claim.
+    """
+    index = build_index(conn, job_id)
+    return [check_claim(claim, conn, job_id, index=index) for claim in claims]
