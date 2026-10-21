@@ -64,6 +64,7 @@ def _stub_context(
         profile: str | None = None,
         source_language: str | None = None,
         target_language: str | None = None,
+        generation: object = None,
     ) -> PipelineContext:
         return _ctx(tmp_path)
 

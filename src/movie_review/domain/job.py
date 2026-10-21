@@ -33,5 +33,8 @@ class Job(BaseModel):
     #: Where the finished output set is written; None means the configured
     #: output directory.
     output_dir: str | None = None
+    #: Whether the regenerable intermediates -- the frame images -- are kept.
+    #: README section 83 deletes them after a successful analysis.
+    keep_intermediates: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

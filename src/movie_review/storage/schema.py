@@ -5,7 +5,7 @@ artifacts. Later tasks add their tables as new migration versions; existing
 statements are append-only history and must not be edited.
 """
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 MIGRATION_1 = [
     """
@@ -263,6 +263,14 @@ MIGRATION_12 = [
     """,
 ]
 
+MIGRATION_13 = [
+    # Whether the job keeps its regenerable intermediates. README section 83
+    # deletes the frame images after a successful analysis.
+    """
+    ALTER TABLE jobs ADD COLUMN keep_intermediates INTEGER NOT NULL DEFAULT 0
+    """,
+]
+
 MIGRATIONS: dict[int, list[str]] = {
     1: MIGRATION_1,
     2: MIGRATION_2,
@@ -276,4 +284,5 @@ MIGRATIONS: dict[int, list[str]] = {
     10: MIGRATION_10,
     11: MIGRATION_11,
     12: MIGRATION_12,
+    13: MIGRATION_13,
 }

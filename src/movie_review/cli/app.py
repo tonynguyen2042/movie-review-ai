@@ -22,7 +22,12 @@ from typing import Annotated, Any
 import typer
 
 from movie_review import __version__
-from movie_review.config.settings import AppSettings, available_profiles, load_settings
+from movie_review.config.settings import (
+    AppSettings,
+    GenerationSettings,
+    available_profiles,
+    load_settings,
+)
 from movie_review.domain import Job, JobStatus
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.state_machine import JobNotFoundError
@@ -326,6 +331,29 @@ def _resolve_languages(source: str, target: str | None) -> tuple[str, str]:
     return source_tag, target_tag
 
 
+def _reconcile_stage_flag(
+    primary_flag: str, primary: str | None, alias_flag: str, alias: str | None
+) -> str | None:
+    """Reconcile a stage flag with its older alias.
+
+    Giving both is a usage error rather than a silent preference for one of
+    them: the operator would not know which one was used.
+    """
+    if primary is not None and alias is not None and primary != alias:
+        raise typer.BadParameter(f"Give {primary_flag} or {alias_flag}, not both.")
+    return primary if primary is not None else alias
+
+
+def _deterministic_generation() -> GenerationSettings:
+    """The sampling a reproducible run uses.
+
+    The seed is fixed, the temperature is zero and the top-p is one, so the
+    same movie, the same model, the same prompt and the same configuration
+    give the same answer.
+    """
+    return GenerationSettings(seed=0, temperature=0.0, top_p=1.0)
+
+
 def _validate_stage(value: str) -> str:
     """Check a stage name against the pipeline, as a usage error.
 
@@ -453,6 +481,32 @@ def process(
     stage_to: Annotated[
         str | None, typer.Option("--stage-to", help="Run up to stage (T086).")
     ] = None,
+    from_stage: Annotated[
+        str | None,
+        typer.Option("--from-stage", help="Start from this stage. The name README uses."),
+    ] = None,
+    to_stage: Annotated[
+        str | None,
+        typer.Option("--to-stage", help="Run up to this stage. The name README uses."),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Discard the recorded artifacts and redo the work."),
+    ] = False,
+    deterministic: Annotated[
+        bool,
+        typer.Option(
+            "--deterministic",
+            help="Pin the seed and the sampling so the run is reproducible.",
+        ),
+    ] = False,
+    keep_intermediates: Annotated[
+        bool,
+        typer.Option(
+            "--keep-intermediates",
+            help="Keep the sampled frames instead of deleting them after the analysis.",
+        ),
+    ] = False,
     no_run: Annotated[
         bool, typer.Option("--no-run", help="Create job only, do not run pipeline.")
     ] = False,
@@ -460,6 +514,12 @@ def process(
     """Accept a movie, create a job, and optionally run the full pipeline."""
     if not Path(movie).is_file():
         raise typer.BadParameter(f"Input file not found: {movie}")
+    # The README names them --from-stage and --to-stage; the older
+    # --stage-from and --stage-to are kept as aliases. Giving both is a
+    # usage error rather than a silent preference for one of them.
+    stage_from = _reconcile_stage_flag("--from-stage", from_stage, "--stage-from", stage_from)
+    stage_to = _reconcile_stage_flag("--to-stage", to_stage, "--stage-to", stage_to)
+
     # Validate stage names before creating the job, so a typo is reported as a
     # usage error instead of raising mid-pipeline and leaving a stray record.
     order = [name for name, _ in STAGE_SEQUENCE]
@@ -499,6 +559,7 @@ def process(
                 spoilers=spoilers,
                 target_seconds=minutes * 60,
                 output_dir=output,
+                keep_intermediates=keep_intermediates,
             )
     with ulog.logging_context(job_id=job.job_id, stage="cli"):
         ulog.log_event(
@@ -523,6 +584,18 @@ def process(
 
     # Run the pipeline, reporting each stage as it starts and finishes so a
     # long run is visibly progressing rather than silent.
+    generation = _deterministic_generation() if deterministic else None
+
+    if force:
+        # The stages are idempotent and their results are content-addressed,
+        # so a cache hit is not a stale answer -- it is the same answer.
+        # Dropping the artifacts is what makes the stages run again.
+        from movie_review.pipeline.force import invalidate_artifacts
+
+        with _session(db_path) as (manager, conn):
+            stages = [name for name, _ in STAGE_SEQUENCE]
+            invalidate_artifacts(conn, job.job_id, stages, Path(effective.paths.data_dir) / "jobs")
+
     reporter = _ProgressReporter(enabled=_progress_enabled())
     try:
         results = run_pipeline(
@@ -536,6 +609,7 @@ def process(
             profile=selected_profile,
             source_language=source_language,
             target_language=narration_language,
+            generation=generation,
         )
     except KeyboardInterrupt:
         typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)

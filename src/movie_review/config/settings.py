@@ -68,6 +68,19 @@ class RuntimeSettings(BaseModel):
     device: str = "gpu"
 
 
+class GenerationSettings(BaseModel):
+    """How a model call is sampled (README sections 73 and 74).
+
+    A pinned seed, a fixed temperature and a fixed top_p make a run
+    reproducible: the same movie, the same model, the same prompt and the
+    same configuration give the same result.
+    """
+
+    seed: int = 0
+    temperature: float = Field(default=0.4, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.95, ge=0.0, le=1.0)
+
+
 class ModelSpec(BaseModel):
     """A single model entry; identities come from ``models.yaml``.
 
@@ -104,6 +117,9 @@ class ModelSpec(BaseModel):
     #: configuration sets this from the privacy flag. A hand-built spec
     #: defaults to allowed.
     cloud_ai: bool = True
+    #: How this model is sampled. The values are part of the cache identity,
+    #: so a different temperature is a different answer.
+    generation: GenerationSettings = GenerationSettings()
 
     @property
     def is_remote(self) -> bool:
@@ -168,6 +184,19 @@ class CloudAIDisabledError(ValueError):
     profile that routed a slot at a remote endpoint sent the movie's
     dialogue and frames off the machine with no warning.
     """
+
+
+def generation_config(spec: ModelSpec) -> dict[str, Any]:
+    """The sampling settings that affect a model call, for a cache key.
+
+    Two runs with the same prompt but a different temperature are two
+    different answers, so the sampling belongs in the cache identity.
+    """
+    return {
+        "seed": spec.generation.seed,
+        "temperature": spec.generation.temperature,
+        "top_p": spec.generation.top_p,
+    }
 
 
 def require_cloud_ai(spec: ModelSpec, cloud_ai: bool, slot: str) -> None:
@@ -500,6 +529,7 @@ def load_settings(
     models_path: str | Path | None = None,
     *,
     profile: str | None = None,
+    generation: GenerationSettings | None = None,
 ) -> AppSettings:
     """Load settings from explicit YAML files with env overrides applied.
 
@@ -510,6 +540,10 @@ def load_settings(
         profile: explicit profile name, overriding the environment and
             ``default.yaml``. Raises :class:`ValueError` if the name is not in
             the ``models.yaml`` catalog.
+        generation: pins the sampling of every model slot, which is what
+            ``--deterministic`` uses. The values are part of the cache
+            identity, so a pinned run and an ordinary one do not share
+            answers.
     """
     resolved_config = Path(config_path) if config_path else default_config_path()
     resolved_models = Path(models_path) if models_path else default_models_path(resolved_config)
@@ -539,4 +573,22 @@ def load_settings(
                 ),
             )
 
-    return _Configured()  # type: ignore[call-arg]  # sources supply models/prompts
+    settings: AppSettings = _Configured()  # type: ignore[call-arg]  # sources supply models/prompts
+    if generation is not None:
+        settings = _with_generation(settings, generation)
+    return settings
+
+
+def _with_generation(settings: AppSettings, generation: GenerationSettings) -> AppSettings:
+    """Every model slot sampled the same, reproducible way.
+
+    The sampling is part of the cache identity, so a pinned run and an
+    ordinary one do not share answers.
+    """
+    models = settings.models
+    updated: dict[str, Any] = {}
+    for name in ("asr", "vision", "reasoning", "critic", "tts"):
+        updated[name] = getattr(models, name).model_copy(update={"generation": generation})
+    if models.translation is not None:
+        updated["translation"] = models.translation.model_copy(update={"generation": generation})
+    return settings.model_copy(update={"models": models.model_copy(update=updated)})

@@ -217,6 +217,20 @@ uv run movie-review process ./my-movie.mp4 \
 
 `--verbose` goes **before** the subcommand: `movie-review --verbose process ...`.
 
+### The rest of the options
+
+| Option | Does |
+|---|---|
+| `--from-stage` / `--to-stage` | run part of the pipeline. `--stage-from` and `--stage-to` are the older names for the same thing. |
+| `--force` | discard the recorded artifacts and redo the work |
+| `--deterministic` | pin the seed and the sampling, so the same inputs give the same output |
+| `--keep-intermediates` | keep the sampled frames instead of deleting them when the job finishes |
+| `--no-run` | create the job without running anything |
+
+`--force` removes the artifacts of the stages it re-runs, not the job record and not the other stages. The cache is content-addressed, so a stage whose inputs have not changed still answers from the cache — which is the same answer, not a stale one.
+
+`--deterministic` pins the seed to `0`, the temperature to `0` and the top-p to `1` for every model slot. The sampling is part of the cache identity, so a pinned run and an ordinary one do not share answers.
+
 ### What actually happens
 
 `process` creates the job and then runs the pipeline. The first line is the job ID you need for everything else:

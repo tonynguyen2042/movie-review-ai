@@ -1877,10 +1877,10 @@ tests/unit/test_cli.py
 
 **Acceptance criteria**
 
-- [ ] each documented flag exists and is validated
-- [ ] `--deterministic` reaches the generation config and the cache key
-- [ ] `--force` invalidates and re-runs the selected stages
-- [ ] `pytest -q` passes
+- [x] each documented flag exists and is validated
+- [x] `--deterministic` reaches the generation config and the cache key
+- [x] `--force` invalidates and re-runs the selected stages
+- [x] `pytest -q` passes
 
 ---
 
