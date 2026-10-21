@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T12:17:42.450624+00:00",
+  "updated_at": "2026-10-21T12:28:44.591868+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -1539,12 +1539,14 @@
       "title": "HTTP reuse + transport retry",
       "type": "perf",
       "branch": "T136-http-pooling-retry",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
-      "attempts": 0,
-      "implementation": "pending",
-      "tests": "pending",
-      "review": "pending"
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-21T12:28:44.591868+00:00",
+      "updated_at": "2026-10-21T12:28:44.591868+00:00"
     },
     "T137": {
       "title": "stage-level retry policy",

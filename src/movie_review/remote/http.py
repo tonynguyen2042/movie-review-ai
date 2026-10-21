@@ -16,17 +16,25 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import random
+import time
 import uuid
 from collections.abc import Callable, Mapping
+from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 # Injected in tests; matches the subset of urlopen's signature we rely on.
 RawTransport = Callable[..., Any]
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
+#: How many times a transient failure is retried before it is reported.
+DEFAULT_ATTEMPTS = 3
+#: The base of the exponential backoff between retries, in seconds.
+DEFAULT_BACKOFF_SECONDS = 0.5
 _USER_AGENT = "movie-review-ai/0.1"
 
 
@@ -36,6 +44,14 @@ class RemoteUnavailableError(Exception):
 
 class RemoteProtocolError(Exception):
     """The remote host answered, but not with a usable response."""
+
+
+class _Permanent(Exception):
+    """A failure that another attempt will not fix."""
+
+    def __init__(self, public: Exception) -> None:
+        super().__init__(str(public))
+        self.public = public
 
 
 def build_endpoint(base_url: str, path: str) -> str:
@@ -74,30 +90,159 @@ def _urlopen(request: Request, timeout: float) -> Any:
     return urlopen(request, timeout=timeout)  # noqa: S310 - scheme validated upstream
 
 
+class _Transient(Exception):
+    """A failure worth retrying, with the exception to raise if it persists."""
+
+    def __init__(self, public: Exception) -> None:
+        super().__init__(str(public))
+        self.public = public
+
+
+def _is_retryable_status(code: int) -> bool:
+    """Whether an HTTP status is worth another attempt.
+
+    A 4xx other than 429 is the request's own fault: a bad body, a bad
+    model name, a missing key. Repeating it wastes the server's time. A 5xx
+    or a rate limit is the server's, and another attempt usually succeeds.
+    """
+    return code == 429 or 500 <= code < 600
+
+
+class _Pool:
+    """Keep-alive connections, one per host.
+
+    ``urllib.request.urlopen`` sets ``Connection: close`` on every request
+    (CPython's ``urllib/request.py``), so each of the roughly 2000 model
+    calls a 2 h run makes paid a fresh TCP and TLS handshake.
+    """
+
+    def __init__(self) -> None:
+        self._connections: dict[tuple[str, str, int], Any] = {}
+
+    def send(self, request: Request, timeout: float) -> bytes:
+        """Send the request over a pooled connection and return the body."""
+        parsed = urlsplit(request.full_url)
+        scheme = parsed.scheme or "http"
+        host = parsed.hostname or ""
+        port = parsed.port or (443 if scheme == "https" else 80)
+        key = (scheme, host, port)
+
+        connection = self._connections.get(key)
+        if connection is None:
+            factory = HTTPSConnection if scheme == "https" else HTTPConnection
+            connection = factory(host, port, timeout=timeout)
+            self._connections[key] = connection
+
+        path = urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
+        try:
+            connection.request(
+                request.get_method(),
+                path,
+                body=request.data,
+                headers=dict(request.header_items()),
+            )
+            response = connection.getresponse()
+            body = response.read()
+            status = response.status
+        except (OSError, HTTPException) as exc:
+            # A connection that was closed by the peer is reused by mistake.
+            # Drop it so the next attempt opens a fresh one.
+            self._connections.pop(key, None)
+            try:
+                connection.close()
+            except OSError:
+                pass
+            raise _Transient(
+                RemoteUnavailableError(f"cannot reach {request.full_url}: {exc}")
+            ) from exc
+
+        if status >= 400:
+            raise _Transient(RemoteProtocolError(f"HTTP {status} from {request.full_url}"))
+        return body if isinstance(body, bytes) else str(body).encode("utf-8")
+
+    def close(self) -> None:
+        """Close every pooled connection."""
+        for connection in self._connections.values():
+            try:
+                connection.close()
+            except OSError:
+                pass
+        self._connections.clear()
+
+
+#: The process-wide pool. One connection per host is enough: the pipeline
+#: is sequential, and the parallel stages (T138, T139) use one pool per
+#: worker.
+_POOL = _Pool()
+
+
+def _backoff_delay(attempt: int, base: float) -> float:
+    """Exponential backoff with jitter.
+
+    The jitter matters: without it, a server that fails a whole batch at
+    once receives the whole batch again at the same instant.
+    """
+    if base <= 0:
+        return 0.0
+    delay: float = min(base * (2 ** (attempt - 1)), 30.0) * (0.5 + random.random() / 2)
+    return delay
+
+
 def perform(
     request: Request,
     timeout: float,
     transport: RawTransport | None = None,
     *,
     url: str,
+    attempts: int = DEFAULT_ATTEMPTS,
+    backoff_seconds: float = DEFAULT_BACKOFF_SECONDS,
 ) -> bytes:
     """Execute the request and return the raw body.
+
+    A transient failure -- a refused connection, a timeout, a 5xx or a rate
+    limit -- is retried with exponential backoff. The previous behaviour
+    raised on the first one, so a single blip aborted a run that had been
+    going for hours.
 
     Raises:
         RemoteUnavailableError: connection refused, DNS failure, or timeout.
         RemoteProtocolError: a non-2xx HTTP status.
     """
-    call = transport or _urlopen
+    last: _Transient | None = None
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            if transport is not None:
+                return _perform_once(request, timeout, transport, url=url)
+            return _POOL.send(request, timeout)
+        except _Transient as exc:
+            last = exc
+            if attempt < attempts:
+                delay = _backoff_delay(attempt, backoff_seconds)
+                if delay:
+                    time.sleep(delay)
+        except _Permanent as exc:
+            raise exc.public from exc
+    assert last is not None
+    raise last.public
+
+
+def _perform_once(request: Request, timeout: float, transport: RawTransport, *, url: str) -> bytes:
+    """One request through an injected transport."""
     try:
-        with call(request, timeout) as response:
+        with transport(request, timeout) as response:
             body = response.read()
     except HTTPError as exc:
         # Never echo headers: they carry the bearer token.
-        raise RemoteProtocolError(f"HTTP {exc.code} from {url}") from exc
+        error = RemoteProtocolError(f"HTTP {exc.code} from {url}")
+        if _is_retryable_status(exc.code):
+            raise _Transient(error) from exc
+        raise _Permanent(error) from exc
     except URLError as exc:
-        raise RemoteUnavailableError(f"cannot reach {url}: {exc.reason}") from exc
+        raise _Transient(RemoteUnavailableError(f"cannot reach {url}: {exc.reason}")) from exc
     except TimeoutError as exc:
-        raise RemoteUnavailableError(f"request to {url} timed out after {timeout}s") from exc
+        raise _Transient(
+            RemoteUnavailableError(f"request to {url} timed out after {timeout}s")
+        ) from exc
     return body if isinstance(body, bytes) else str(body).encode("utf-8")
 
 

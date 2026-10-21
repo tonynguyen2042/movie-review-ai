@@ -1280,10 +1280,10 @@ tests/unit/test_remote_http.py   (new)
 
 **Acceptance criteria**
 
-- [ ] consecutive requests to one host reuse a connection
-- [ ] a transient 5xx is retried and then succeeds
-- [ ] a timeout is retried and then reported as `RemoteUnavailableError`
-- [ ] `pytest -q` passes
+- [x] consecutive requests to one host reuse a connection
+- [x] a transient 5xx is retried and then succeeds
+- [x] a timeout is retried and then reported as `RemoteUnavailableError`
+- [x] `pytest -q` passes
 
 ---
 

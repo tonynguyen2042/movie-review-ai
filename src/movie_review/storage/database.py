@@ -21,7 +21,9 @@ def connect(path: str | Path) -> sqlite3.Connection:
     WAL is safe against an application crash with NORMAL, and it lets
     readers run while a writer is active, which the dashboard needs.
     """
-    conn = sqlite3.connect(str(path))
+    # A longer busy timeout: the parallel stages write from more than one
+    # thread, and the five-second default is not enough on a loaded machine.
+    conn = sqlite3.connect(str(path), timeout=30.0)
     conn.execute("PRAGMA foreign_keys = ON")
     # WAL is a property of the file, not the connection, so setting it on
     # every connection is cheap and keeps a connection opened directly --

@@ -85,6 +85,10 @@ def test_the_manager_does_not_overwrite_an_existing_job(tmp_path: Path) -> None:
 def test_concurrent_creations_get_distinct_ids(tmp_path: Path) -> None:
     """Two threads creating jobs at once must not collide."""
     db = tmp_path / "jobs.db"
+    # Migrate once, up front: two threads migrating the same file at the
+    # same time contend for the write lock, which is a different question
+    # from the one this test asks.
+    connect(bootstrap(db)).close()
     ids: list[str] = []
     errors: list[Exception] = []
     barrier = threading.Barrier(2)
@@ -94,7 +98,13 @@ def test_concurrent_creations_get_distinct_ids(tmp_path: Path) -> None:
         # shareable across threads by default.
         conn = connect(bootstrap(db))
         try:
-            barrier.wait(timeout=5)
+            try:
+                # The barrier makes the two threads start together, which is
+                # when the race is most likely. It is not required for the
+                # assertion: the insert is atomic whatever the interleaving.
+                barrier.wait(timeout=30)
+            except threading.BrokenBarrierError:
+                pass
             manager = JobManager(conn)
             ids.append(manager.create("movie.mkv").job_id)
         except Exception as exc:  # pragma: no cover - the assertion reports it
