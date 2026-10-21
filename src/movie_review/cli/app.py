@@ -1173,6 +1173,67 @@ def render(
 
 
 @app.command()
+def benchmark(
+    mode: Annotated[
+        str,
+        typer.Option("--mode", help="model, pipeline or memory."),
+    ] = "model",
+    slot: Annotated[
+        str | None,
+        typer.Option("--slot", help="Which model slot to measure: reasoning, tts, asr, vision."),
+    ] = None,
+    movie: Annotated[
+        str | None,
+        typer.Option("--movie", help="A reference movie, for the pipeline and vision modes."),
+    ] = None,
+    repeats: Annotated[
+        int, typer.Option("--repeats", help="How many times to repeat the measurement.")
+    ] = 3,
+    profile: ProfileOption = None,
+    db_path: DbOption = None,
+) -> None:
+    """Measure the models and the pipeline.
+
+    README section 75 lists the measurements: model load time, throughput,
+    the realtime factors, peak memory and the pipeline duration. Section 56
+    says the exact model sizes "SHALL be benchmarked on the target Mac
+    rather than hard-coded", which needs a command that takes the
+    measurements.
+
+    `--mode model` loads one model slot and times one unit of its work.
+    `--mode pipeline` runs the whole pipeline on a reference movie and
+    reports the time each stage took.
+    """
+    from movie_review.benchmark.runner import (
+        BenchmarkError,
+        run_model_benchmark,
+        run_pipeline_benchmark,
+    )
+
+    settings = load_settings(profile=_resolve_profile(profile, None))
+    workdir = Path(settings.paths.data_dir) / "benchmark"
+
+    try:
+        if mode == "pipeline":
+            if not movie:
+                raise typer.BadParameter("--mode pipeline needs --movie")
+            document = run_pipeline_benchmark(movie, db_path, settings)
+        elif mode in ("model", "memory"):
+            if not slot:
+                raise typer.BadParameter(f"--mode {mode} needs --slot")
+            document = run_model_benchmark(settings, slot, workdir, repeats=repeats, movie=movie)
+        else:
+            raise typer.BadParameter(
+                f"Unknown --mode {mode!r}; expected model, pipeline or memory."
+            )
+    except BenchmarkError as exc:
+        typer.echo(f"Cannot run the benchmark: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_json(document)
+
+
+@app.command()
 def stages() -> None:
     """List available pipeline stages in execution order (T086)."""
     for stage_name, desc in STAGE_SEQUENCE:
