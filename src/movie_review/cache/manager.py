@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,31 @@ class CacheManager:
             self._remove(payload, meta)
             return None, None
         return payload, data
+
+    def prune(self, older_than_seconds: float | None = None) -> list[str]:
+        """Remove cache entries; returns the keys that were removed.
+
+        README section 84 puts the raw frames, the temporary clips, the proxy
+        video and the temporary audio in the "optional cleanup" list. This is
+        the cleanup for the cache itself.
+
+        ``older_than_seconds`` keeps the entries that were written recently,
+        so a run in progress is not pruned out from under itself.
+        """
+        removed: list[str] = []
+        now = time.time()
+        for meta in sorted(self._dir.glob(f"*{_META_SUFFIX}")):
+            key = meta.name[: -len(_META_SUFFIX)]
+            if older_than_seconds is not None:
+                try:
+                    if now - meta.stat().st_mtime < older_than_seconds:
+                        continue
+                except OSError:
+                    continue
+            payload, _ = self._paths(key)
+            if self._remove(payload, meta):
+                removed.append(key)
+        return removed
 
     def invalidate(self, key: str) -> bool:
         """Remove one entry; returns ``True`` when something was removed."""
