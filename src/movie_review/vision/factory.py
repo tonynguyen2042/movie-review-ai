@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from movie_review.config.settings import ModelSpec
+from movie_review.config.settings import ModelSpec, require_cloud_ai
 from movie_review.vision.openai_compat import DEFAULT_MAX_TOKENS, OpenAICompatVLMAdapter
 from movie_review.vision.port import VLMPort
 from movie_review.vision.qwen_vl import QwenVLAdapter
@@ -17,6 +17,7 @@ def build_vlm_adapter(spec: ModelSpec, *, max_tokens: int | None = None) -> VLMP
     """
     if not spec.enabled:
         raise ValueError(f"Vision model {spec.model!r} is disabled")
+    require_cloud_ai(spec, spec.cloud_ai, "vision")
     if spec.is_remote:
         assert spec.base_url is not None  # guaranteed by ModelSpec validation
         return OpenAICompatVLMAdapter(

@@ -1725,9 +1725,9 @@ tests/unit/test_privacy_gate.py   (new)
 
 **Acceptance criteria**
 
-- [ ] a remote slot with `cloud_ai: false` is refused with a clear message
-- [ ] `cloud_ai: true` allows the remote adapter
-- [ ] `pytest -q` passes
+- [x] a remote slot with `cloud_ai: false` is refused with a clear message
+- [x] `cloud_ai: true` allows the remote adapter
+- [x] `pytest -q` passes
 
 ---
 

@@ -7,7 +7,7 @@ the local MLX adapter or the remote OpenAI-compatible one, based on
 
 from __future__ import annotations
 
-from movie_review.config.settings import ModelSpec
+from movie_review.config.settings import ModelSpec, require_cloud_ai
 from movie_review.reasoning.openai_compat import OpenAICompatAdapter
 from movie_review.reasoning.port import ReasoningPort
 from movie_review.reasoning.qwen import QwenReasoningAdapter
@@ -22,6 +22,7 @@ def build_reasoning_adapter(spec: ModelSpec, *, max_tokens: int = 2048) -> Reaso
     """
     if not spec.enabled:
         raise ValueError(f"Reasoning model {spec.model!r} is disabled")
+    require_cloud_ai(spec, spec.cloud_ai, "reasoning")
 
     if spec.is_remote:
         assert spec.base_url is not None  # guaranteed by ModelSpec validation
