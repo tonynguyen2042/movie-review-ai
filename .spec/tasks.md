@@ -2202,11 +2202,11 @@ src/movie_review/artifacts/manager.py   (only if a guard is found to be missing)
 
 **Acceptance criteria**
 
-- [ ] an absolute path is rejected
-- [ ] a Windows drive path is rejected
-- [ ] an empty path is rejected
-- [ ] a nested relative path is accepted
-- [ ] `pytest -q` passes
+- [x] an absolute path is rejected
+- [x] a Windows drive path is rejected
+- [x] an empty path is rejected
+- [x] a nested relative path is accepted
+- [x] `pytest -q` passes
 
 ---
 

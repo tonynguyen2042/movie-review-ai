@@ -83,6 +83,15 @@ def resolve_relative(jobs_dir: str | Path, job_id: str, relative: str) -> Path:
     rather than being normalised away.
     """
     root = Path(jobs_dir) / _safe_segment(job_id, "job")
+    # An absolute path is a tampered row. It has to fail here rather than be
+    # reinterpreted: dropping the leading separator would turn
+    # "/etc/passwd" into "<root>/etc/passwd", which stays inside the root
+    # but reads a file the row never named.
+    if relative.startswith("/") or relative.startswith("\\"):
+        raise UnsafePathError(f"Absolute artifact path: {relative!r}")
+    # A Windows drive path is the same thing.
+    if len(relative) > 1 and relative[1] == ":":
+        raise UnsafePathError(f"Absolute artifact path: {relative!r}")
     segments = [segment for segment in relative.split("/") if segment]
     if not segments:
         raise UnsafePathError("Empty artifact path")
