@@ -624,7 +624,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         characters = repo.list_characters(ctx.conn, ctx.job_id)
         segments = repo.list_transcript_segments(ctx.conn, ctx.job_id)
 
-        return run_event_extraction(
+        result = run_event_extraction(
             scenes,
             analyses,
             segments,
@@ -638,6 +638,17 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
                 settings=ctx.settings,
             ),
         )
+
+        # The story graph is derived from the events and persisted, so the
+        # relationships table is populated and `movie-analysis.json` carries
+        # the graph instead of an empty list. The builder was complete and
+        # tested, and nothing called it.
+        from movie_review.knowledge.graph import build_graph
+
+        graph = build_graph(result.events)
+        for relationship in graph.relationships:
+            repo.save_relationship(ctx.conn, ctx.job_id, relationship)
+        return result
 
     def arcs_fn(ctx: PipelineContext) -> Any:
         from movie_review.storage import repositories as repo
