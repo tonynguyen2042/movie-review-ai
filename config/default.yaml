@@ -59,14 +59,19 @@ memory:
   reserve_mb: 8192
 
 prompts:
+  # The pinned version of every prompt that exists. A prompt that is not
+  # listed here uses its newest version. The names below are the files in
+  # config/prompts/; the registry used to name five prompts that were never
+  # written, and the five that were written were not listed.
   versions:
+    event_extraction: v1
+    publishing_metadata: v1
     scene_analysis: v1
-    character_analysis: v1
-    story_analysis: v1
-    review_planner: v1
     script_writer: v1
-    fact_checker: v1
-    visual_planner: v1
+    story_arc: v1
+    theme: v1
+    translate: v1
+    twist: v1
 
 logging:
   level: INFO
