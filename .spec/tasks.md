@@ -1249,10 +1249,10 @@ tests/unit/test_remote_adapters.py
 
 **Acceptance criteria**
 
-- [ ] a 2 h film is uploaded in several bounded requests
-- [ ] the returned segment timestamps are offset back to movie time
-- [ ] the peak request body is bounded by the segment size
-- [ ] `pytest -q` passes
+- [x] a 2 h film is uploaded in several bounded requests
+- [x] the returned segment timestamps are offset back to movie time
+- [x] the peak request body is bounded by the segment size
+- [x] `pytest -q` passes
 
 ---
 
