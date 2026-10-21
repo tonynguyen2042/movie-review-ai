@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "EventType": {
+      "description": "Story event categories.",
+      "enum": [
+        "INTRODUCTION",
+        "MEETING",
+        "DISCOVERY",
+        "CONFLICT",
+        "DECISION",
+        "BETRAYAL",
+        "REVELATION",
+        "ACTION",
+        "DEATH",
+        "ESCAPE",
+        "CAPTURE",
+        "ROMANCE",
+        "INVESTIGATION",
+        "DECEPTION",
+        "FLASHBACK",
+        "FLASH_FORWARD",
+        "TRANSITION",
+        "CLIMAX",
+        "RESOLUTION",
+        "OTHER"
+      ],
+      "title": "EventType",
+      "type": "string"
+    }
+  },
+  "$id": "https://movie-review-ai/schemas/event.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One story state change with evidence links.",
+  "properties": {
+    "characters": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Characters",
+      "type": "array"
+    },
+    "description": {
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "id": {
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "importance": {
+      "default": 0.5,
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Importance",
+      "type": "number"
+    },
+    "location": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Location"
+    },
+    "timestamp": {
+      "minimum": 0.0,
+      "title": "Timestamp",
+      "type": "number"
+    },
+    "type": {
+      "$ref": "#/$defs/EventType"
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "timestamp",
+    "description"
+  ],
+  "title": "event",
+  "type": "object"
+}

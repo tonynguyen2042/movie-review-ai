@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "EvidenceType": {
+      "description": "Where a piece of evidence comes from.",
+      "enum": [
+        "DIALOGUE",
+        "VISUAL",
+        "AUDIO",
+        "SCENE",
+        "EVENT",
+        "CHARACTER",
+        "TIMELINE"
+      ],
+      "title": "EvidenceType",
+      "type": "string"
+    }
+  },
+  "$id": "https://movie-review-ai/schemas/evidence.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Traceable pointer from a claim to its source (dialogue, frame, scene...).",
+  "properties": {
+    "confidence": {
+      "default": 1.0,
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "end": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "End"
+    },
+    "id": {
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "source_id": {
+      "minLength": 1,
+      "title": "Source Id",
+      "type": "string"
+    },
+    "start": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Start"
+    },
+    "type": {
+      "$ref": "#/$defs/EvidenceType"
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "source_id"
+  ],
+  "title": "evidence",
+  "type": "object"
+}

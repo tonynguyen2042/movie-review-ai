@@ -1969,10 +1969,10 @@ tests/unit/test_schemas.py   (new)
 
 **Acceptance criteria**
 
-- [ ] all seven schema files exist and are valid JSON Schema
-- [ ] an artifact that violates its schema is rejected at write time
-- [ ] a valid artifact still writes
-- [ ] `pytest -q` passes
+- [x] all seven schema files exist and are valid JSON Schema
+- [x] an artifact that violates its schema is rejected at write time
+- [x] a valid artifact still writes
+- [x] `pytest -q` passes
 
 ---
 

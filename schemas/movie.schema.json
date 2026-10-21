@@ -1,0 +1,97 @@
+{
+  "$defs": {
+    "MovieMetadata": {
+      "description": "Validated media facts extracted at ingest.",
+      "properties": {
+        "audio_codec": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio Codec"
+        },
+        "container": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Container"
+        },
+        "duration_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Duration Seconds",
+          "type": "number"
+        },
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "fps": {
+          "exclusiveMinimum": 0,
+          "title": "Fps",
+          "type": "number"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "title": "Sha256",
+          "type": "string"
+        },
+        "video_codec": {
+          "title": "Video Codec",
+          "type": "string"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "file",
+        "sha256",
+        "duration_seconds",
+        "width",
+        "height",
+        "fps",
+        "video_codec"
+      ],
+      "title": "MovieMetadata",
+      "type": "object"
+    }
+  },
+  "$id": "https://movie-review-ai/schemas/movie.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A movie under analysis.",
+  "properties": {
+    "id": {
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "metadata": {
+      "$ref": "#/$defs/MovieMetadata"
+    }
+  },
+  "required": [
+    "id",
+    "metadata"
+  ],
+  "title": "movie",
+  "type": "object"
+}

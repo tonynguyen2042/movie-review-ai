@@ -25,6 +25,10 @@ _PHRASE_RE = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b")
 _STOPWORDS = frozenset({"I", "We", "You", "He", "She", "It", "They"})
 
 
+class CharacterDiscoveryError(Exception):
+    """Character discovery failed in a classified way."""
+
+
 @dataclass
 class _Candidate:
     name: str
@@ -131,6 +135,16 @@ def discover_characters(
 
 def save_discovery(conn: sqlite3.Connection, job_id: str, result: DiscoveryResult) -> None:
     """Persist discovery output through the T027 repositories."""
+    # Every AI output passes schema validation before it enters the next
+    # stage (README section 6.6).
+    from movie_review.schemas import SchemaError, validate_artifact
+
+    for character in result.characters:
+        try:
+            validate_artifact("character", character.model_dump(mode="json"))
+        except SchemaError as exc:
+            raise CharacterDiscoveryError(str(exc)) from exc
+
     for character in result.characters:
         repo.save_character(conn, job_id, character)
     # One transaction for every mention: a mention is written once per
