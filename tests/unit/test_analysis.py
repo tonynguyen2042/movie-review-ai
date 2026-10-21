@@ -54,9 +54,14 @@ class Harness:
     frames: dict[str, list[Path]]
     segments: list[TranscriptSegment]
 
-    def stage(self) -> VisualAnalysisResult:
+    def stage(self, batch_size: int = 8) -> VisualAnalysisResult:
         return run_visual_analysis(
-            self.scenes, self.frames, self.segments, self.ctx, port=self.port
+            self.scenes,
+            self.frames,
+            self.segments,
+            self.ctx,
+            port=self.port,
+            batch_size=batch_size,
         )
 
 
@@ -114,11 +119,23 @@ def test_stage_happy_path(tmp_path: Path) -> None:
     assert harness.port.unloaded is True
     assert harness.ctx.manager.get("job_1").status is JobStatus.VISUAL_ANALYSIS_READY
     assert repo.get_artifact(harness.conn, "job_1-vision") is not None
-    # Scene 2 sees scene 1's summary and its own dialogue only.
-    second = harness.port.calls[1]
-    assert "loc-scene_000001" in (second.previous_summary or "")
-    assert harness.port.calls[0].dialogue == "first lines"
-    assert second.dialogue == "second lines"
+    # The scenes of a batch run concurrently, so the calls are not in order.
+    # Each scene must still get its own dialogue.
+    by_scene = {call.scene_id: call for call in harness.port.calls}
+    assert by_scene["scene_000001"].dialogue == "first lines"
+    assert by_scene["scene_000002"].dialogue == "second lines"
+
+
+def test_scene_sees_the_previous_scene_summary(tmp_path: Path) -> None:
+    """A scene is told what the scene before it showed.
+
+    The scenes are analysed in batches, and the continuity context comes from
+    the batch before, so a batch of one is the serial behaviour.
+    """
+    harness = _harness(tmp_path)
+    harness.stage(batch_size=1)
+    by_scene = {call.scene_id: call for call in harness.port.calls}
+    assert "loc-scene_000001" in (by_scene["scene_000002"].previous_summary or "")
 
 
 def test_stage_second_run_hits_cache(tmp_path: Path) -> None:

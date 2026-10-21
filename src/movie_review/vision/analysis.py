@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
-from movie_review.config.prompts import load_prompt, render
+from movie_review.config.prompts import Prompt, load_prompt, render
 from movie_review.domain import Artifact, JobStatus, Scene, SceneAnalysis, TranscriptSegment
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
@@ -33,6 +34,124 @@ STAGE_NAME = "vision"
 STAGE_VERSION = "v1"
 VISION_FILENAME = "vision.json"
 MAX_DIALOGUE_CHARS = 2000
+
+#: How many scenes are analysed at once. The scenes in a batch run
+#: concurrently; the batch before it supplies the continuity context.
+DEFAULT_BATCH_SIZE = 8
+
+#: How many scenes are analysed at the same time. A remote endpoint can
+#: usually take a few requests at once; a local one can take as many as
+#: the machine has cores for.
+DEFAULT_CONCURRENCY = 4
+
+
+@dataclass(frozen=True)
+class _BatchEntry:
+    """One scene's outcome."""
+
+    analysis: SceneAnalysis
+    cache_hit: bool
+
+
+def _batches(scenes: list[Scene], size: int) -> list[list[Scene]]:
+    """Split the scenes into batches of at most ``size``."""
+    if size <= 1:
+        return [[scene] for scene in scenes]
+    return [scenes[index : index + size] for index in range(0, len(scenes), size)]
+
+
+def _analyse_one(
+    scene: Scene,
+    scene_frames: list[Path],
+    dialogue: str,
+    summary: str,
+    input_summary: str | None,
+    prompt: Prompt,
+    model: str,
+    active: VLMPort,
+    ctx: StageContext,
+) -> _BatchEntry:
+    """Analyse one scene: cache lookup, then the model."""
+    text = render(
+        prompt,
+        scene_id=scene.scene_id,
+        frame_count=str(len(scene_frames)),
+        metadata=f"{scene.duration:.1f}s, {len(scene_frames)} frames",
+        dialogue=dialogue or "(no dialogue)",
+        previous_summary=summary,
+    )
+    spec = CacheSpec(
+        stage=STAGE_NAME,
+        stage_version=STAGE_VERSION,
+        input_hash=_scene_input_hash(scene, scene_frames, dialogue, summary),
+        model_id=model,
+        prompt_version=prompt.cache_version,
+    )
+    key = cache_key(spec)
+    cached = ctx.cache.lookup_json(key)
+    if cached is not None:
+        try:
+            analysis = SceneAnalysis.model_validate(cached["analysis"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise VisualAnalysisError(f"Cached vision is corrupt for {scene.scene_id}") from exc
+        return _BatchEntry(analysis=analysis, cache_hit=True)
+
+    try:
+        analysis = active.analyze(
+            AnalysisInput(
+                scene_id=scene.scene_id,
+                frames=scene_frames,
+                dialogue=dialogue,
+                previous_summary=input_summary,
+            ),
+            text,
+        )
+    except Exception as exc:
+        raise VisualAnalysisError(f"Cannot analyze {scene.scene_id}: {exc}") from exc
+    ctx.cache.store_json(key, {"analysis": analysis.model_dump(mode="json")})
+    return _BatchEntry(analysis=analysis, cache_hit=False)
+
+
+def _analyse_batch(
+    batch: list[Scene],
+    frames: dict[str, list[Path]],
+    segments: list[TranscriptSegment],
+    prompt: Prompt,
+    model: str,
+    previous_summaries: list[str],
+    active: VLMPort,
+    ctx: StageContext,
+) -> list[_BatchEntry]:
+    """Analyse a batch of scenes concurrently, preserving their order.
+
+    The continuity context is the previous batch's summary, so every scene in
+    the batch is told the same thing about what came before it.
+    """
+    if not batch:
+        return []
+
+    # The first batch has no previous scene, and says so in the prompt --
+    # the same wording the serial version used.
+    has_previous = bool(previous_summaries)
+    summary = previous_summaries[-1] if has_previous else "none (first scene)"
+    input_summary = summary if has_previous else None
+
+    def work(scene: Scene) -> _BatchEntry:
+        scene_frames = frames.get(scene.scene_id, [])
+        if not scene_frames:
+            raise VisualAnalysisError(f"No frames for {scene.scene_id}")
+        dialogue = scene_dialogue(segments, scene.start, scene.end)
+        return _analyse_one(
+            scene, scene_frames, dialogue, summary, input_summary, prompt, model, active, ctx
+        )
+
+    if len(batch) == 1 or DEFAULT_CONCURRENCY <= 1:
+        return [work(scene) for scene in batch]
+
+    with ThreadPoolExecutor(max_workers=min(DEFAULT_CONCURRENCY, len(batch))) as pool:
+        # `map` keeps the order of the input, so the results line up with the
+        # scenes no matter which finished first.
+        return list(pool.map(work, batch))
 
 
 class VisualAnalysisError(Exception):
@@ -74,12 +193,16 @@ def run_visual_analysis(
     port: VLMPort | None = None,
     prompt_version: str | None = None,
     on_progress: ProgressReporter | None = None,
+    batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> VisualAnalysisResult:
     """Analyze scenes for ``ctx.job_id`` through to ``VISUAL_ANALYSIS_READY``.
 
     Reports one step per scene when ``on_progress`` is given. This is the longest
     stage in the pipeline -- one VLM call per scene, each with its own network
     round trip -- so a per-scene fraction is what tells the user it is moving.
+
+    The scenes are analysed in batches of ``batch_size``; the scenes in a batch
+    are analysed concurrently.
     """
     started = time.perf_counter()
     try:
@@ -100,64 +223,38 @@ def run_visual_analysis(
 
     analyses: list[SceneAnalysis] = []
     cache_hits = 0
-    previous: SceneAnalysis | None = None
+    # The continuity context: each scene is told what the scene before it
+    # showed. Analysing strictly one after another made the stage one round
+    # trip per scene -- for a 2 h film, about 1000 sequential calls, which
+    # at 3 s each is fifty minutes of pure serial latency with the machine
+    # idle.
+    #
+    # The scenes are analysed in batches instead. Within a batch they run
+    # concurrently and each one is told about the batch before it, so the
+    # continuity still crosses the scenes; the scene immediately before it
+    # inside the same batch is not in the context, which is the trade.
+    previous_summaries: list[str] = []
     try:
-        for scene in scenes:
-            scene_frames = frames.get(scene.scene_id, [])
-            if not scene_frames:
-                raise VisualAnalysisError(f"No frames for {scene.scene_id}")
-            dialogue = scene_dialogue(segments, scene.start, scene.end)
-            summary = previous_summary(previous)
-            text = render(
+        for batch in _batches(scenes, batch_size):  # noqa: B007
+            results = _analyse_batch(
+                batch,
+                frames,
+                segments,
                 prompt,
-                scene_id=scene.scene_id,
-                frame_count=str(len(scene_frames)),
-                metadata=f"{scene.duration:.1f}s, {len(scene_frames)} frames",
-                dialogue=dialogue or "(no dialogue)",
-                previous_summary=summary,
+                model,
+                previous_summaries,
+                active,
+                ctx,
             )
-            spec = CacheSpec(
-                stage=STAGE_NAME,
-                stage_version=STAGE_VERSION,
-                input_hash=_scene_input_hash(scene, scene_frames, dialogue, summary),
-                model_id=model,
-                prompt_version=prompt.cache_version,
-            )
-            key = cache_key(spec)
-            cached = ctx.cache.lookup_json(key)
-            if cached is not None:
-                try:
-                    analysis = SceneAnalysis.model_validate(cached["analysis"])
-                except (KeyError, TypeError, ValueError) as exc:
-                    if owns_completion:
-                        ctx.manager.fail(ctx.job_id, STAGE_NAME, f"cached vision corrupt: {exc}")
-                    raise VisualAnalysisError(
-                        f"Cached vision is corrupt for {scene.scene_id}"
-                    ) from exc
-                cache_hits += 1
-            else:
-                try:
-                    analysis = active.analyze(
-                        AnalysisInput(
-                            scene_id=scene.scene_id,
-                            frames=scene_frames,
-                            dialogue=dialogue,
-                            previous_summary=None if previous is None else summary,
-                        ),
-                        text,
-                    )
-                except Exception as exc:
-                    if owns_completion:
-                        ctx.manager.fail(ctx.job_id, STAGE_NAME, f"{scene.scene_id}: {exc}")
-                    raise VisualAnalysisError(f"Cannot analyze {scene.scene_id}: {exc}") from exc
-                ctx.cache.store_json(key, {"analysis": analysis.model_dump(mode="json")})
-            if analysis.scene_id != scene.scene_id:
-                raise VisualAnalysisError(f"Scene ID drift in analysis for {scene.scene_id}")
-            analyses.append(analysis)
-            previous = analysis
+            for entry in results:
+                if entry.cache_hit:
+                    cache_hits += 1
+                analyses.append(entry.analysis)
+            # The next batch is told about the last scene of this one.
+            previous_summaries = [previous_summary(results[-1].analysis)] if results else []
             if on_progress is not None:
-                # Reported after a scene is fully done, cache hit or not, so the
-                # count only advances on work that actually completed.
+                # Reported after a batch is fully done, so the count only
+                # advances on work that actually completed.
                 on_progress(
                     WorkProgress(
                         done=len(analyses),
@@ -165,6 +262,12 @@ def run_visual_analysis(
                         label=f"scene {len(analyses)}/{len(scenes)}",
                     )
                 )
+    except Exception as exc:
+        if owns_completion:
+            # The workers raise; the failure is recorded here, from the
+            # thread that owns the connection.
+            ctx.manager.fail(ctx.job_id, STAGE_NAME, str(exc))
+        raise
     finally:
         active.unload()
 
