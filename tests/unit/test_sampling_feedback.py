@@ -11,12 +11,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from movie_review.domain import Scene, SceneAnalysis
 from movie_review.media.feedback import (
     FeedbackConfig,
-    SamplingDecision,
     decide_feedback,
 )
-from movie_review.domain import Scene, SceneAnalysis
 
 
 def _scene(scene_id: str = "scene_000001", duration: float = 20.0) -> Scene:

@@ -400,6 +400,35 @@ def run_pipeline(
         ctx.conn.close()
 
 
+def _mix_music(ctx: StageContext, narration_wav: Path) -> Path:
+    """Mix the music bed under the narration, when one is configured.
+
+    The mix is written beside the narration and the mix is what the render
+    muxes. A configuration with no track, or a track that is not there, means
+    no bed -- the music is optional, so a missing file is not a failure.
+    """
+    music = ctx.settings.music
+    if not music.enabled or not music.track:
+        return narration_wav
+
+    track = Path(music.track)
+    if not track.is_absolute():
+        track = Path(ctx.settings.paths.data_dir) / track
+    if not track.is_file():
+        return narration_wav
+
+    from movie_review.rendering.audio import mix
+
+    dest = narration_wav.with_name("narration-with-music.wav")
+    try:
+        mix(narration_wav, dest, music_path=track, music_gain=music.gain)
+    except Exception:
+        # A music bed that cannot be mixed is not worth failing the render
+        # over: the narration is the product.
+        return narration_wav
+    return dest
+
+
 def _regroup_frames(added: list[Any], frames: dict[str, list[Path]]) -> dict[str, list[Path]]:
     """The frame mapping with the feedback's extra frames folded in."""
     from movie_review.media.frames import Frame
@@ -1042,6 +1071,11 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         source_movie = ctx.movie_path
         narration_wav = Path(ctx.jobs_dir) / ctx.job_id / "tts" / "narration.wav"
         subtitles_srt = Path(ctx.jobs_dir) / ctx.job_id / "render" / "review.srt"
+
+        # The music bed is mixed under the narration before the render, so the
+        # video carries the mix. The mixer implements the ducking envelope
+        # README section 43 asks for, and nothing called it.
+        narration_wav = _mix_music(ctx, narration_wav)
 
         return render_job(
             manifest,

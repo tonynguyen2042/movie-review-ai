@@ -1632,10 +1632,10 @@ tests/unit/test_music_mixing.py   (new)
 
 **Acceptance criteria**
 
-- [ ] a configured music track is mixed under the narration
-- [ ] the narration stays intelligible while the music plays
-- [ ] no music track means the current behaviour
-- [ ] `pytest -q` passes
+- [x] a configured music track is mixed under the narration
+- [x] the narration stays intelligible while the music plays
+- [x] no music track means the current behaviour
+- [x] `pytest -q` passes
 
 ---
 

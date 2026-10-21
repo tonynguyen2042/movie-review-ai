@@ -44,6 +44,13 @@ paths:
   data_dir: data
   output_dir: data/output
 
+# The optional music bed (README section 43). Local assets only, off by
+# default. Set `track` to a local file to enable it.
+music:
+  enabled: false
+  track: null
+  gain: 1.0
+
 privacy:
   cloud_ai: false
   telemetry: false
