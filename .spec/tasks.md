@@ -876,9 +876,9 @@ tests/unit/test_manifest.py
 
 **Acceptance criteria**
 
-- [ ] a manifest failure records `failed_stage="render-manifest"`
-- [ ] `resume` after a manifest failure re-runs `render-manifest`
-- [ ] `pytest -q` passes
+- [x] a manifest failure records `failed_stage="render-manifest"`
+- [x] `resume` after a manifest failure re-runs `render-manifest`
+- [x] `pytest -q` passes
 
 ---
 

@@ -33,6 +33,7 @@ from movie_review.domain import (
     Scene,
 )
 from movie_review.jobs.manager import JobManager
+from movie_review.jobs.recovery import recovery_plan
 from movie_review.pipeline.context import StageContext
 from movie_review.pipeline.orchestrator import (
     PipelineContext,
@@ -356,3 +357,65 @@ def test_the_word_target_follows_the_configured_wpm() -> None:
         }
     )
     assert review_target_words(shorter) < default_words
+
+
+# ---------------------------------------------------------------------------
+# A manifest failure has to name the stage that failed
+# ---------------------------------------------------------------------------
+
+
+def test_a_manifest_failure_records_the_render_manifest_stage(tmp_path: Path) -> None:
+    """Regression: the failure was recorded as "render".
+
+    A resume maps a failed job back to the stage named in `failed_stage`.
+    Recording "render" made the resume re-run the render stage, which then
+    failed on a manifest file that had never been written -- so the job could
+    not be recovered through the documented path.
+    """
+    harness = _harness(tmp_path)
+    with pytest.raises(ManifestError):
+        assemble_manifest(
+            [_paragraph("p1")],
+            {"p1": _clip("p1", 0.0, 5.0)},
+            {"p1": 10.0},
+            100.0,
+            harness.ctx,
+            max_total_seconds=4.0,
+        )
+    job = harness.ctx.manager.get("job_1")
+    assert job.status is JobStatus.FAILED
+    assert job.failed_stage == "render-manifest"
+
+
+def test_resume_after_a_manifest_failure_reruns_the_manifest_stage(tmp_path: Path) -> None:
+    """The recorded stage has to be one the pipeline can actually resume."""
+    harness = _harness(tmp_path)
+    with pytest.raises(ManifestError):
+        assemble_manifest(
+            [_paragraph("p1")],
+            {"p1": _clip("p1", 0.0, 5.0)},
+            {"p1": 10.0},
+            100.0,
+            harness.ctx,
+            max_total_seconds=4.0,
+        )
+    plan = recovery_plan(harness.ctx.manager, "job_1")
+    assert plan.resume_stage == "render-manifest"
+
+    from movie_review.pipeline.orchestrator import STAGE_SEQUENCE
+
+    order = [name for name, _ in STAGE_SEQUENCE]
+    assert plan.resume_stage in order
+
+
+def test_the_manifest_still_lands_in_the_render_directory(tmp_path: Path) -> None:
+    """The stage name and the directory it writes into are different things."""
+    harness = _harness(tmp_path)
+    result = assemble_manifest(
+        [_paragraph("p1")],
+        {"p1": _clip("p1", 0.0, 5.0)},
+        {"p1": 10.0},
+        100.0,
+        harness.ctx,
+    )
+    assert result.manifest_path.parent.name == "render"
