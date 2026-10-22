@@ -22,6 +22,7 @@ from movie_review.domain import JobStatus, ReviewScript
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.recovery import recovery_plan
 from movie_review.pipeline.context import StageContext
+from movie_review.pipeline.model_gate import ModelCall, ModelStageDeclined, model_call_for
 from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.pipeline.retry import RetryPolicy, run_with_retry
 from movie_review.utils import logging as ulog
@@ -350,6 +351,41 @@ def _build_context(
     )
 
 
+def _confirm_model_stage(
+    stage_name: str,
+    ctx: PipelineContext,
+    on_model_stage: Callable[[ModelCall], bool] | None,
+) -> None:
+    """Ask before a stage that needs a model, and stop the run if declined.
+
+    Runs before :func:`run_stage` so a declined stage leaves no trace: no
+    progress line is printed for it, no retry is recorded, and the job stays
+    in the state the previous stage left it in -- which is what makes the
+    ``resume`` after a model swap pick up at exactly this stage.
+    """
+    if on_model_stage is None:
+        return
+    call = model_call_for(
+        stage_name,
+        ctx.settings,
+        source_language=ctx.source_language,
+        target_language=ctx.target_language,
+    )
+    if call is None:
+        return
+    if on_model_stage(call):
+        return
+    with ulog.logging_context(job_id=ctx.job_id, stage=stage_name):
+        ulog.log_event(
+            _logger,
+            event="model_gate.declined",
+            status="ok",
+            slot=call.slot,
+            model=call.model,
+        )
+    raise ModelStageDeclined(stage_name)
+
+
 def run_pipeline(
     job_id: str,
     movie_path: str | Path,
@@ -362,6 +398,7 @@ def run_pipeline(
     source_language: str | None = None,
     target_language: str | None = None,
     generation: GenerationSettings | None = None,
+    on_model_stage: Callable[[ModelCall], bool] | None = None,
 ) -> list[StageResult]:
     """Execute pipeline stages in sequence with optional start/end bounds.
 
@@ -375,6 +412,13 @@ def run_pipeline(
     ``profile`` selects a ``models.yaml`` profile for this run only.
     ``source_language`` and ``target_language`` are described in
     :func:`_build_context`.
+
+    ``on_model_stage`` is asked once before each stage that needs a model,
+    with the model that stage will use. Returning False stops the run before
+    that stage starts and raises :class:`ModelStageDeclined`. ``None`` -- the
+    default -- runs without pausing, which is what every non-interactive
+    caller wants: a test, the dashboard and the desktop app cannot answer a
+    prompt, and a pipeline that blocked on one would hang rather than fail.
     """
     # Pass profile by keyword: it is a trailing option, and call sites that
     # patch this helper should not have to track its position.
@@ -406,6 +450,7 @@ def run_pipeline(
             stage_fn = _get_stage_function(stage_name)
             if stage_fn is None:
                 continue
+            _confirm_model_stage(stage_name, ctx, on_model_stage)
             result = run_stage(stage_name, stage_fn, ctx, on_progress=on_progress, on_work=on_work)
             results.append(result)
             if not result.success:
@@ -1208,13 +1253,15 @@ def resume_job(
     source_language: str | None = None,
     target_language: str | None = None,
     generation: GenerationSettings | None = None,
+    on_model_stage: Callable[[ModelCall], bool] | None = None,
 ) -> list[StageResult]:
     """Resume a job from its recovery point.
 
     ``on_progress`` is forwarded to :func:`run_pipeline`; see there.
     ``on_work`` likewise receives in-stage steps.
     ``profile`` selects a ``models.yaml`` profile for this resume only, and the
-    languages behave as they do for a fresh run.
+    languages behave as they do for a fresh run. ``on_model_stage`` is the
+    pause before a stage that needs a model, also as described there.
     """
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap
@@ -1263,6 +1310,7 @@ def resume_job(
         source_language=source_language,
         target_language=target_language,
         generation=generation,
+        on_model_stage=on_model_stage,
     )
 
 

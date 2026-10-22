@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, NoReturn, TextIO
 
 import typer
 
@@ -31,6 +31,7 @@ from movie_review.config.settings import (
 from movie_review.domain import Job, JobStatus
 from movie_review.jobs.manager import JobManager
 from movie_review.jobs.state_machine import JobNotFoundError
+from movie_review.pipeline.model_gate import ModelCall, ModelStageDeclined, render_model_call
 from movie_review.pipeline.orchestrator import (
     STAGE_SEQUENCE,
     ResumeError,
@@ -104,6 +105,70 @@ def _progress_enabled() -> bool:
     if override in _PROGRESS_FALSE:
         return False
     return sys.stderr.isatty()
+
+
+def _auto_accept(flag: bool | None, settings: AppSettings) -> bool:
+    """Whether a stage that needs a model may start without asking.
+
+    ``None`` means the flag was not given, so the configuration decides. That
+    is the difference between ``--auto-accept`` (this run), ``--no-auto-accept``
+    (this run, against a configured default of true) and saying nothing at all.
+    """
+    return settings.interaction.auto_accept if flag is None else flag
+
+
+def _ask_before_model(
+    call: ModelCall,
+    *,
+    echo: Callable[..., None] = typer.echo,
+    stdin: TextIO | None = None,
+) -> bool:
+    """Show the model the next stage needs, and wait for a human.
+
+    The block goes to stderr with the rest of the progress output, so stdout
+    stays machine-readable. The answer is read from ``stdin`` explicitly
+    rather than through ``input()`` for the same reason: ``input()`` writes
+    its prompt to stdout.
+
+    A read that returns nothing means the stream ended with nobody at the
+    keyboard. That is not consent -- it is the GUI that spawned the CLI with
+    piped stdio -- so the run stops and says how to run unattended instead of
+    treating silence as a yes.
+    """
+    stream = stdin if stdin is not None else sys.stdin
+    echo(render_model_call(call), err=True)
+    echo("   Continue? [Y/n] ", err=True, nl=False)
+    answer = stream.readline()
+    if answer == "":
+        echo("", err=True)
+        echo("   No input available. Re-run with --auto-accept to run unattended.", err=True)
+        return False
+    return answer.strip().lower() not in {"n", "no", "q", "quit"}
+
+
+def _model_stage_gate(auto_accept: bool) -> Callable[[ModelCall], bool] | None:
+    """The pause before a model stage, or None when the run is unattended.
+
+    The pipeline takes ``None`` to mean "do not ask", which keeps every
+    non-CLI caller -- tests, the dashboard, the desktop app -- from blocking
+    on a prompt nobody can answer.
+    """
+    return None if auto_accept else _ask_before_model
+
+
+def _stop_for_declined(exc: ModelStageDeclined, job_id: str) -> NoReturn:
+    """Report a declined model stage, and exit non-zero.
+
+    The run did not finish, so the command does not report success. The job
+    is where the previous stage left it, which is what makes the printed
+    ``resume`` the whole recovery.
+    """
+    typer.echo(str(exc), err=True)
+    typer.echo(
+        f"Job state is preserved. Run 'movie-review resume {job_id}' when the model is ready.",
+        err=True,
+    )
+    raise typer.Exit(code=1) from None
 
 
 def _format_bar(fraction: float, width: int = _PROGRESS_BAR_WIDTH) -> str:
@@ -507,6 +572,16 @@ def process(
             help="Keep the sampled frames instead of deleting them after the analysis.",
         ),
     ] = False,
+    auto_accept: Annotated[
+        bool | None,
+        typer.Option(
+            "--auto-accept/--no-auto-accept",
+            help=(
+                "Start a stage that needs a model without waiting for confirmation. "
+                "Defaults to interaction.auto_accept in the configuration."
+            ),
+        ),
+    ] = None,
     no_run: Annotated[
         bool, typer.Option("--no-run", help="Create job only, do not run pipeline.")
     ] = False,
@@ -610,7 +685,10 @@ def process(
             source_language=source_language,
             target_language=narration_language,
             generation=generation,
+            on_model_stage=_model_stage_gate(_auto_accept(auto_accept, effective)),
         )
+    except ModelStageDeclined as exc:
+        _stop_for_declined(exc, job.job_id)
     except KeyboardInterrupt:
         typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)
         raise typer.Exit(code=130) from None
@@ -716,6 +794,16 @@ def resume(
     target_language: Annotated[
         str | None, typer.Option("--target-language", help="Narration language.")
     ] = None,
+    auto_accept: Annotated[
+        bool | None,
+        typer.Option(
+            "--auto-accept/--no-auto-accept",
+            help=(
+                "Start a stage that needs a model without waiting for confirmation. "
+                "Defaults to interaction.auto_accept in the configuration."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Resume an interrupted job from its last checkpoint."""
     selected_profile = _resolve_profile(profile, quality)
@@ -724,7 +812,8 @@ def resume(
     source_language, narration_language = _resolve_languages(language, target_language)
     # Same reasoning as process(): a resume that quietly falls back to an
     # unusable profile fails at the same stage the user is trying to escape.
-    _warn_unusable_backends(load_settings(profile=selected_profile))
+    effective = load_settings(profile=selected_profile)
+    _warn_unusable_backends(effective)
     with _session(db_path) as (manager, conn):
         with conn:
             _load_job(manager, job_id)
@@ -738,7 +827,10 @@ def resume(
             profile=selected_profile,
             source_language=source_language,
             target_language=narration_language,
+            on_model_stage=_model_stage_gate(_auto_accept(auto_accept, effective)),
         )
+    except ModelStageDeclined as exc:
+        _stop_for_declined(exc, job_id)
     except KeyboardInterrupt:
         typer.echo("Interrupted. Job state is preserved; use 'resume' to continue.", err=True)
         raise typer.Exit(code=130) from None
@@ -769,6 +861,16 @@ def retry(
     target_language: Annotated[
         str | None, typer.Option("--target-language", help="Narration language.")
     ] = None,
+    auto_accept: Annotated[
+        bool | None,
+        typer.Option(
+            "--auto-accept/--no-auto-accept",
+            help=(
+                "Start a stage that needs a model without waiting for confirmation. "
+                "Defaults to interaction.auto_accept in the configuration."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Retry a failed job or specific stage."""
     from movie_review.jobs.recovery import recovery_plan
@@ -778,7 +880,8 @@ def retry(
     # of once per attempt.
     selected_profile = _resolve_profile(profile, quality)
     source_language, narration_language = _resolve_languages(language, target_language)
-    _warn_unusable_backends(load_settings(profile=selected_profile))
+    effective = load_settings(profile=selected_profile)
+    _warn_unusable_backends(effective)
     with _session(db_path) as (manager, conn):
         with conn:
             job = _load_job(manager, job_id)
@@ -813,6 +916,7 @@ def retry(
             profile=selected_profile,
             source_language=source_language,
             target_language=narration_language,
+            on_model_stage=_model_stage_gate(_auto_accept(auto_accept, effective)),
         )
         if not results or not results[0].success:
             raise RuntimeError(
@@ -821,8 +925,18 @@ def retry(
         return results[0]
 
     try:
-        run_with_retry(_run_stage, policy, stage=target_stage)
+        # A declined model stage is an answer, not a transient failure: asking
+        # the same question three times in a row would be the retry policy
+        # arguing with the operator.
+        run_with_retry(
+            _run_stage,
+            policy,
+            stage=target_stage,
+            should_retry=lambda exc: not isinstance(exc, ModelStageDeclined),
+        )
         typer.echo(f"Stage {target_stage} succeeded on retry")
+    except ModelStageDeclined as exc:
+        _stop_for_declined(exc, job_id)
     except KeyboardInterrupt:
         reporter.close()
         typer.echo("Interrupted.", err=True)
@@ -1110,6 +1224,16 @@ def analyze(
     db_path: DbOption = None,
     profile: ProfileOption = None,
     language: Annotated[str, typer.Option(help="Source language of the movie.")] = "en",
+    auto_accept: Annotated[
+        bool | None,
+        typer.Option(
+            "--auto-accept/--no-auto-accept",
+            help=(
+                "Start a stage that needs a model without waiting for confirmation. "
+                "Defaults to interaction.auto_accept in the configuration."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Analyze a movie up to the story, and print the result.
 
@@ -1121,6 +1245,7 @@ def analyze(
         raise typer.BadParameter(f"Input file not found: {movie}")
     selected_profile = _resolve_profile(profile, None)
     source_language, narration_language = _resolve_languages(language, None)
+    effective = load_settings(profile=selected_profile)
 
     manager, conn = _manager(db_path)
     with conn:
@@ -1134,12 +1259,14 @@ def analyze(
             profile=selected_profile,
             source_language=source_language,
             target_language=narration_language,
+            on_model_stage=_model_stage_gate(_auto_accept(auto_accept, effective)),
         )
+    except ModelStageDeclined as exc:
+        _stop_for_declined(exc, job.job_id)
     finally:
         conn.close()
 
-    settings = load_settings(profile=selected_profile)
-    document = _job_document(job.job_id, _jobs_dir(settings), "movie-analysis.json")
+    document = _job_document(job.job_id, _jobs_dir(effective), "movie-analysis.json")
     _print_json(document)
 
 

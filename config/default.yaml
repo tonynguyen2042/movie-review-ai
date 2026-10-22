@@ -49,6 +49,14 @@ music:
 privacy:
   cloud_ai: false
 
+interaction:
+  # Pause before every pipeline stage that needs a model, so a machine that
+  # cannot hold every model at once has time to swap the loaded one. The
+  # pause is per stage, not per model call. The CLI's --auto-accept overrides
+  # this for one run, and MOVIE_REVIEW_INTERACTION__AUTO_ACCEPT overrides it
+  # for every run.
+  auto_accept: false
+
 prompts:
   # The pinned version of every prompt that exists. A prompt that is not
   # listed here uses its newest version. The names below are the files in

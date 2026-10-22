@@ -161,6 +161,7 @@ export MOVIE_REVIEW_MODELS__PROFILE=quality
 | `privacy.cloud_ai` | `false` | Keep everything local. Leave this `false`. |
 | `pipeline.diarization` | `true` | Whether the speaker-attribution stage runs. |
 | `media.ffmpeg` / `media.ffprobe` | `ffmpeg` / `ffprobe` | Absolute paths if not on `PATH`. |
+| `interaction.auto_accept` | `false` | Start a stage that needs a model without waiting for confirmation. The default pauses before each one; see [Swapping models on one machine](#swapping-models-on-one-machine). |
 
 ### About `source_video` limits
 
@@ -183,6 +184,25 @@ Two things to get right:
 - **TTS format:** ask the server for `wav`. Duration is measured from the returned bytes, and `mp3` is rejected rather than guessed — a wrong duration would silently corrupt subtitle timing.
 
 The `remote` profile in `config/models.yaml` ships with placeholder hostnames (`gpu-box.local`). Edit it before use.
+
+### Swapping models on one machine
+
+A single machine cannot hold every model at once: whisper, the vision model, the reasoner and the TTS model compete for the same memory. When that is your setup, the CLI stops before every stage that needs a model and prints the model, its URL and its port:
+
+```text
+-- vision needs a model ----------------------------------------
+   model: Qwen3-VL (openai_compatible)
+   slot : vision
+   url  : http://192.168.1.144:8000/v1
+   port : 8000
+   Continue? [Y/n]
+```
+
+Load that model on the server, press Enter, and the stage starts. Typing `n` stops the run before the stage — nothing is lost, and `movie-review resume <job_id>` continues at the same stage once the model is loaded. The pause is per stage, not per call: a vision run makes one call per scene, and asking before each of them would be unusable.
+
+The pause is skipped for work that will not call a model: a translation stage when the narration is in the source language, and the critic when the profile does not enable it.
+
+Runs with nobody at the keyboard — CI, a script, the desktop app — pass `--auto-accept`, or set `interaction.auto_accept: true` in the configuration. The default is to ask, because a pipeline that assumes nobody is watching is a pipeline that hangs.
 
 ---
 
@@ -213,6 +233,7 @@ uv run movie-review process ./my-movie.mp4 \
 | `--stage-from` | — | Start from this stage. See [Pipeline stages](#6-pipeline-stages). |
 | `--stage-to` | — | Stop after this stage. |
 | `--no-run` | off | Create the job record only, do not run the pipeline. |
+| `--auto-accept` | from config | Start a stage that needs a model without waiting for confirmation. `--no-auto-accept` asks even when the configuration says otherwise. |
 
 `--verbose` goes **before** the subcommand: `movie-review --verbose process ...`.
 
