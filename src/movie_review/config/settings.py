@@ -322,6 +322,24 @@ class PrivacySettings(BaseModel):
     cloud_ai: bool = False
 
 
+class InteractionSettings(BaseModel):
+    """How the pipeline talks to the operator while it runs.
+
+    ``auto_accept`` decides whether a stage that needs a model starts on its
+    own or waits for a human. One machine cannot hold every model at once:
+    whisper, the VLM, the reasoner and the TTS model compete for the same
+    unified memory, so a run that swaps them has to stop long enough for the
+    operator to load the next one. The pause is per stage, not per call -- a
+    vision run makes one call per scene, and a prompt before each of them
+    would be unusable.
+
+    The default is ``False``: an unattended run has to say that it is
+    unattended, rather than the pipeline assuming it.
+    """
+
+    auto_accept: bool = False
+
+
 class PromptsSettings(BaseModel):
     """Prompt version registry; prompt content lives in ``config/prompts/``."""
 
@@ -471,6 +489,7 @@ class AppSettings(BaseSettings):
     paths: PathsSettings = PathsSettings()
     music: MusicSettings = MusicSettings()
     privacy: PrivacySettings = PrivacySettings()
+    interaction: InteractionSettings = InteractionSettings()
     prompts: PromptsSettings
     logging: LoggingSettings = LoggingSettings()
     media: MediaSettings = MediaSettings()
