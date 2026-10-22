@@ -578,3 +578,38 @@ def test_factories_pass_api_key_from_env(monkeypatch) -> None:
     adapter = build_vlm_adapter(spec)
     assert isinstance(adapter, OpenAICompatVLMAdapter)
     assert adapter._api_key == "abc123"
+
+
+def test_a_remote_slot_uses_the_retry_budget_it_was_given(tmp_path: Path) -> None:
+    """A 500 costs one request per attempt, and the profile decides how many."""
+    from email.message import Message
+    from urllib.error import HTTPError
+
+    from movie_review.remote import http
+
+    calls: list[int] = []
+
+    def failing(request: Any, timeout: float) -> Any:
+        calls.append(1)
+        raise HTTPError(
+            request.full_url,
+            500,
+            "boom",
+            Message(),
+            io.BytesIO(b'{"message": "the engine died while generating"}'),
+        )
+
+    adapter = OpenAICompatVLMAdapter(
+        "Qwen3-VL",
+        "http://gpu:8000/v1",
+        retry=http.TransportRetry(attempts=2, backoff_seconds=0.0),
+        transport=failing,
+    )
+
+    with pytest.raises(VLMUnavailableError, match="engine died"):
+        adapter.analyze(
+            AnalysisInput(scene_id="s1", frames=[_frame(tmp_path)]),
+            "describe the scene",
+        )
+
+    assert len(calls) == 2

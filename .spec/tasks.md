@@ -2445,6 +2445,90 @@ tests/unit/test_vision_parallel.py
 
 ---
 
+## T177 - Configurable transport retry for a model server that restarts
+
+**Objective**
+
+Make the retry schedule a slot's own configuration, keep the server's error body
+in the message, and let a 5xx outlast a vLLM engine reload instead of killing a
+stage that has been running for twenty minutes.
+
+**Depends on**: T136, T137.
+
+**The defect**
+
+A remote run (`job_20261022_014`, `--profile remote`) died at `vision` after
+21m26s with
+
+```text
+Cannot analyze scene_000061: HTTP 500 from http://192.168.1.144:8000/v1/chat/completions
+```
+
+Three separate faults hid behind that line.
+
+The schedule was too short to matter. `remote/http.py` retried a 5xx -- and a
+429, a timeout, a dropped connection -- three attempts in total with a 0.5 s
+base of exponential backoff. Measured against a host that answers 500 every
+time, the whole budget came to 1.31 s. A vLLM engine that has just crashed and
+is reloading answers 500 for something closer to a minute, so every attempt
+landed inside the outage and the retry existed but never helped.
+
+A 5xx was reported as the wrong kind of failure. `_Transient` carried a
+`RemoteProtocolError`, which the adapters map to "the model answered badly" --
+a permanent error. The stage-level policy added in T137 only retries errors
+classified as transient, so a 5xx went straight past it and failed the stage at
+the first scene that saw one. The pooled path was worse in the other direction:
+it treated every non-2xx status as retryable, so a 404 from a wrong
+`endpoint_path` was attempted three times before being reported.
+
+The server's own explanation was discarded. Both paths read the response body
+in full and then built `HTTP {status} from {url}` from the status alone, so the
+one sentence that says whether the engine died or the context was too long
+never reached the operator -- which is why job_20261022_014 could not be
+diagnosed after the fact.
+
+**Files**
+
+```text
+src/movie_review/remote/http.py
+src/movie_review/config/settings.py
+src/movie_review/asr/openai_compat.py
+src/movie_review/asr/factory.py
+src/movie_review/reasoning/openai_compat.py
+src/movie_review/reasoning/factory.py
+src/movie_review/tts/openai_compat.py
+src/movie_review/tts/factory.py
+src/movie_review/vision/openai_compat.py
+src/movie_review/vision/factory.py
+config/models.yaml
+docs/model-selection.md
+docs/troubleshooting.md
+tests/unit/test_remote_http.py
+tests/unit/test_config.py
+tests/unit/test_remote_adapters.py
+```
+
+**Acceptance criteria**
+
+- [x] attempts, backoff base and the backoff ceiling are per-slot configuration
+  (`attempts`, `backoff_seconds`, `max_backoff_seconds`), not literals in code
+- [x] a retryable status is retried and, once the budget is spent, reported as
+  `RemoteUnavailableError` so the stage-level policy can retry the stage
+- [x] a 4xx is reported after a single attempt on both the pooled and the
+  injected-transport paths
+- [x] the message quotes the server's error body, on one line and bounded to
+  `ERROR_EXCERPT_CHARS`, and never quotes headers
+- [x] the shipped `remote` profile gives vision and reasoning four attempts,
+  waiting up to 5 s / 10 s / 20 s between them (`max_backoff_seconds: 30`)
+- [x] a zero base keeps retrying without sleeping, so tests do not wait
+- [x] the T177 tests pass (`test_remote_http`, `test_config`,
+  `test_remote_adapters`: 88 passed)
+- [ ] `pytest -q` passes -- 1628 passed, 1 failed: `test_proxy_settings_defaults`
+  is red only because `config/default.yaml` carries an uncommitted local change
+  (`media.proxy` 854x480) that is not part of this task
+
+---
+
 ## T178 - Proxy scaling must land on even dimensions
 
 **Objective**

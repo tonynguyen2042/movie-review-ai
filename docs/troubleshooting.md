@@ -205,6 +205,33 @@ python scripts/benchmark_models.py --slot vision --movie ./reference.mkv
 
 ---
 
+## The remote server answers 500
+
+```text
+RemoteUnavailableError: HTTP 500 from http://192.168.1.144:8000/v1/chat/completions:
+{"object": "error", "message": "..."}
+```
+
+The request was well formed and the host failed to serve it. A 500, a 503 and
+a 429 are retried, so a message that reaches the operator means the slot spent
+its whole budget first — `attempts`, `backoff_seconds` and
+`max_backoff_seconds` per slot in `config/models.yaml`.
+
+The body after the URL is the server's own explanation, quoted up to 300
+characters. It is the first thing to read:
+
+- an engine or CUDA failure: the server restarted its model; give the slot a
+  longer `backoff_seconds` and more `attempts` so it can wait the restart out
+- a context-length error: the request is too large for the model; lower
+  `max_tokens` or sample fewer frames per scene
+- a 4xx never reaches this message: it is the request's own fault and is not
+  retried
+
+**What to do:** read the quoted body, fix the cause, then re-run. Scenes that
+were already analysed are cached, so the re-run does not pay for them again.
+
+---
+
 ## The remote server is not answering
 
 ```text

@@ -25,6 +25,7 @@ def build_vlm_adapter(spec: ModelSpec, *, max_tokens: int | None = None) -> VLMP
             spec.base_url,
             api_key=spec.resolved_api_key(),
             timeout_seconds=spec.timeout_seconds,
+            retry=spec.retry,
             max_tokens=max_tokens or spec.max_tokens or DEFAULT_MAX_TOKENS,
         )
     return QwenVLAdapter(spec.model)

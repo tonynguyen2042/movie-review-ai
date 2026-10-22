@@ -83,6 +83,7 @@ class OpenAICompatASRAdapter(ASRPort):
         *,
         api_key: str | None = None,
         timeout_seconds: float = http.DEFAULT_TIMEOUT_SECONDS,
+        retry: http.TransportRetry = http.DEFAULT_RETRY,
         transport: http.RawTransport | None = None,
         endpoint_path: str | None = None,
         segment_seconds: float = DEFAULT_SEGMENT_SECONDS,
@@ -93,6 +94,7 @@ class OpenAICompatASRAdapter(ASRPort):
         self._base_url = base_url
         self._api_key = api_key
         self._timeout = timeout_seconds
+        self._retry = retry
         self._transport = transport
         self._endpoint_path = endpoint_path
         self._segment_seconds = segment_seconds
@@ -148,6 +150,7 @@ class OpenAICompatASRAdapter(ASRPort):
                         api_key=self._api_key,
                         timeout=self._timeout,
                         transport=self._transport,
+                        retry=self._retry,
                     )
                     document = http.decode_json(body, url)
                 except http.RemoteUnavailableError as exc:

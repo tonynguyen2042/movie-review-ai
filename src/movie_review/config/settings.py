@@ -26,6 +26,13 @@ from pydantic_settings import (
     YamlConfigSettingsSource,
 )
 
+from movie_review.remote.http import (
+    DEFAULT_ATTEMPTS,
+    DEFAULT_BACKOFF_SECONDS,
+    DEFAULT_MAX_BACKOFF_SECONDS,
+    TransportRetry,
+)
+
 CONFIG_ENV_VAR = "MOVIE_REVIEW_CONFIG"
 ENV_PREFIX = "MOVIE_REVIEW_"
 
@@ -100,6 +107,18 @@ class ModelSpec(BaseModel):
     endpoint_path: str | None = None
     api_key_env: str | None = None
     timeout_seconds: float = Field(default=120.0, gt=0.0)
+    #: How many attempts one HTTP request gets before the adapter hears about
+    #: a retryable failure -- a 429, a 5xx, a timeout, a dropped connection.
+    #: Total attempts, not retries: 4 means the first try plus three more.
+    #: A host that needs a minute to reload a crashed engine wants both more
+    #: attempts and a longer wait than the transport defaults.
+    attempts: int = Field(default=DEFAULT_ATTEMPTS, ge=1)
+    #: Base of the exponential backoff between those attempts, in seconds.
+    #: Zero means "retry immediately", not "do not retry".
+    backoff_seconds: float = Field(default=DEFAULT_BACKOFF_SECONDS, ge=0.0)
+    #: Ceiling for a single backoff sleep; the schedule grows to this and
+    #: stops, so a long outage cannot turn into an unbounded wait.
+    max_backoff_seconds: float = Field(default=DEFAULT_MAX_BACKOFF_SECONDS, gt=0.0)
     #: Completion-token budget for remote chat models. Left unset, each adapter
     #: applies its own default. Set it when a reply gets cut off -- a truncated
     #: reply is indistinguishable from prose once the closing brace is missing,
@@ -118,6 +137,15 @@ class ModelSpec(BaseModel):
     def is_remote(self) -> bool:
         """True when this model is served over HTTP by a remote host."""
         return self.backend == "openai_compatible"
+
+    @property
+    def retry(self) -> TransportRetry:
+        """The transport retry schedule this slot asks for."""
+        return TransportRetry(
+            attempts=self.attempts,
+            backoff_seconds=self.backoff_seconds,
+            max_backoff_seconds=self.max_backoff_seconds,
+        )
 
     def resolved_api_key(self) -> str | None:
         """Read the API key from the environment variable named by ``api_key_env``.

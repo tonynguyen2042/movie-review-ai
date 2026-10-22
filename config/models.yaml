@@ -94,6 +94,15 @@ profiles:
   # Credentials: put the NAME of an environment variable in `api_key_env`, never
   # the secret itself, so tokens stay out of version control. Leave it unset for
   # servers needing no auth (a LAN vLLM usually needs none).
+  #
+  # Retries: `attempts` is the number of attempts for ONE request, so 4 means
+  # the first try plus three retries. `backoff_seconds` is the base of an
+  # exponential, jittered wait between them and `max_backoff_seconds` caps a
+  # single sleep. Only 429s, 5xx, timeouts and dropped connections are retried:
+  # a 4xx is the request's own fault and is reported on the first answer. A 5xx
+  # or a rate limit that outlives the schedule is reported as "unavailable", so
+  # the stage-level retry gets a second, cheaper chance (the per-scene cache
+  # means a retried stage does not redo the scenes it already analysed).
   remote:
     asr:
       model: whisper-large-v3-turbo
@@ -112,12 +121,25 @@ profiles:
       base_url: http://192.168.1.144:8000/v1
       # api_key_env: MOVIE_REVIEW_LLM_TOKEN
       timeout_seconds: 300
+      # A vLLM engine that answers 500 after an OOM or a restart needs longer
+      # than the transport default (3 attempts, 0.5 s apart, ~1.5 s in total)
+      # to come back. Four attempts at 5 s, 10 s and 20 s wait about 35 s,
+      # which is roughly how long the engine takes to reload, and costs one
+      # scene instead of the whole stage when the host really is broken.
+      attempts: 4
+      backoff_seconds: 5
+      max_backoff_seconds: 30
     reasoning:
       model: Qwen3.5-27B
       backend: openai_compatible
       base_url: http://192.168.1.144:8000/v1
       # api_key_env: MOVIE_REVIEW_LLM_TOKEN
       timeout_seconds: 120
+      # Same host, same restart window: a reasoning stage that gives up after
+      # 1.5 s throws away every event it has already extracted.
+      attempts: 4
+      backoff_seconds: 5
+      max_backoff_seconds: 30
     critic:
       model: Qwen3.5-27B
       backend: openai_compatible
