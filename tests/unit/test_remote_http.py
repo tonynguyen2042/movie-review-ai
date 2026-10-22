@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from email.message import Message
 from http.client import CannotSendRequest
@@ -335,7 +336,7 @@ class _FakeConnection:
 
 
 @pytest.fixture()
-def fake_connections(monkeypatch: pytest.MonkeyPatch) -> list[_FakeConnection]:
+def fake_connections(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[_FakeConnection]]:
     """Route ``http.HTTPConnection`` to the fake and start from an empty pool."""
     http._POOL.close()
     _FakeConnection.created = []
