@@ -2383,3 +2383,64 @@ tests/unit/test_orchestrator.py
 - [x] `pytest -q` passes
 
 ---
+
+## T176 - Concurrent model calls share one HTTP connection
+
+**Objective**
+
+Give every concurrent model call its own pooled connection, and make a stage
+that refuses a failed job report the stage and the error the job recorded.
+
+**Depends on**: T136, T138.
+
+**The defect**
+
+`remote/http.py` kept one `HTTPConnection` per host in a process-wide `_Pool`,
+on the assumption -- stated in a comment -- that the pipeline was sequential
+and that the parallel stages used one pool per worker. They do not: the vision
+stage analyses eight scenes per batch through a `ThreadPoolExecutor` and every
+thread goes through the same `_POOL`. Two threads that send at once drive one
+`HTTPConnection` into its "request sent" state, and the second raises
+`CannotSendRequest('Request-sent')`, which the pool reports as
+`cannot reach <url>: Request-sent` -- a client-side state error dressed as a
+network failure. A remote run against a healthy vLLM server therefore died at
+`vision` with a message that pointed at the wrong machine.
+
+The stage then made that unreadable: thirteen stages refused a failed job with
+`Job <id> failed; resume arrives in T085`, a task number where the recorded
+`failed_stage` and `error` belong, so the CLI printed the placeholder while
+the cause sat unused in the job row.
+
+**Files**
+
+```text
+src/movie_review/remote/http.py
+src/movie_review/jobs/failure.py   (new)
+src/movie_review/asr/transcript.py
+src/movie_review/knowledge/analysis.py
+src/movie_review/media/detection.py
+src/movie_review/media/ingest.py
+src/movie_review/pipeline/diarization.py
+src/movie_review/pipeline/verify.py
+src/movie_review/quality/gates.py
+src/movie_review/rendering/manifest.py
+src/movie_review/rendering/renderer.py
+src/movie_review/review/writer.py
+src/movie_review/story/events.py
+src/movie_review/tts/reconcile.py
+src/movie_review/vision/analysis.py
+docs/troubleshooting.md
+tests/unit/test_remote_http.py
+tests/unit/test_job_failure.py   (new)
+tests/unit/test_vision_parallel.py
+```
+
+**Acceptance criteria**
+
+- [x] concurrent model calls never share a connection
+- [x] a sequential run still reuses an idle connection
+- [x] a broken connection is closed rather than returned to the idle list
+- [x] a stage that refuses a failed job names the stage and repeats its error
+- [x] `pytest -q` passes
+
+---

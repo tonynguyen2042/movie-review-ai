@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T20:53:33.703059+00:00",
+  "updated_at": "2026-10-22T18:13:03.675750+00:00",
   "tasks": {
     "T001": {
       "title": "Bootstrap Python Project",
@@ -2015,6 +2015,22 @@
       "review": "approved",
       "completed_at": "2026-10-21T20:27:22.876553+00:00",
       "updated_at": "2026-10-21T20:27:22.876553+00:00"
+    },
+    "T176": {
+      "title": "concurrent model calls share one HTTP connection",
+      "type": "fix",
+      "branch": "T176-thread-safe-http-pool",
+      "status": "done",
+      "depends_on": [
+        "T136",
+        "T138"
+      ],
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-22T18:13:03.675750+00:00",
+      "updated_at": "2026-10-22T18:13:03.675750+00:00"
     }
   }
 }
