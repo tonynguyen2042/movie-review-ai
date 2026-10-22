@@ -2031,6 +2031,23 @@
       "review": "approved",
       "completed_at": "2026-10-22T18:13:03.675750+00:00",
       "updated_at": "2026-10-22T18:13:03.675750+00:00"
+    },
+    "T177": {
+      "title": "configurable transport retry for a model server that restarts",
+      "type": "fix",
+      "branch": "T177-configurable-transport-retry",
+      "status": "done",
+      "depends_on": [
+        "T136",
+        "T137"
+      ],
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-22T19:05:00+00:00",
+      "updated_at": "2026-10-22T19:05:00+00:00",
+      "note": "pytest -q: 1628 passed, 1 failed (test_proxy_settings_defaults); the failure is an uncommitted local change to config/default.yaml (media.proxy 854x480) outside this task"
     }
   }
 }
