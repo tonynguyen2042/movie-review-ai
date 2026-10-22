@@ -569,9 +569,34 @@ def load_settings(
             )
 
     settings: AppSettings = _Configured()  # type: ignore[call-arg]  # sources supply models/prompts
+    settings = _with_privacy_policy(settings)
     if generation is not None:
         settings = _with_generation(settings, generation)
     return settings
+
+
+def _with_privacy_policy(settings: AppSettings) -> AppSettings:
+    """Record the privacy policy on every model slot, whatever set it.
+
+    The policy travels on the model spec rather than as a separate argument
+    to the adapter factories: the spec is the configured model, and a
+    factory that only has the spec still knows the rule it has to obey.
+
+    The YAML source applies the policy when it builds the profile -- but
+    the YAML source only sees the YAML. An environment override of
+    ``privacy.cloud_ai`` therefore never reached the slots: the switch read
+    ``true`` while every model was still marked local, and the remote
+    models were refused with a message that named a switch the operator
+    had already turned on.
+    """
+    cloud_ai = settings.privacy.cloud_ai
+    models = settings.models
+    updated: dict[str, Any] = {}
+    for name in ("asr", "vision", "reasoning", "critic", "tts"):
+        updated[name] = getattr(models, name).model_copy(update={"cloud_ai": cloud_ai})
+    if models.translation is not None:
+        updated["translation"] = models.translation.model_copy(update={"cloud_ai": cloud_ai})
+    return settings.model_copy(update={"models": models.model_copy(update=updated)})
 
 
 def _with_generation(settings: AppSettings, generation: GenerationSettings) -> AppSettings:
