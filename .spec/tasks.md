@@ -2528,3 +2528,57 @@ tests/unit/test_remote_adapters.py
   (`media.proxy` 854x480) that is not part of this task
 
 ---
+
+## T178 - Proxy scaling must land on even dimensions
+
+**Objective**
+
+Stop `libx264` from refusing the proxy when the configured box does not divide
+the source aspect ratio evenly.
+
+**Depends on**: T012.
+
+**The defect**
+
+`media/proxy.py` scaled with
+
+```text
+scale=w=854:h=480:force_original_aspect_ratio=decrease
+```
+
+`max_width`/`max_height` are a **box**, not a size: ffmpeg fits the source into
+it and rounds each side on its own. For a 1920x1080 film and an 854x480 box the
+height is the binding side, so the width lands on 853.33 -> 853. `libx264` with
+`yuv420p` requires both sides even and refuses the frame, and the failure is
+raised on the very first frame:
+
+```text
+Cannot generate proxy for E:\Phim\AI.mp4: ffmpeg failed:
+[libx264] width not divisible by 2 (853x480)
+```
+
+The run therefore died at `vision` after 120 ms, before sampling a scene, and
+the message pointed at the encoder rather than at the box that caused it
+(job_20261022_003). The default 1280x720 happens to be even for 16:9, which is
+why this stayed hidden until a smaller box was tried.
+
+**Files**
+
+```text
+src/movie_review/media/proxy.py
+docs/troubleshooting.md
+tests/unit/test_proxy.py
+```
+
+**Acceptance criteria**
+
+- [x] the scale filter enforces divisible-by-two sides on both dimensions
+- [x] a 1920x1080 source in an 854x480 box encodes, with an even output that
+  does not exceed the box, asserted against a real ffmpeg run
+- [x] the filter keeps `force_original_aspect_ratio=decrease`, so the source is
+  never upscaled to fill the box
+- [x] `pytest tests/unit/test_proxy.py -q` passes apart from
+  `test_proxy_settings_defaults`, which is red only for the uncommitted local
+  `config/default.yaml` change (see T177)
+
+---

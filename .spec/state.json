@@ -1484,7 +1484,7 @@
       "updated_at": "2026-10-21T12:03:45.955004+00:00"
     },
     "T132": {
-      "title": "retrieval EvidenceIndex \u2014 O(S\u00b2)\u2192O(S)",
+      "title": "retrieval EvidenceIndex — O(S²)→O(S)",
       "type": "perf",
       "branch": "T132-retrieval-evidence-index",
       "status": "done",
@@ -1497,7 +1497,7 @@
       "updated_at": "2026-10-21T12:07:43.932298+00:00"
     },
     "T133": {
-      "title": "frames manifest O(N\u00b2)",
+      "title": "frames manifest O(N²)",
       "type": "perf",
       "branch": "T133-frames-manifest-quadratic",
       "status": "done",
@@ -1614,7 +1614,7 @@
       "updated_at": "2026-10-21T12:53:22.788150+00:00"
     },
     "T142": {
-      "title": "verify stage: claims\u2192fact-check\u2192repair",
+      "title": "verify stage: claims→fact-check→repair",
       "type": "feat",
       "branch": "T142-verify-stage",
       "status": "done",
@@ -2048,6 +2048,22 @@
       "completed_at": "2026-10-22T19:05:00+00:00",
       "updated_at": "2026-10-22T19:05:00+00:00",
       "note": "pytest -q: 1628 passed, 1 failed (test_proxy_settings_defaults); the failure is an uncommitted local change to config/default.yaml (media.proxy 854x480) outside this task"
+    },
+    "T178": {
+      "title": "proxy scaling must land on even dimensions",
+      "type": "fix",
+      "branch": "T178-even-proxy-dimensions",
+      "status": "done",
+      "depends_on": [
+        "T012"
+      ],
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-22T19:22:00+00:00",
+      "updated_at": "2026-10-22T19:22:00+00:00",
+      "note": "pytest -q can only be fully green once the uncommitted local config/default.yaml change (media.proxy 854x480) is either reverted or the expected default updated; tests/unit/test_proxy.py otherwise passes"
     }
   }
 }

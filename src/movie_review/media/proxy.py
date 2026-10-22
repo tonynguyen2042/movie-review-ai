@@ -43,7 +43,21 @@ class ProxyResult:
 
 
 def _scale_filter(max_width: int, max_height: int) -> str:
-    return f"scale=w={max_width}:h={max_height}:force_original_aspect_ratio=decrease"
+    """Downscale into a box, never onto an odd pixel.
+
+    ``force_original_aspect_ratio=decrease`` fits the source into the box and
+    rounds each side on its own, so 1920x1080 in an 854x480 box lands on
+    853x480. ``libx264`` with ``yuv420p`` rejects an odd side -- "width not
+    divisible by 2" -- and the run dies at the proxy before a single frame is
+    sampled, even though the box itself is a perfectly reasonable size.
+    ``force_divisible_by=2`` rounds both sides to the nearest even value
+    instead, which is why 854x480 yields 852x480 rather than failing.
+    """
+    return (
+        f"scale=w={max_width}:h={max_height}"
+        ":force_original_aspect_ratio=decrease"
+        ":force_divisible_by=2"
+    )
 
 
 def generate_proxy(
