@@ -232,6 +232,46 @@ the script as Markdown, and the manifest.
 
 ---
 
+## The pause before a model stage
+
+Ten of the stages call a model. Before each one the pipeline asks the
+operator to confirm, because a single machine cannot hold every model at
+once: whisper, the vision model, the reasoner and the TTS model compete for
+the same memory, and a run that swaps them has to stop long enough to load
+the next one.
+
+```bash
+uv run movie-review process movie.mkv            # ask before each model stage
+uv run movie-review process movie.mkv --auto-accept   # ask nothing
+```
+
+The block names what to load, not what the prompt says: the model, the
+URL and the port are the three things the operator acts on.
+
+```text
+-- vision needs a model ----------------------------------------
+   model: Qwen3-VL (openai_compatible)
+   slot : vision
+   url  : http://192.168.1.144:8000/v1
+   port : 8000
+   Continue? [Y/n]
+```
+
+The pipeline does not prompt; it takes a callback
+(`run_pipeline(..., on_model_stage=...)`) and calls it with a `ModelCall`.
+The CLI supplies the interactive one. A test, the dashboard or the desktop
+app passes nothing, and the run never blocks on a prompt nobody can answer.
+
+Declining raises `ModelStageDeclined` before the stage starts: no progress
+line, no retry, no artifact, and the job stays where the previous stage
+left it. `resume` then continues at exactly that stage.
+
+Translation is skipped when the narration is in the source language, and
+the critic is skipped when the profile does not enable it — there is no
+model call, so there is no pause.
+
+---
+
 ## Running part of it
 
 ```bash
