@@ -17,6 +17,7 @@ import json
 import mimetypes
 import os
 import random
+import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping
@@ -35,6 +36,11 @@ DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_ATTEMPTS = 3
 #: The base of the exponential backoff between retries, in seconds.
 DEFAULT_BACKOFF_SECONDS = 0.5
+#: How many idle connections are kept per host. One is enough for a
+#: sequential run; the vision stage analyses eight scenes per batch, so the
+#: pool has to be able to lend more than one at a time. The cap keeps a burst
+#: from leaving a socket per burst thread open for the life of the process.
+_MAX_IDLE_PER_HOST = 8
 _USER_AGENT = "movie-review-ai/0.1"
 
 
@@ -109,29 +115,56 @@ def _is_retryable_status(code: int) -> bool:
 
 
 class _Pool:
-    """Keep-alive connections, one per host.
+    """Keep-alive connections, lent one at a time.
 
     ``urllib.request.urlopen`` sets ``Connection: close`` on every request
     (CPython's ``urllib/request.py``), so each of the roughly 2000 model
     calls a 2 h run makes paid a fresh TCP and TLS handshake.
+
+    One connection per host was enough while the pipeline was sequential.
+    The vision stage analyses four scenes at once, and an ``HTTPConnection``
+    carries one request at a time: two threads sharing the pooled connection
+    made the second raise ``CannotSendRequest('Request-sent')``, a
+    client-side state error that was reported as "cannot reach <url>" and
+    sent the operator looking at a server that was answering perfectly well.
+    The idle connections of a host are therefore kept in a list and checked
+    out to one caller at a time, with a fresh connection created when none is
+    free.
     """
 
     def __init__(self) -> None:
-        self._connections: dict[tuple[str, str, int], Any] = {}
+        self._idle: dict[tuple[str, str, int], list[Any]] = {}
+        self._lock = threading.Lock()
+
+    def _acquire(
+        self, key: tuple[str, str, int], scheme: str, host: str, port: int, timeout: float
+    ) -> Any:
+        """An idle connection for this host, or a new one when none is free."""
+        with self._lock:
+            bucket = self._idle.get(key)
+            if bucket:
+                return bucket.pop()
+        factory = HTTPSConnection if scheme == "https" else HTTPConnection
+        return factory(host, port, timeout=timeout)
+
+    def _release(self, key: tuple[str, str, int], connection: Any) -> None:
+        """Return a healthy connection to the idle list, or close the surplus."""
+        with self._lock:
+            bucket = self._idle.setdefault(key, [])
+            if len(bucket) < _MAX_IDLE_PER_HOST:
+                bucket.append(connection)
+                return
+        _close_quietly(connection)
 
     def send(self, request: Request, timeout: float) -> bytes:
-        """Send the request over a pooled connection and return the body."""
+        """Send the request over a connection only this call holds."""
         parsed = urlsplit(request.full_url)
         scheme = parsed.scheme or "http"
         host = parsed.hostname or ""
         port = parsed.port or (443 if scheme == "https" else 80)
         key = (scheme, host, port)
 
-        connection = self._connections.get(key)
-        if connection is None:
-            factory = HTTPSConnection if scheme == "https" else HTTPConnection
-            connection = factory(host, port, timeout=timeout)
-            self._connections[key] = connection
+        connection = self._acquire(key, scheme, host, port, timeout)
 
         path = urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
         try:
@@ -145,34 +178,42 @@ class _Pool:
             body = response.read()
             status = response.status
         except (OSError, HTTPException) as exc:
-            # A connection that was closed by the peer is reused by mistake.
-            # Drop it so the next attempt opens a fresh one.
-            self._connections.pop(key, None)
-            try:
-                connection.close()
-            except OSError:
-                pass
+            # The connection belongs to this call, not to the pool, so it is
+            # closed rather than removed: a half-used socket never goes back
+            # to the idle list. The next attempt opens a fresh one.
+            _close_quietly(connection)
             raise _Transient(
                 RemoteUnavailableError(f"cannot reach {request.full_url}: {exc}")
             ) from exc
 
+        # The body is read in full, so the connection is reusable even when
+        # the status is an error: a 5xx is the server's answer, not a broken
+        # socket.
+        self._release(key, connection)
         if status >= 400:
             raise _Transient(RemoteProtocolError(f"HTTP {status} from {request.full_url}"))
         return body if isinstance(body, bytes) else str(body).encode("utf-8")
 
     def close(self) -> None:
-        """Close every pooled connection."""
-        for connection in self._connections.values():
-            try:
-                connection.close()
-            except OSError:
-                pass
-        self._connections.clear()
+        """Close every idle connection."""
+        with self._lock:
+            idle = [connection for bucket in self._idle.values() for connection in bucket]
+            self._idle.clear()
+        for connection in idle:
+            _close_quietly(connection)
 
 
-#: The process-wide pool. One connection per host is enough: the pipeline
-#: is sequential, and the parallel stages (T138, T139) use one pool per
-#: worker.
+def _close_quietly(connection: Any) -> None:
+    """Close a connection, ignoring a socket the peer already closed."""
+    try:
+        connection.close()
+    except OSError:
+        pass
+
+
+#: The process-wide pool. Every caller shares it, and the stages that run
+#: their scenes concurrently (vision, events) each get a connection of their
+#: own for the duration of a request.
 _POOL = _Pool()
 
 
