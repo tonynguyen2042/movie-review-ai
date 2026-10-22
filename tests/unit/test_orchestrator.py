@@ -17,6 +17,7 @@ from movie_review.cache.manager import CacheManager
 from movie_review.config.settings import load_settings
 from movie_review.jobs.manager import JobManager
 from movie_review.pipeline.context import StageContext
+from movie_review.pipeline.model_gate import ModelStageDeclined
 from movie_review.pipeline.orchestrator import (
     STAGE_SEQUENCE,
     PipelineContext,
@@ -311,6 +312,87 @@ def test_run_pipeline_end_stage_is_inclusive(monkeypatch, tmp_path) -> None:
         "job_test", tmp_path / "movie.mp4", start_stage="scenes", end_stage="scenes"
     )
     assert [r.stage for r in results] == ["scenes"]
+
+
+# ---------------------------------------------------------------------------
+# the model gate
+# ---------------------------------------------------------------------------
+
+
+def test_run_pipeline_asks_before_a_model_stage(monkeypatch, tmp_path) -> None:
+    """The pause is per stage, and only for the stages that infer."""
+    asked: list[str] = []
+
+    def record(call: Any) -> bool:
+        asked.append(call.stage)
+        return True
+
+    monkeypatch.setattr(
+        "movie_review.pipeline.orchestrator._build_context",
+        _stub_context(tmp_path),
+    )
+    monkeypatch.setattr(
+        "movie_review.pipeline.orchestrator._get_stage_function",
+        lambda name: lambda ctx: name,
+    )
+
+    results = run_pipeline(
+        "job_test",
+        tmp_path / "movie.mp4",
+        start_stage="scenes",
+        end_stage="vision",
+        on_model_stage=record,
+    )
+
+    assert [r.stage for r in results] == ["scenes", "transcript", "vision"]
+    # Scene detection does no inference; the transcript and the analysis do.
+    assert asked == ["transcript", "vision"]
+
+
+def test_run_pipeline_stops_when_the_model_is_declined(monkeypatch, tmp_path) -> None:
+    """A declined stage never runs, so a resume picks up exactly there."""
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "movie_review.pipeline.orchestrator._build_context",
+        _stub_context(tmp_path),
+    )
+
+    def registry(stage_name: str) -> Any:
+        def run(ctx: PipelineContext) -> str:
+            calls.append(stage_name)
+            return stage_name
+
+        return run
+
+    monkeypatch.setattr("movie_review.pipeline.orchestrator._get_stage_function", registry)
+
+    with pytest.raises(ModelStageDeclined) as excinfo:
+        run_pipeline(
+            "job_test",
+            tmp_path / "movie.mp4",
+            start_stage="scenes",
+            end_stage="vision",
+            on_model_stage=lambda call: call.stage != "vision",
+        )
+
+    assert excinfo.value.stage == "vision"
+    assert calls == ["scenes", "transcript"]
+
+
+def test_run_pipeline_without_a_gate_never_asks(monkeypatch, tmp_path) -> None:
+    """Tests, the dashboard and the desktop app cannot answer a prompt."""
+    monkeypatch.setattr(
+        "movie_review.pipeline.orchestrator._build_context",
+        _stub_context(tmp_path),
+    )
+    monkeypatch.setattr(
+        "movie_review.pipeline.orchestrator._get_stage_function",
+        lambda name: lambda ctx: name,
+    )
+    results = run_pipeline(
+        "job_test", tmp_path / "movie.mp4", start_stage="transcript", end_stage="transcript"
+    )
+    assert [r.stage for r in results] == ["transcript"]
 
 
 def test_run_pipeline_rejects_unknown_stage(monkeypatch, tmp_path) -> None:
