@@ -30,6 +30,7 @@ from movie_review.domain import (
     SceneAnalysis,
     TranscriptSegment,
 )
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
 from movie_review.reasoning.factory import build_reasoning_adapter
@@ -225,7 +226,7 @@ def run_event_extraction(
     except JobNotFoundError as exc:
         raise EventExtractionError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise EventExtractionError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise EventExtractionError(job_failure_message(job))
     # Entry is CHARACTERS_READY per the T006 chain; the driver that sequences
     # discovery/linking into that state arrives with orchestration (T084+).
     owns_completion = job.status is JobStatus.CHARACTERS_READY

@@ -18,6 +18,7 @@ from pathlib import Path
 from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.domain import Artifact, JobStatus, Scene
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.media import scenes as adapter
 from movie_review.media.scenes import DetectionResult
@@ -83,7 +84,7 @@ def detect_scenes_stage(
     except JobNotFoundError as exc:
         raise SceneStageError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise SceneStageError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise SceneStageError(job_failure_message(job))
 
     analyzed = resolve_analysis_file(
         source, jobs_dir=ctx.jobs_dir, job_id=ctx.job_id, prefer_proxy=prefer_proxy

@@ -14,7 +14,12 @@ contract every adapter relies on.
 from __future__ import annotations
 
 import json
+import threading
+import time
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from email.message import Message
+from http.client import CannotSendRequest
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -264,3 +269,175 @@ def test_post_multipart_uploads_the_file() -> None:
         transport=transport,
     )
     assert b'name="file"; filename="audio.wav"' in seen["body"]
+
+
+# --- the connection pool -------------------------------------------------
+
+
+class _PoolResponse:
+    """The slice of ``http.client.HTTPResponse`` the pool reads."""
+
+    def __init__(self, body: bytes, status: int = 200) -> None:
+        self._body = body
+        self.status = status
+
+    def read(self) -> bytes:
+        return self._body
+
+
+class _FakeConnection:
+    """A stand-in for ``HTTPConnection`` that one message can drive at a time.
+
+    Real ``http.client`` connections raise ``CannotSendRequest('Request-sent')``
+    when a second caller sends while a response is still pending -- that is the
+    failure a shared pool produced for the vision stage -- so the fake does too.
+    """
+
+    #: Every fake connection created, oldest first.
+    created: list[_FakeConnection] = []
+
+    def __init__(self, host: str, port: int, timeout: float | None = None) -> None:
+        self.host = host
+        self.port = port
+        self.timeout = timeout
+        self.closed = False
+        self.requests = 0
+        self.body: bytes = b"{}"
+        self.status: int = 200
+        self.fail_with: Exception | None = None
+        self._in_flight = False
+        _FakeConnection.created.append(self)
+
+    # -- http.client's interface, as far as the pool uses it --------------
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        if self._in_flight:
+            raise CannotSendRequest("Request-sent")
+        if self.fail_with is not None:
+            raise self.fail_with
+        self._in_flight = True
+        self.requests += 1
+        # Hold the connection long enough that the other threads reach the
+        # pool while this request is still in flight.
+        time.sleep(0.05)
+
+    def getresponse(self) -> _PoolResponse:
+        self._in_flight = False
+        return _PoolResponse(self.body, self.status)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.fixture()
+def fake_connections(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[_FakeConnection]]:
+    """Route ``http.HTTPConnection`` to the fake and start from an empty pool."""
+    http._POOL.close()
+    _FakeConnection.created = []
+    monkeypatch.setattr(http, "HTTPConnection", _FakeConnection)
+    yield _FakeConnection.created
+    http._POOL.close()
+
+
+def _pooled_post(attempts: int = 3) -> bytes:
+    return http.perform(
+        Request("http://gpu:8000/v1", data=b"{}", method="POST"),
+        60.0,
+        None,
+        url="http://gpu:8000/v1",
+        attempts=attempts,
+    )
+
+
+def test_concurrent_calls_do_not_share_one_connection(
+    fake_connections: list[_FakeConnection],
+) -> None:
+    """The vision stage runs four scenes at once; they must not share a socket.
+
+    Before T176 every caller took the same pooled ``HTTPConnection``, so the
+    second thread raised ``CannotSendRequest('Request-sent')`` and the run died
+    with "cannot reach <url>" against a healthy server.
+    """
+    start = threading.Barrier(4)
+
+    def call() -> None:
+        start.wait(timeout=5)
+        _pooled_post(attempts=1)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(call) for _ in range(4)]
+        for future in futures:
+            future.result()
+
+    assert len(fake_connections) == 4
+    assert all(connection.requests == 1 for connection in fake_connections)
+
+
+def test_a_sequential_call_reuses_the_pooled_connection(
+    fake_connections: list[_FakeConnection],
+) -> None:
+    """Keep-alive survives the thread-safe pool: one call at a time is cheap."""
+    for _ in range(3):
+        _pooled_post()
+
+    assert len(fake_connections) == 1
+    assert fake_connections[0].requests == 3
+
+
+def test_a_broken_connection_is_closed_and_replaced(
+    fake_connections: list[_FakeConnection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A socket the peer closed is not put back into the idle list."""
+
+    def broken(*args: Any, **kwargs: Any) -> _FakeConnection:
+        connection = _FakeConnection(*args, **kwargs)
+        connection.fail_with = ConnectionResetError("reset by peer")
+        return connection
+
+    monkeypatch.setattr(http, "HTTPConnection", broken)
+
+    with pytest.raises(http.RemoteUnavailableError, match="cannot reach"):
+        _pooled_post(attempts=1)
+
+    assert fake_connections[0].closed is True
+
+    monkeypatch.setattr(http, "HTTPConnection", _FakeConnection)
+    _pooled_post()
+
+    assert len(fake_connections) == 2
+
+
+def test_an_error_status_keeps_the_connection(
+    fake_connections: list[_FakeConnection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 5xx is the server's answer, not a dead socket: the connection is reused."""
+
+    def failing_host(*args: Any, **kwargs: Any) -> _FakeConnection:
+        connection = _FakeConnection(*args, **kwargs)
+        connection.status = 500
+        return connection
+
+    monkeypatch.setattr(http, "HTTPConnection", failing_host)
+
+    with pytest.raises(http.RemoteProtocolError, match="500"):
+        _pooled_post(attempts=1)
+    assert fake_connections[0].closed is False
+
+    with pytest.raises(http.RemoteProtocolError, match="500"):
+        _pooled_post(attempts=1)
+
+    assert len(fake_connections) == 1
+
+
+def test_close_closes_the_idle_connections(
+    fake_connections: list[_FakeConnection],
+) -> None:
+    _pooled_post()
+    http._POOL.close()
+    assert fake_connections[0].closed is True

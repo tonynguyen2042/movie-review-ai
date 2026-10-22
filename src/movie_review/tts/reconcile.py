@@ -17,6 +17,7 @@ from pathlib import Path
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.domain import Artifact, JobStatus, ReviewScript
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
 from movie_review.review.duration import fit_script, script_words, target_words
@@ -110,7 +111,7 @@ def run_reconciliation(
     except JobNotFoundError as exc:
         raise ReconciliationError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise ReconciliationError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise ReconciliationError(job_failure_message(job))
     owns_completion = job.status in (JobStatus.SCRIPT_READY, JobStatus.SCRIPT_VERIFIED)
 
     actual = measure_wav(narration_path)

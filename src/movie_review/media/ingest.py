@@ -16,6 +16,7 @@ from pathlib import Path
 from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.domain import Artifact, JobStatus, Movie, MovieMetadata
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.media import ffmpeg as ff
 from movie_review.pipeline.context import StageContext
@@ -56,7 +57,7 @@ def ingest_movie(
     except JobNotFoundError as exc:
         raise IngestError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise IngestError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise IngestError(job_failure_message(job))
     if not source.is_file():
         raise IngestError(f"Input file not found: {source}")
 
