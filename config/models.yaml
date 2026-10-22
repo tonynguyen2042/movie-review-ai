@@ -98,7 +98,12 @@ profiles:
     asr:
       model: whisper-large-v3-turbo
       backend: openai_compatible
-      base_url: http://192.168.1.144:9000/v1
+      # The whisper.cpp server serves /inference. The OpenAI-compatible
+      # route is /v1/audio/transcriptions, which this server does not
+      # have -- a request to it comes back 404, and the transcript stage
+      # never runs.
+      base_url: http://192.168.1.144:9000
+      endpoint_path: /inference
       # api_key_env: MOVIE_REVIEW_ASR_TOKEN
       timeout_seconds: 600
     vision:
