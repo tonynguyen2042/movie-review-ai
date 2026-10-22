@@ -90,6 +90,20 @@ media:
   ffprobe: /opt/homebrew/bin/ffprobe
 ```
 
+### The proxy fails with "width not divisible by 2"
+
+```text
+Cannot generate proxy for AI.mp4: ffmpeg failed: [libx264] width not divisible
+by 2 (853x480)
+```
+
+`media.proxy.max_width` and `max_height` describe a **box**, not a size: FFmpeg
+fits the source into it and scales each side on its own, so a 16:9 film in a
+854x480 box wants 853 px and `libx264` (with `yuv420p`) refuses an odd side.
+The scale filter now rounds both sides to an even number, so 854x480 produces
+854x480 or 852x480 and encodes. If you see this message, the build predates that
+fix: pick an even pair such as 852x480, or update.
+
 ---
 
 ## The source-footage controls refuse the edit

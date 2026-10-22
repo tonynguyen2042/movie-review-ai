@@ -2031,6 +2031,22 @@
       "review": "approved",
       "completed_at": "2026-10-22T18:13:03.675750+00:00",
       "updated_at": "2026-10-22T18:13:03.675750+00:00"
+    },
+    "T178": {
+      "title": "proxy scaling must land on even dimensions",
+      "type": "fix",
+      "branch": "T178-even-proxy-dimensions",
+      "status": "done",
+      "depends_on": [
+        "T012"
+      ],
+      "attempts": 1,
+      "implementation": "passed",
+      "tests": "passed",
+      "review": "approved",
+      "completed_at": "2026-10-22T19:22:00+00:00",
+      "updated_at": "2026-10-22T19:22:00+00:00",
+      "note": "pytest -q can only be fully green once the uncommitted local config/default.yaml change (media.proxy 854x480) is either reverted or the expected default updated; tests/unit/test_proxy.py otherwise passes"
     }
   }
 }
