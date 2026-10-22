@@ -165,3 +165,126 @@ def test_the_flag_is_switched_on_by_the_configuration(tmp_path: Path) -> None:
     )
     assert settings.models.vision.cloud_ai is True
     assert build_vlm_adapter(settings.models.vision) is not None
+
+
+def test_the_environment_switch_reaches_the_specs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An operator who exports the variable has to be believed.
+
+    The policy was applied when the YAML source built the profile, and the
+    YAML source only sees the YAML. So ``MOVIE_REVIEW_PRIVACY__CLOUD_AI=true``
+    set the switch and left every model marked local: the remote models
+    were refused with a message naming a switch the operator had already
+    turned on.
+    """
+    (tmp_path / "models.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": {
+                    "remote": {
+                        "asr": {
+                            "model": "whisper",
+                            "backend": "openai_compatible",
+                            "base_url": "http://gpu:9000/v1",
+                        },
+                        "vision": {
+                            "model": "qwen3-vl",
+                            "backend": "openai_compatible",
+                            "base_url": "http://gpu:8000/v1",
+                        },
+                        "reasoning": {
+                            "model": "qwen3.5-27b",
+                            "backend": "openai_compatible",
+                            "base_url": "http://gpu:8000/v1",
+                        },
+                        "critic": {"model": "qwen3.5", "enabled": False},
+                        "tts": {
+                            "model": "qwen3-tts",
+                            "backend": "openai_compatible",
+                            "base_url": "http://gpu:8000/v1",
+                        },
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "default.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "models": {"profile": "remote"},
+                "prompts": {"versions": {"scene_analysis": "v1"}},
+                "privacy": {"cloud_ai": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MOVIE_REVIEW_PRIVACY__CLOUD_AI", "true")
+
+    settings = load_settings(
+        config_path=tmp_path / "default.yaml", models_path=tmp_path / "models.yaml"
+    )
+
+    assert settings.privacy.cloud_ai is True
+    for name in ("asr", "vision", "reasoning", "tts"):
+        assert getattr(settings.models, name).cloud_ai is True, name
+    assert build_vlm_adapter(settings.models.vision) is not None
+
+
+def test_the_environment_switch_off_is_believed_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The switch has to be able to close the door as well."""
+    (tmp_path / "models.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": {
+                    "remote": {
+                        "asr": {
+                            "model": "whisper",
+                            "backend": "openai_compatible",
+                            "base_url": "http://gpu:9000/v1",
+                        },
+                        "vision": {
+                            "model": "qwen3-vl",
+                            "backend": "openai_compatible",
+                            "base_url": "http://gpu:8000/v1",
+                        },
+                        "reasoning": {
+                            "model": "qwen3.5-27b",
+                            "backend": "openai_compatible",
+                            "base_url": "http://gpu:8000/v1",
+                        },
+                        "critic": {"model": "qwen3.5", "enabled": False},
+                        "tts": {
+                            "model": "qwen3-tts",
+                            "backend": "openai_compatible",
+                            "base_url": "http://gpu:8000/v1",
+                        },
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "default.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "models": {"profile": "remote"},
+                "prompts": {"versions": {"scene_analysis": "v1"}},
+                "privacy": {"cloud_ai": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MOVIE_REVIEW_PRIVACY__CLOUD_AI", "false")
+
+    settings = load_settings(
+        config_path=tmp_path / "default.yaml", models_path=tmp_path / "models.yaml"
+    )
+
+    assert settings.privacy.cloud_ai is False
+    assert settings.models.vision.cloud_ai is False
+    with pytest.raises(CloudAIDisabledError):
+        build_vlm_adapter(settings.models.vision)
