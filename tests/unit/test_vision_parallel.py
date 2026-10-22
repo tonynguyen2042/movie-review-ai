@@ -202,3 +202,30 @@ def test_a_failure_in_one_scene_fails_the_stage(tmp_path: Path) -> None:
             raise AssertionError("the stage should have failed")
     finally:
         conn.close()
+
+
+def test_a_failed_job_reports_the_recorded_cause(tmp_path: Path) -> None:
+    """A stage that refuses a failed job must say why, not "resume in T085"."""
+    from movie_review.vision.analysis import VisualAnalysisError
+
+    ctx, conn = _ctx__vision_parallel(tmp_path)
+    try:
+        ctx.manager.fail("job_1", "vision", "the VLM server refused the connection")
+        scenes = _scenes(2)
+        try:
+            run_visual_analysis(
+                scenes,
+                _frames__vision_parallel(tmp_path, scenes),
+                [],
+                ctx,
+                port=_SlowAdapter(),
+            )
+        except VisualAnalysisError as exc:
+            message = str(exc)
+            assert "'vision'" in message
+            assert "the VLM server refused the connection" in message
+            assert "T085" not in message
+        else:
+            raise AssertionError("the stage should have refused the failed job")
+    finally:
+        conn.close()

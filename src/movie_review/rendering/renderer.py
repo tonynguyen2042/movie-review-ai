@@ -17,6 +17,7 @@ from pathlib import Path
 from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.domain import Artifact, JobStatus, RenderManifest
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.media import ffmpeg as ff
 from movie_review.pipeline.context import StageContext
@@ -259,7 +260,7 @@ def render_job(
     except JobNotFoundError as exc:
         raise RenderError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise RenderError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise RenderError(job_failure_message(job))
     owns_completion = job.status is JobStatus.EDIT_PLAN_READY
 
     dest = artifacts.artifact_path(ctx.jobs_dir, ctx.job_id, STAGE_NAME, REVIEW_FILENAME)

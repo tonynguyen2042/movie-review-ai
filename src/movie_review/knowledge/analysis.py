@@ -18,6 +18,7 @@ from typing import Any
 from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.domain import Artifact, JobStatus
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
@@ -88,7 +89,7 @@ def build_movie_analysis(ctx: StageContext) -> AnalysisResult:
     except JobNotFoundError as exc:
         raise AnalysisError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise AnalysisError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise AnalysisError(job_failure_message(job))
     owns_completion = job.status is JobStatus.EVENTS_READY
 
     movie = repo.get_movie(ctx.conn, ctx.job_id)

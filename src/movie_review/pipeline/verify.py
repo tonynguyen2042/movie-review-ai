@@ -20,6 +20,7 @@ from pathlib import Path
 
 from movie_review.artifacts import manager as artifacts
 from movie_review.domain import Artifact, Claim, JobStatus
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
 from movie_review.review.claims import ClaimExtractionError, extract_claims, store_claims
@@ -74,7 +75,7 @@ def run_verification(
     except JobNotFoundError as exc:
         raise VerificationError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise VerificationError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise VerificationError(job_failure_message(job))
     owns_completion = job.status is JobStatus.SCRIPT_READY
 
     from movie_review.review.translate import load_script

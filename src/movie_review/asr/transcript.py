@@ -20,6 +20,7 @@ from movie_review.asr.port import ASRPort
 from movie_review.asr.subtitles import write_sidecars
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.domain import Artifact, JobStatus, TranscriptSegment
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.media.audio import CHANNELS as AUDIO_CHANNELS
 from movie_review.media.audio import SAMPLE_RATE, AudioExtractionError, extract_dialogue_audio
@@ -67,7 +68,7 @@ def run_transcript(
     except JobNotFoundError as exc:
         raise TranscriptError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise TranscriptError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise TranscriptError(job_failure_message(job))
     owns_completion = job.status is JobStatus.SCENES_READY
 
     src = Path(source)

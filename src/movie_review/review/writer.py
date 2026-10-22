@@ -19,6 +19,7 @@ from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.config.prompts import load_prompt, render
 from movie_review.config.settings import ModelSpec, generation_config
 from movie_review.domain import Artifact, JobStatus, ReviewPlan, ReviewScript, ReviewSection
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.models.resources import run_with_oom_recovery
 from movie_review.pipeline.context import StageContext
@@ -136,7 +137,7 @@ def write_script(
     except JobNotFoundError as exc:
         raise ScriptWriterError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise ScriptWriterError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise ScriptWriterError(job_failure_message(job))
     owns_completion = job.status is JobStatus.STORY_READY
     if target_words <= 0:
         raise ScriptWriterError(f"Target words must be positive: {target_words}")

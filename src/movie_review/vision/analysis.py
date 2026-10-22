@@ -21,6 +21,7 @@ from movie_review.artifacts import manager as artifacts
 from movie_review.cache.keys import CacheSpec, cache_key
 from movie_review.config.prompts import Prompt, load_prompt, render
 from movie_review.domain import Artifact, JobStatus, Scene, SceneAnalysis, TranscriptSegment
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.models.resources import run_with_oom_recovery
 from movie_review.pipeline.context import StageContext
@@ -264,7 +265,7 @@ def run_visual_analysis(
     except JobNotFoundError as exc:
         raise VisualAnalysisError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise VisualAnalysisError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise VisualAnalysisError(job_failure_message(job))
     owns_completion = job.status is JobStatus.TRANSCRIPT_READY
 
     prompt = load_prompt("scene_analysis", prompt_version)

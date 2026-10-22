@@ -23,6 +23,7 @@ from movie_review.domain import (
     RenderManifest,
     ReviewParagraph,
 )
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
 from movie_review.rendering.clips import SelectedClip
@@ -153,7 +154,7 @@ def assemble_manifest(
     except JobNotFoundError as exc:
         raise ManifestError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise ManifestError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise ManifestError(job_failure_message(job))
     owns_completion = job.status is JobStatus.AUDIO_READY
 
     try:

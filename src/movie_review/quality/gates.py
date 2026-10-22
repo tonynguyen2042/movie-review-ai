@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 
 from movie_review.domain import JobStatus, QualityMetric
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
 from movie_review.utils import logging as ulog
@@ -92,7 +93,7 @@ def run_quality_gate(
     except JobNotFoundError as exc:
         raise QualityGateError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise QualityGateError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise QualityGateError(job_failure_message(job))
     owns_completion = job.status is JobStatus.RENDERED
 
     result = evaluate_gate(metrics, actual_seconds, target_seconds)

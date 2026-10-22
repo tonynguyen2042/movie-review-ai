@@ -123,10 +123,13 @@ have the rights to the footage.
 ## The job stopped at a stage
 
 ```text
-Job job_20261006_001 failed; resume arrives in T085
+Job job_20261006_001 failed at 'vision': cannot reach
+http://gpu:8000/v1/chat/completions: connection refused. Re-run the pipeline to try again.
 ```
 
-The job failed and the stage that ran next refused to continue.
+The job failed and the stage that ran next refused to continue. The message
+names the stage that failed and repeats the error it recorded; the job row
+holds the same pair as `failed_stage` and `error`.
 
 **What to do:** look at the job record, then resume it.
 

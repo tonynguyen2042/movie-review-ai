@@ -21,6 +21,7 @@ from movie_review.characters.linking import link_speakers, save_links
 from movie_review.diarization.initial import EnergyDiarizer
 from movie_review.diarization.port import DiarizationPort
 from movie_review.domain import DiarizedSegment, JobStatus, TranscriptSegment
+from movie_review.jobs.failure import job_failure_message
 from movie_review.jobs.state_machine import JobNotFoundError
 from movie_review.pipeline.context import StageContext
 from movie_review.storage import repositories as repo
@@ -79,7 +80,7 @@ def run_diarization(
     except JobNotFoundError as exc:
         raise DiarizationStageError(f"Unknown job: {ctx.job_id}") from exc
     if job.status is JobStatus.FAILED:
-        raise DiarizationStageError(f"Job {ctx.job_id} failed; resume arrives in T085")
+        raise DiarizationStageError(job_failure_message(job))
 
     if not audio_path.is_file():
         raise DiarizationStageError(f"No dialogue audio at {audio_path}")
