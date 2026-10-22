@@ -189,6 +189,35 @@ the CLI reads the catalogue rather than hard-coding a list.
 The key comes from the **environment**, never from the file. A token in a
 tracked YAML file is a leak.
 
+### Retries on a slot
+
+A remote slot retries a failed request on its own: 429s, 5xx, timeouts and
+dropped connections. Three keys decide how hard it tries, and they exist
+because hosts differ — a whisper.cpp box that answers in two seconds and a
+vLLM engine that needs a minute to reload after a crash do not want the same
+schedule.
+
+```yaml
+    vision:
+      model: Qwen3-VL
+      backend: openai_compatible
+      base_url: http://192.168.1.144:8000/v1
+      timeout_seconds: 300
+      attempts: 4            # total attempts: the first try plus three retries
+      backoff_seconds: 5     # 5 s, 10 s, 20 s between them
+      max_backoff_seconds: 30
+```
+
+Unset, the slot uses `attempts: 3`, `backoff_seconds: 0.5` and
+`max_backoff_seconds: 30` — about 1.5 s of patience, which is fine for a blip
+and useless for an engine that is coming back up. A 4xx is never retried: the
+request itself is at fault, and repeating it only wastes the server's time.
+
+`attempts` counts requests, not retries. A 5xx that outlives the schedule is
+reported as "unavailable", so the stage-level retry gets a second, cheaper
+chance — the per-scene cache means a retried stage does not redo the scenes it
+already analysed.
+
 ---
 
 ## What changes when you switch models

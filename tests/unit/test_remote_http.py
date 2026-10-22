@@ -14,6 +14,7 @@ contract every adapter relies on.
 from __future__ import annotations
 
 import json
+import random
 import threading
 import time
 from collections.abc import Iterator
@@ -94,6 +95,9 @@ def test_auth_headers_omit_the_content_type_for_a_multipart_body() -> None:
 
 # --- the error mapping ---------------------------------------------------
 
+#: One attempt and no wait: these tests must not sleep between retries.
+ONCE = http.TransportRetry(attempts=1, backoff_seconds=0.0)
+
 
 def test_a_timeout_maps_to_unavailable() -> None:
     """A hung server must not raise a raw TimeoutError.
@@ -111,7 +115,7 @@ def test_a_timeout_maps_to_unavailable() -> None:
             60.0,
             transport,
             url="http://gpu:8000/v1",
-            attempts=1,
+            retry=ONCE,
         )
 
 
@@ -125,7 +129,7 @@ def test_a_refused_connection_maps_to_unavailable() -> None:
             60.0,
             transport,
             url="http://gpu:8000/v1",
-            attempts=1,
+            retry=ONCE,
         )
 
 
@@ -139,7 +143,7 @@ def test_an_http_error_maps_to_a_protocol_error() -> None:
             60.0,
             transport,
             url="http://gpu:8000/v1",
-            attempts=1,
+            retry=ONCE,
         )
 
 
@@ -147,7 +151,7 @@ def test_the_error_message_never_carries_the_token() -> None:
     """The headers carry the bearer token; the message must not."""
 
     def transport(request: Any, timeout: float) -> _FakeResponse:
-        raise HTTPError("http://gpu:8000/v1", 500, "boom", Message(), None)
+        raise HTTPError("http://gpu:8000/v1", 400, "boom", Message(), None)
 
     with pytest.raises(http.RemoteProtocolError) as excinfo:
         http.perform(
@@ -155,7 +159,7 @@ def test_the_error_message_never_carries_the_token() -> None:
             60.0,
             transport,
             url="http://gpu:8000/v1",
-            attempts=1,
+            retry=ONCE,
         )
     assert "secret" not in str(excinfo.value)
 
@@ -351,7 +355,7 @@ def _pooled_post(attempts: int = 3) -> bytes:
         60.0,
         None,
         url="http://gpu:8000/v1",
-        attempts=attempts,
+        retry=http.TransportRetry(attempts=attempts, backoff_seconds=0.0),
     )
 
 
@@ -425,11 +429,11 @@ def test_an_error_status_keeps_the_connection(
 
     monkeypatch.setattr(http, "HTTPConnection", failing_host)
 
-    with pytest.raises(http.RemoteProtocolError, match="500"):
+    with pytest.raises(http.RemoteUnavailableError, match="500"):
         _pooled_post(attempts=1)
     assert fake_connections[0].closed is False
 
-    with pytest.raises(http.RemoteProtocolError, match="500"):
+    with pytest.raises(http.RemoteUnavailableError, match="500"):
         _pooled_post(attempts=1)
 
     assert len(fake_connections) == 1
@@ -441,3 +445,109 @@ def test_close_closes_the_idle_connections(
     _pooled_post()
     http._POOL.close()
     assert fake_connections[0].closed is True
+
+
+# --- the retry schedule --------------------------------------------------
+
+
+def test_a_5xx_is_retried_then_reported_as_unavailable(
+    fake_connections: list[_FakeConnection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 500 is the host failing to serve a good request, so it is retried.
+
+    It used to surface as ``RemoteProtocolError``, which the adapters map to a
+    permanent "the model answered badly" error: the stage gave up on the first
+    500 and the retry policy never saw it.
+    """
+
+    def failing_host(*args: Any, **kwargs: Any) -> _FakeConnection:
+        connection = _FakeConnection(*args, **kwargs)
+        connection.status = 500
+        connection.body = b'{"message": "the engine died while generating"}'
+        return connection
+
+    monkeypatch.setattr(http, "HTTPConnection", failing_host)
+
+    with pytest.raises(http.RemoteUnavailableError) as excinfo:
+        _pooled_post(attempts=4)
+
+    assert fake_connections[0].requests == 4
+    assert "HTTP 500" in str(excinfo.value)
+
+
+def test_the_server_error_body_reaches_the_message(
+    fake_connections: list[_FakeConnection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The body says why the host failed; discarding it left only "HTTP 500"."""
+
+    def failing_host(*args: Any, **kwargs: Any) -> _FakeConnection:
+        connection = _FakeConnection(*args, **kwargs)
+        connection.status = 500
+        connection.body = b'{"object": "error", "message": "maximum context length is 32768"}'
+        return connection
+
+    monkeypatch.setattr(http, "HTTPConnection", failing_host)
+
+    with pytest.raises(http.RemoteUnavailableError, match="maximum context length"):
+        _pooled_post(attempts=1)
+
+
+def test_a_4xx_is_not_retried(
+    fake_connections: list[_FakeConnection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 404 is the request's own fault: repeating it only wastes the server."""
+
+    def missing_route(*args: Any, **kwargs: Any) -> _FakeConnection:
+        connection = _FakeConnection(*args, **kwargs)
+        connection.status = 404
+        connection.body = b'{"message": "no such route"}'
+        return connection
+
+    monkeypatch.setattr(http, "HTTPConnection", missing_route)
+
+    with pytest.raises(http.RemoteProtocolError, match="404"):
+        _pooled_post(attempts=4)
+
+    assert fake_connections[0].requests == 1
+
+
+def test_a_retryable_error_reaches_the_caller_after_the_budget(
+    fake_connections: list[_FakeConnection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The attempts are counted per request, not per stage."""
+
+    def failing_host(*args: Any, **kwargs: Any) -> _FakeConnection:
+        connection = _FakeConnection(*args, **kwargs)
+        connection.status = 503
+        return connection
+
+    monkeypatch.setattr(http, "HTTPConnection", failing_host)
+
+    with pytest.raises(http.RemoteUnavailableError):
+        _pooled_post(attempts=2)
+
+    assert fake_connections[0].requests == 2
+
+
+def test_the_backoff_grows_to_its_cap_and_stops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A long outage must not turn the schedule into an unbounded wait."""
+    monkeypatch.setattr(random, "random", lambda: 1.0)
+
+    assert http._backoff_delay(1, base=5.0, cap=30.0) == 5.0
+    assert http._backoff_delay(2, base=5.0, cap=30.0) == 10.0
+    assert http._backoff_delay(6, base=5.0, cap=30.0) == 30.0
+
+
+def test_a_zero_base_means_no_wait() -> None:
+    """Zero disables the sleep, not the retry: tests rely on that."""
+    assert http._backoff_delay(3, base=0.0) == 0.0
+
+
+def test_the_error_excerpt_is_one_bounded_line() -> None:
+    assert http._error_excerpt(b"a\n  b") == "a b"
+
+    long = http._error_excerpt(b"x" * 1000)
+    assert len(long) == http.ERROR_EXCERPT_CHARS + 3
+    assert long.endswith("...")

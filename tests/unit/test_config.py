@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from movie_review.config.settings import load_settings
+from movie_review.config.settings import ModelSpec, load_settings
+from movie_review.remote import http
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_YAML = REPO / "config" / "default.yaml"
@@ -97,3 +98,51 @@ def test_invalid_values_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MOVIE_REVIEW_SOURCE_VIDEO__MAX_SOURCE_RATIO", "1.5")
     with pytest.raises(ValidationError):
         load_settings()
+
+
+# --- the transport retry schedule ----------------------------------------
+
+
+def test_a_model_spec_defaults_to_the_transport_schedule() -> None:
+    spec = ModelSpec(model="m", backend="openai_compatible", base_url="http://gpu:8000/v1")
+
+    assert spec.retry == http.DEFAULT_RETRY
+
+
+def test_a_model_spec_carries_its_own_retry_schedule() -> None:
+    spec = ModelSpec(
+        model="m",
+        backend="openai_compatible",
+        base_url="http://gpu:8000/v1",
+        attempts=4,
+        backoff_seconds=5.0,
+        max_backoff_seconds=30.0,
+    )
+
+    assert spec.retry == http.TransportRetry(
+        attempts=4, backoff_seconds=5.0, max_backoff_seconds=30.0
+    )
+
+
+def test_an_attempt_budget_below_one_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ModelSpec(
+            model="m",
+            backend="openai_compatible",
+            base_url="http://gpu:8000/v1",
+            attempts=0,
+        )
+
+
+def test_the_remote_profile_gives_vision_three_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The shipped profile must outlast a vLLM engine reloading, not a blip."""
+    _clean_env(monkeypatch)
+    settings = load_settings(profile="remote")
+
+    vision = settings.models.vision.retry
+    assert vision.attempts == 4
+    assert vision.backoff_seconds == 5.0
+    # Three retries: 5 s, 10 s and 20 s, roughly the reload window.
+    assert vision.max_backoff_seconds == 30.0

@@ -31,6 +31,7 @@ def build_reasoning_adapter(spec: ModelSpec, *, max_tokens: int = 2048) -> Reaso
             spec.base_url,
             api_key=spec.resolved_api_key(),
             timeout_seconds=spec.timeout_seconds,
+            retry=spec.retry,
             max_tokens=max_tokens,
             generation=spec.generation,
         )

@@ -57,6 +57,7 @@ class OpenAICompatVLMAdapter(VLMPort):
         *,
         api_key: str | None = None,
         timeout_seconds: float = http.DEFAULT_TIMEOUT_SECONDS,
+        retry: http.TransportRetry = http.DEFAULT_RETRY,
         max_tokens: int = 2048,
         temperature: float = 0.4,
         transport: http.RawTransport | None = None,
@@ -67,6 +68,7 @@ class OpenAICompatVLMAdapter(VLMPort):
         self._base_url = base_url
         self._api_key = api_key
         self._timeout = timeout_seconds
+        self._retry = retry
         self._max_tokens = max_tokens
         self._temperature = temperature
         self._transport = transport
@@ -131,10 +133,14 @@ class OpenAICompatVLMAdapter(VLMPort):
                     api_key=self._api_key,
                     timeout=self._timeout,
                     transport=self._transport,
+                    retry=self._retry,
                 )
             except http.RemoteUnavailableError as exc:
-                # A transport failure is not a formatting problem; a second
-                # attempt would only repeat it.
+                # The transport has already spent its whole schedule on this
+                # call -- attempts and all -- so this is not a formatting
+                # problem and the repair prompt below cannot help. It is
+                # reported as "unavailable" rather than "bad answer" so the
+                # stage knows the failure was the host's and may retry later.
                 raise VLMUnavailableError(self._model, str(exc)) from exc
             except http.RemoteProtocolError as exc:
                 raise VLMError(str(exc)) from exc

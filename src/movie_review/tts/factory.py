@@ -24,5 +24,6 @@ def build_tts_adapter(spec: ModelSpec) -> TTSPort:
             spec.base_url,
             api_key=spec.resolved_api_key(),
             timeout_seconds=spec.timeout_seconds,
+            retry=spec.retry,
         )
     return QwenTTSAdapter(spec.model)

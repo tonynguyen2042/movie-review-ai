@@ -21,6 +21,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,14 @@ DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_ATTEMPTS = 3
 #: The base of the exponential backoff between retries, in seconds.
 DEFAULT_BACKOFF_SECONDS = 0.5
+#: The ceiling for a single backoff sleep. A schedule that keeps doubling
+#: without one would turn a long outage into an unbounded wait.
+DEFAULT_MAX_BACKOFF_SECONDS = 30.0
+#: How much of an error response is quoted back in the message. A server
+#: that answers 500 usually says why in the body -- an engine failure, a
+#: context that is too long -- and that sentence is the difference between
+#: diagnosing the failure and guessing at it.
+ERROR_EXCERPT_CHARS = 300
 #: How many idle connections are kept per host. One is enough for a
 #: sequential run; the vision stage analyses eight scenes per batch, so the
 #: pool has to be able to lend more than one at a time. The cap keeps a burst
@@ -44,12 +53,47 @@ _MAX_IDLE_PER_HOST = 8
 _USER_AGENT = "movie-review-ai/0.1"
 
 
+@dataclass(frozen=True)
+class TransportRetry:
+    """How long one HTTP request keeps trying before the adapter hears about it.
+
+    The configuration layer owns these numbers (``ModelSpec.attempts`` and
+    friends) because what is long enough depends on the host: a whisper.cpp
+    box that answers in two seconds and a vLLM engine that needs a minute to
+    reload after a crash want different schedules. The defaults match the
+    behaviour the transport had when the values were literals.
+
+    Distinct from :class:`movie_review.pipeline.retry.RetryPolicy`, which
+    decides how many times a whole *stage* is re-run.
+    """
+
+    #: Total attempts, not retries: 3 means the first try plus two more.
+    attempts: int = DEFAULT_ATTEMPTS
+    #: Base of the exponential backoff between attempts, in seconds. Zero
+    #: disables the wait entirely, which is what a test wants.
+    backoff_seconds: float = DEFAULT_BACKOFF_SECONDS
+    #: Ceiling for one sleep; the schedule grows to this and stops.
+    max_backoff_seconds: float = DEFAULT_MAX_BACKOFF_SECONDS
+
+
+DEFAULT_RETRY = TransportRetry()
+
+
 class RemoteUnavailableError(Exception):
-    """The remote host is unreachable, timed out, or refused the connection."""
+    """The remote host is unreachable, timed out, or could not serve the request.
+
+    A 5xx ends up here rather than in :class:`RemoteProtocolError`: the request
+    was well formed and the host failed to answer it, which is the same class
+    of problem as a refused connection and deserves the same retry.
+    """
 
 
 class RemoteProtocolError(Exception):
-    """The remote host answered, but not with a usable response."""
+    """The remote host answered, but the answer is not usable.
+
+    A 4xx lands here -- the request itself is at fault, so repeating it only
+    wastes the server's time -- as does a body that cannot be decoded.
+    """
 
 
 class _Permanent(Exception):
@@ -109,9 +153,39 @@ def _is_retryable_status(code: int) -> bool:
 
     A 4xx other than 429 is the request's own fault: a bad body, a bad
     model name, a missing key. Repeating it wastes the server's time. A 5xx
-    or a rate limit is the server's, and another attempt usually succeeds.
+    or a rate limit is the server's, and another attempt usually succeeds --
+    the vision stage lost a twenty-minute run to one 500 that a longer wait
+    would have survived.
     """
     return code == 429 or 500 <= code < 600
+
+
+def _error_excerpt(body: bytes) -> str:
+    """A bounded, single-line view of an error response body.
+
+    The pool and the transport read the body anyway, so an error status used
+    to throw away the one sentence the server wrote about what went wrong.
+    """
+    flattened = " ".join(body.decode("utf-8", errors="replace").split())
+    if len(flattened) <= ERROR_EXCERPT_CHARS:
+        return flattened
+    return flattened[:ERROR_EXCERPT_CHARS] + "..."
+
+
+def _status_failure(status: int, url: str, body: bytes) -> _Transient | _Permanent:
+    """An error status as the wrapper that decides whether to try again.
+
+    A retryable status (429, a 5xx) maps to :class:`RemoteUnavailableError`:
+    the request was fine and the host failed to serve it, so the retry counts
+    against the transport budget and the adapters report it as a model that
+    was momentarily unavailable rather than one that answered badly. Anything
+    else is the request's own fault and is not repeated.
+    """
+    excerpt = _error_excerpt(body)
+    detail = f"HTTP {status} from {url}" + (f": {excerpt}" if excerpt else "")
+    if _is_retryable_status(status):
+        return _Transient(RemoteUnavailableError(detail))
+    return _Permanent(RemoteProtocolError(detail))
 
 
 class _Pool:
@@ -191,7 +265,7 @@ class _Pool:
         # socket.
         self._release(key, connection)
         if status >= 400:
-            raise _Transient(RemoteProtocolError(f"HTTP {status} from {request.full_url}"))
+            raise _status_failure(status, request.full_url, body)
         return body if isinstance(body, bytes) else str(body).encode("utf-8")
 
     def close(self) -> None:
@@ -217,15 +291,18 @@ def _close_quietly(connection: Any) -> None:
 _POOL = _Pool()
 
 
-def _backoff_delay(attempt: int, base: float) -> float:
-    """Exponential backoff with jitter.
+def _backoff_delay(attempt: int, base: float, cap: float = DEFAULT_MAX_BACKOFF_SECONDS) -> float:
+    """Exponential backoff with jitter, capped.
 
     The jitter matters: without it, a server that fails a whole batch at
-    once receives the whole batch again at the same instant.
+    once receives the whole batch again at the same instant. The cap matters
+    for the opposite reason: an engine that needs a minute to come back must
+    not be hammered with a sleep that has doubled past any useful wait.
     """
     if base <= 0:
         return 0.0
-    delay: float = min(base * (2 ** (attempt - 1)), 30.0) * (0.5 + random.random() / 2)
+    ceiling = max(cap, base)
+    delay: float = min(base * (2 ** (attempt - 1)), ceiling) * (0.5 + random.random() / 2)
     return delay
 
 
@@ -235,22 +312,23 @@ def perform(
     transport: RawTransport | None = None,
     *,
     url: str,
-    attempts: int = DEFAULT_ATTEMPTS,
-    backoff_seconds: float = DEFAULT_BACKOFF_SECONDS,
+    retry: TransportRetry = DEFAULT_RETRY,
 ) -> bytes:
     """Execute the request and return the raw body.
 
     A transient failure -- a refused connection, a timeout, a 5xx or a rate
-    limit -- is retried with exponential backoff. The previous behaviour
-    raised on the first one, so a single blip aborted a run that had been
-    going for hours.
+    limit -- is retried with exponential backoff, up to ``retry.attempts``
+    attempts in total. The previous behaviour raised on the first one, so a
+    single blip aborted a run that had been going for hours.
 
     Raises:
-        RemoteUnavailableError: connection refused, DNS failure, or timeout.
-        RemoteProtocolError: a non-2xx HTTP status.
+        RemoteUnavailableError: connection refused, DNS failure, timeout, or
+            a retryable status the host kept answering with.
+        RemoteProtocolError: a status the request itself caused (4xx).
     """
+    attempts = max(1, retry.attempts)
     last: _Transient | None = None
-    for attempt in range(1, max(1, attempts) + 1):
+    for attempt in range(1, attempts + 1):
         try:
             if transport is not None:
                 return _perform_once(request, timeout, transport, url=url)
@@ -258,7 +336,7 @@ def perform(
         except _Transient as exc:
             last = exc
             if attempt < attempts:
-                delay = _backoff_delay(attempt, backoff_seconds)
+                delay = _backoff_delay(attempt, retry.backoff_seconds, retry.max_backoff_seconds)
                 if delay:
                     time.sleep(delay)
         except _Permanent as exc:
@@ -267,17 +345,30 @@ def perform(
     raise last.public
 
 
+def _error_body(error: HTTPError) -> bytes:
+    """The body of an HTTP error response, when the transport carried one.
+
+    ``HTTPError`` is file-like over the response it wraps, so the server's
+    own explanation of the failure is available here -- and was discarded.
+    """
+    try:
+        body = error.read()
+    except (OSError, ValueError, AttributeError):
+        # Some transports (and every test double built with a stub fp) expose
+        # no readable body; the status alone is still worth reporting.
+        return b""
+    return body if isinstance(body, bytes) else b""
+
+
 def _perform_once(request: Request, timeout: float, transport: RawTransport, *, url: str) -> bytes:
     """One request through an injected transport."""
     try:
         with transport(request, timeout) as response:
             body = response.read()
     except HTTPError as exc:
-        # Never echo headers: they carry the bearer token.
-        error = RemoteProtocolError(f"HTTP {exc.code} from {url}")
-        if _is_retryable_status(exc.code):
-            raise _Transient(error) from exc
-        raise _Permanent(error) from exc
+        # Never echo headers: they carry the bearer token. The body is the
+        # server's own words and is quoted bounded by _status_failure.
+        raise _status_failure(exc.code, url, _error_body(exc)) from exc
     except URLError as exc:
         raise _Transient(RemoteUnavailableError(f"cannot reach {url}: {exc.reason}")) from exc
     except TimeoutError as exc:
@@ -307,6 +398,7 @@ def post_json(
     api_key: str | None,
     timeout: float,
     transport: RawTransport | None = None,
+    retry: TransportRetry = DEFAULT_RETRY,
 ) -> Any:
     """POST a JSON body and return the decoded JSON response."""
     headers = auth_headers(api_key)
@@ -316,7 +408,7 @@ def post_json(
         headers=headers,
         method="POST",
     )
-    return decode_json(perform(request, timeout, transport, url=url), url)
+    return decode_json(perform(request, timeout, transport, url=url, retry=retry), url)
 
 
 def encode_multipart(
@@ -368,13 +460,14 @@ def post_multipart(
     api_key: str | None,
     timeout: float,
     transport: RawTransport | None = None,
+    retry: TransportRetry = DEFAULT_RETRY,
 ) -> bytes:
     """POST a multipart body and return the raw response."""
     body, content_type = encode_multipart(fields, files)
     headers = auth_headers(api_key, json_body=False)
     headers["Content-Type"] = content_type
     request = Request(url, data=body, headers=headers, method="POST")
-    return perform(request, timeout, transport, url=url)
+    return perform(request, timeout, transport, url=url, retry=retry)
 
 
 def post_for_bytes(
@@ -384,6 +477,7 @@ def post_for_bytes(
     api_key: str | None,
     timeout: float,
     transport: RawTransport | None = None,
+    retry: TransportRetry = DEFAULT_RETRY,
 ) -> bytes:
     """POST a JSON body and return the raw (possibly binary) response."""
     headers = auth_headers(api_key, json_body=False)
@@ -394,4 +488,4 @@ def post_for_bytes(
         headers=headers,
         method="POST",
     )
-    return perform(request, timeout, transport, url=url)
+    return perform(request, timeout, transport, url=url, retry=retry)
