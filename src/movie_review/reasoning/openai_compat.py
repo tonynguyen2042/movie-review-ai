@@ -74,6 +74,7 @@ class OpenAICompatAdapter(ReasoningPort):
         *,
         api_key: str | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        retry: http.TransportRetry = http.DEFAULT_RETRY,
         max_tokens: int = 2048,
         transport: RawTransport | None = None,
         system_prompt: str | None = None,
@@ -85,6 +86,7 @@ class OpenAICompatAdapter(ReasoningPort):
         self._base_url = base_url
         self._api_key = api_key
         self._timeout = timeout_seconds
+        self._retry = retry
         self._max_tokens = max_tokens
         self._transport = transport
         self._system_prompt = system_prompt
@@ -163,6 +165,7 @@ class OpenAICompatAdapter(ReasoningPort):
                 api_key=self._api_key,
                 timeout=self._timeout,
                 transport=self._transport,
+                retry=self._retry,
             )
         except http.RemoteUnavailableError as exc:
             raise ReasoningUnavailableError(self._model, str(exc)) from exc

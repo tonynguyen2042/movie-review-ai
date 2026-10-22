@@ -44,6 +44,7 @@ class OpenAICompatTTSAdapter(TTSPort):
         *,
         api_key: str | None = None,
         timeout_seconds: float = http.DEFAULT_TIMEOUT_SECONDS,
+        retry: http.TransportRetry = http.DEFAULT_RETRY,
         response_format: str = WAV_FORMAT,
         pcm_sample_rate: int = 24000,
         pcm_channels: int = 1,
@@ -61,6 +62,7 @@ class OpenAICompatTTSAdapter(TTSPort):
         self._base_url = base_url
         self._api_key = api_key
         self._timeout = timeout_seconds
+        self._retry = retry
         self._format = response_format
         self._pcm_sample_rate = pcm_sample_rate
         self._pcm_channels = pcm_channels
@@ -94,6 +96,7 @@ class OpenAICompatTTSAdapter(TTSPort):
                 api_key=self._api_key,
                 timeout=self._timeout,
                 transport=self._transport,
+                retry=self._retry,
             )
         except http.RemoteUnavailableError as exc:
             raise TTSUnavailableError(self._model, str(exc)) from exc
