@@ -674,6 +674,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             segments,
             ctx.stage_context(),
             on_progress=_sub_step(ctx),
+            # The endpoint's image budget, not a constant: a scene over the cap
+            # is sent with an evenly spaced subset of its frames (T181).
+            max_frames=ctx.settings.models.vision.max_frames_per_request,
         )
 
         # The frame budget is feedback-driven, not a pure function of the
@@ -714,7 +717,8 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             return result
 
         # The extra frames are analysed too. The scenes that were already
-        # analysed hit the cache, so only the boosted ones cost a call.
+        # analysed hit the cache, so only the boosted ones cost a call. The
+        # same cap as the first pass: a boosted scene is a scene.
         boosted = _regroup_frames(feedback.added, frames)
         return run_visual_analysis(
             scenes,
@@ -722,8 +726,8 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             segments,
             ctx.stage_context(),
             on_progress=_sub_step(ctx),
+            max_frames=ctx.settings.models.vision.max_frames_per_request,
         )
-        return result
 
     def characters_fn(ctx: PipelineContext) -> Any:
         from movie_review.characters.discovery import discover_characters, save_discovery

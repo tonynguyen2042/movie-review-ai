@@ -47,6 +47,11 @@ DEFAULT_BATCH_SIZE = 8
 #: the machine has cores for.
 DEFAULT_CONCURRENCY = 4
 
+#: The most frames one request may carry. The orchestrator always passes the
+#: configured ``ModelSpec.max_frames_per_request``; this default serves direct
+#: callers and must stay equal to the ModelSpec fallback.
+DEFAULT_MAX_FRAMES_PER_REQUEST = 32
+
 
 @dataclass(frozen=True)
 class _BatchEntry:
@@ -63,6 +68,23 @@ def _batches(scenes: list[Scene], size: int) -> list[list[Scene]]:
     return [scenes[index : index + size] for index in range(0, len(scenes), size)]
 
 
+def _request_frames(frames: list[Path], max_frames: int) -> list[Path]:
+    """The frames one request carries: never more than ``max_frames``.
+
+    A scene keeps every frame it sampled, but the endpoint may refuse more
+    images than the cap in a single request. Over the cap, the request keeps
+    the first and the last frame and spaces the rest evenly over the scene,
+    so it still covers the whole span in chronological order. The frames that
+    do not ride the request stay on disk and in the manifest.
+    """
+    if len(frames) <= max_frames:
+        return list(frames)
+    if max_frames <= 1:
+        return [frames[len(frames) // 2]]
+    step = (len(frames) - 1) / (max_frames - 1)
+    return [frames[round(index * step)] for index in range(max_frames)]
+
+
 def _analyse_one(
     scene: Scene,
     scene_frames: list[Path],
@@ -73,20 +95,24 @@ def _analyse_one(
     model: str,
     active: VLMPort,
     ctx: StageContext,
+    max_frames: int,
 ) -> _BatchEntry:
     """Analyse one scene: cache lookup, then the model."""
+    # The request carries at most max_frames of the scene's frames (T181);
+    # the prompt and the cache key describe what the request carries.
+    request_frames = _request_frames(scene_frames, max_frames)
     text = render(
         prompt,
         scene_id=scene.scene_id,
-        frame_count=str(len(scene_frames)),
-        metadata=f"{scene.duration:.1f}s, {len(scene_frames)} frames",
+        frame_count=str(len(request_frames)),
+        metadata=f"{scene.duration:.1f}s, {len(request_frames)} frames",
         dialogue=dialogue or "(no dialogue)",
         previous_summary=summary,
     )
     spec = CacheSpec(
         stage=STAGE_NAME,
         stage_version=STAGE_VERSION,
-        input_hash=_scene_input_hash(scene, scene_frames, dialogue, summary),
+        input_hash=_scene_input_hash(scene, scene_frames, dialogue, summary, max_frames),
         model_id=model,
         prompt_version=prompt.cache_version,
     )
@@ -104,7 +130,7 @@ def _analyse_one(
             lambda: active.analyze(
                 AnalysisInput(
                     scene_id=scene.scene_id,
-                    frames=scene_frames,
+                    frames=request_frames,
                     dialogue=dialogue,
                     previous_summary=input_summary,
                 ),
@@ -129,6 +155,7 @@ def _analyse_batch(
     previous_summaries: list[str],
     active: VLMPort,
     ctx: StageContext,
+    max_frames: int,
 ) -> list[_BatchEntry]:
     """Analyse a batch of scenes concurrently, preserving their order.
 
@@ -150,7 +177,16 @@ def _analyse_batch(
             raise VisualAnalysisError(f"No frames for {scene.scene_id}")
         dialogue = _join_dialogue(dialogue_index.window(scene.start, scene.end))
         return _analyse_one(
-            scene, scene_frames, dialogue, summary, input_summary, prompt, model, active, ctx
+            scene,
+            scene_frames,
+            dialogue,
+            summary,
+            input_summary,
+            prompt,
+            model,
+            active,
+            ctx,
+            max_frames,
         )
 
     if len(batch) == 1 or DEFAULT_CONCURRENCY <= 1:
@@ -249,6 +285,7 @@ def run_visual_analysis(
     prompt_version: str | None = None,
     on_progress: ProgressReporter | None = None,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    max_frames: int = DEFAULT_MAX_FRAMES_PER_REQUEST,
 ) -> VisualAnalysisResult:
     """Analyze scenes for ``ctx.job_id`` through to ``VISUAL_ANALYSIS_READY``.
 
@@ -258,7 +295,14 @@ def run_visual_analysis(
 
     The scenes are analysed in batches of ``batch_size``; the scenes in a batch
     are analysed concurrently.
+
+    ``max_frames`` caps what a single request carries (T181): a scene with more
+    frames is sent with its first and last frames and the rest spaced evenly.
+    The cap joins the per-scene cache key, so changing it re-analyses instead
+    of adopting an answer the other cap produced.
     """
+    if max_frames < 1:
+        raise VisualAnalysisError(f"max_frames_per_request must be at least 1, got {max_frames}")
     started = time.perf_counter()
     try:
         job = ctx.manager.get(ctx.job_id)
@@ -303,6 +347,7 @@ def run_visual_analysis(
                 previous_summaries,
                 active,
                 ctx,
+                max_frames,
             )
             for entry in results:
                 if entry.cache_hit:
@@ -379,8 +424,20 @@ def run_visual_analysis(
     )
 
 
-def _scene_input_hash(scene: Scene, scene_frames: list[Path], dialogue: str, summary: str) -> str:
-    parts = [scene.scene_id, f"{scene.start:.3f}", f"{scene.end:.3f}", dialogue, summary]
+def _scene_input_hash(
+    scene: Scene, scene_frames: list[Path], dialogue: str, summary: str, max_frames: int
+) -> str:
+    # The cap joins the key because it changes which subset of the frames the
+    # request carries: an answer produced under one cap is not the answer the
+    # other cap would have produced.
+    parts = [
+        scene.scene_id,
+        f"{scene.start:.3f}",
+        f"{scene.end:.3f}",
+        dialogue,
+        summary,
+        f"max_frames={max_frames}",
+    ]
     for frame in scene_frames:
         parts.append(artifacts.sha256_file(frame))
     return artifacts.sha256_bytes("|".join(parts).encode("utf-8"))

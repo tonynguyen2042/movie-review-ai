@@ -2712,3 +2712,49 @@ tests/unit/test_feedback_dedupe.py
   failures
 
 ---
+## T181 - The vision request carries no more frames than its endpoint will take
+
+**Objective**
+
+Make the number of frames one VLM request carries a configured cap instead of
+an implicit "however many the scene sampled", and when a scene exceeds the cap,
+send a deterministic chronological, evenly spaced subset.
+
+**Depends on**: T025.
+
+**The defect**
+
+`vision/analysis.py` sends every frame the scene sampled in one request: up to
+12 for a long scene, more after the feedback boost. A remote endpoint decides
+whether it accepts that many images in a single request, and one that refuses
+(or OOMs decoding them) fails the stage on the largest scenes, with no way to
+configure the limit without code changes. The boosted-frames pass re-analysed
+with whatever default the function carried, not the configured value.
+
+**Files**
+
+```text
+src/movie_review/config/settings.py
+src/movie_review/vision/analysis.py
+src/movie_review/pipeline/orchestrator.py
+tests/unit/test_vision_max_frames.py
+tests/unit/test_vision_frames_wiring.py
+```
+
+**Acceptance criteria**
+
+- [x] a request carries no more than `max_frames_per_request` frames,
+  asserted on the frames the port actually receives
+- [x] a scene at or under the cap gets an unchanged request: every frame,
+  the same prompt counts
+- [x] a scene over the cap gets a subset that is chronological, evenly
+  spaced, keeps the scene's first and last frame, and has exactly the cap's
+  length
+- [x] the cap is configuration on the vision model spec (env/yaml
+  overridable), not a code threshold, and joins the vision cache key: a
+  different cap re-analyses instead of adopting
+- [x] the prompt's frame count describes the frames the request carries
+- [x] the orchestrator passes the configured cap on both the first pass and
+  the boosted-frames pass
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+  Windows-path failures, which are red on this master

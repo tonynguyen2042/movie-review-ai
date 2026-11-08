@@ -167,6 +167,7 @@ def captured_frames(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, list[Path
         port: Any = None,
         prompt_version: Any = None,
         on_progress: Any = None,
+        max_frames: Any = 32,
     ) -> object:
         seen.append(frames)
         work.append(on_progress)
@@ -303,6 +304,7 @@ def test_vision_stage_reports_scene_progress(
         port: Any = None,
         prompt_version: Any = None,
         on_progress: Any = None,
+        max_frames: Any = 32,
     ) -> object:
         for index, _scene in enumerate(scenes, start=1):
             if on_progress is not None:
