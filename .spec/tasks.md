@@ -2692,23 +2692,23 @@ tests/unit/test_feedback_dedupe.py
 
 **Acceptance criteria**
 
-- [ ] a static scene keeps exactly its floor of frames; a dynamic scene
+- [x] a static scene keeps exactly its floor of frames; a dynamic scene
   keeps all of them
-- [ ] a boundary frame shared by two adjacent scenes is dropped from the
+- [x] a boundary frame shared by two adjacent scenes is dropped from the
   later scene beyond its floor
-- [ ] the dhash is computed by one FFmpeg concat pass per scene, asserted by
+- [x] the dhash is computed by one FFmpeg concat pass per scene, asserted by
   counting invocations, with no image library in the dependency list
-- [ ] near-identical real frames hash within the threshold; different real
+- [x] near-identical real frames hash within the threshold; different real
   frames hash far outside it
-- [ ] a fingerprint failure keeps all frames of the scene and logs it
+- [x] a fingerprint failure keeps all frames of the scene and logs it
   instead of failing the stage
-- [ ] the dedupe switch and threshold are configuration, not constants, and
+- [x] the dedupe switch and threshold are configuration, not constants, and
   join the frames cache key
-- [ ] the manifest records the dhash of every kept frame, and a resumed run
+- [x] the manifest records the dhash of every kept frame, and a resumed run
   drops the same frames a fresh run does
-- [ ] `apply_feedback` stops adding frames that duplicate the scene's kept
+- [x] `apply_feedback` stops adding frames that duplicate the scene's kept
   frames, and its cache key binds the same fps as `sample_movie`
-- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   failures
 
 ---

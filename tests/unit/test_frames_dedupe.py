@@ -176,6 +176,17 @@ def test_boundary_duplicate_beyond_the_floor_is_dropped(tmp_path: Path) -> None:
     assert len(result.frames) == 4
 
 
+def test_cache_key_binds_the_dedupe_switch_and_threshold() -> None:
+    # Frames sampled with dedupe on are not the frames sampled with it off
+    # (or at a different threshold), so the cache must not adopt them.
+    scenes = [("scene_000001", 0.0, 10.0)]
+    a = frames_cache_key("h", scenes, SamplingConfig(), FPS)
+    b = frames_cache_key("h", scenes, SamplingConfig(dedupe=False), FPS)
+    c = frames_cache_key("h", scenes, SamplingConfig(dedupe_hamming_threshold=10), FPS)
+    assert a != b
+    assert a != c
+
+
 def test_dedupe_disabled_keeps_every_frame(tmp_path: Path) -> None:
     harness = _harness(tmp_path)
     recorded: list[list[str]] = []
