@@ -100,7 +100,9 @@ def test_build_context_uses_jobs_subdirectory(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     cfg = tmp_path / "cfg"
     cfg.mkdir()
-    (cfg / "models.yaml").write_text(
+    (cfg / "config.yaml").write_text(
+        "models:\n  profile: balanced\n"
+        f"paths:\n  data_dir: {data_dir}\nprompts:\n  versions:\n    scene_analysis: v1\n"
         "profiles:\n"
         "  balanced:\n"
         "    asr: {model: w}\n"
@@ -110,11 +112,7 @@ def test_build_context_uses_jobs_subdirectory(tmp_path, monkeypatch) -> None:
         "    tts: {model: t}\n",
         encoding="utf-8",
     )
-    (cfg / "default.yaml").write_text(
-        f"paths:\n  data_dir: {data_dir}\nprompts:\n  versions:\n    scene_analysis: v1\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("MOVIE_REVIEW_CONFIG", str(cfg / "default.yaml"))
+    monkeypatch.setenv("MOVIE_REVIEW_CONFIG", str(cfg / "config.yaml"))
 
     ctx = _build_context("job_x", tmp_path / "movie.mp4", str(tmp_path / "jobs.db"))
     assert ctx.jobs_dir == data_dir / "jobs"

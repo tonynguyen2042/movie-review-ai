@@ -286,7 +286,7 @@ def test_endpoint_path_is_appended_to_base_url(tmp_path: Path) -> None:
 
 
 def test_endpoint_path_reaches_the_adapter_from_config() -> None:
-    """The value has to travel models.yaml -> ModelSpec -> adapter."""
+    """The value has to travel the config file's profile -> ModelSpec -> adapter."""
     spec = ModelSpec(
         model="ggml-large-v3-turbo-q5_0",
         backend="openai_compatible",

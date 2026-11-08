@@ -10,6 +10,7 @@ movie's dialogue and frames off the machine with no warning.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -35,6 +36,50 @@ def _remote_spec__privacy_gate() -> ModelSpec:
 
 def _local_spec() -> ModelSpec:
     return ModelSpec(model="qwen3.5-27b", backend="mlx")
+
+
+def _remote_profile__privacy_gate() -> dict[str, Any]:
+    """The remote profile block the single-file configs below carry."""
+    return {
+        "asr": {
+            "model": "whisper",
+            "backend": "openai_compatible",
+            "base_url": "http://gpu:9000/v1",
+        },
+        "vision": {
+            "model": "qwen3-vl",
+            "backend": "openai_compatible",
+            "base_url": "http://gpu:8000/v1",
+        },
+        "reasoning": {
+            "model": "qwen3.5-27b",
+            "backend": "openai_compatible",
+            "base_url": "http://gpu:8000/v1",
+        },
+        "critic": {"model": "qwen3.5", "enabled": False},
+        "tts": {
+            "model": "qwen3-tts",
+            "backend": "openai_compatible",
+            "base_url": "http://gpu:8000/v1",
+        },
+    }
+
+
+def _write_config(tmp_path: Path, cloud_ai: bool) -> Path:
+    """One config file: the product controls and the profile catalog together."""
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "models": {"profile": "remote"},
+                "prompts": {"versions": {"scene_analysis": "v1"}},
+                "privacy": {"cloud_ai": cloud_ai},
+                "profiles": {"remote": _remote_profile__privacy_gate()},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def test_a_remote_spec_is_refused_when_cloud_ai_is_off() -> None:
@@ -65,51 +110,7 @@ def test_a_local_spec_is_never_refused() -> None:
 
 def test_the_flag_travels_on_the_spec(tmp_path: Path) -> None:
     """The configuration records the policy on every slot."""
-    (tmp_path / "models.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "profiles": {
-                    "remote": {
-                        "asr": {
-                            "model": "whisper",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:9000/v1",
-                        },
-                        "vision": {
-                            "model": "qwen3-vl",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                        "reasoning": {
-                            "model": "qwen3.5-27b",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                        "critic": {"model": "qwen3.5", "enabled": False},
-                        "tts": {
-                            "model": "qwen3-tts",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    (tmp_path / "default.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "models": {"profile": "remote"},
-                "prompts": {"versions": {"scene_analysis": "v1"}},
-                "privacy": {"cloud_ai": False},
-            }
-        ),
-        encoding="utf-8",
-    )
-    settings = load_settings(
-        config_path=tmp_path / "default.yaml", models_path=tmp_path / "models.yaml"
-    )
+    settings = load_settings(config_path=_write_config(tmp_path, cloud_ai=False))
     assert settings.privacy.cloud_ai is False
     assert settings.models.vision.cloud_ai is False
     assert settings.models.reasoning.cloud_ai is False
@@ -118,51 +119,7 @@ def test_the_flag_travels_on_the_spec(tmp_path: Path) -> None:
 
 def test_the_flag_is_switched_on_by_the_configuration(tmp_path: Path) -> None:
     """`cloud_ai: true` reaches the specs."""
-    (tmp_path / "models.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "profiles": {
-                    "remote": {
-                        "asr": {
-                            "model": "whisper",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:9000/v1",
-                        },
-                        "vision": {
-                            "model": "qwen3-vl",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                        "reasoning": {
-                            "model": "qwen3.5-27b",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                        "critic": {"model": "qwen3.5", "enabled": False},
-                        "tts": {
-                            "model": "qwen3-tts",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    (tmp_path / "default.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "models": {"profile": "remote"},
-                "prompts": {"versions": {"scene_analysis": "v1"}},
-                "privacy": {"cloud_ai": True},
-            }
-        ),
-        encoding="utf-8",
-    )
-    settings = load_settings(
-        config_path=tmp_path / "default.yaml", models_path=tmp_path / "models.yaml"
-    )
+    settings = load_settings(config_path=_write_config(tmp_path, cloud_ai=True))
     assert settings.models.vision.cloud_ai is True
     assert build_vlm_adapter(settings.models.vision) is not None
 
@@ -178,53 +135,10 @@ def test_the_environment_switch_reaches_the_specs(
     were refused with a message naming a switch the operator had already
     turned on.
     """
-    (tmp_path / "models.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "profiles": {
-                    "remote": {
-                        "asr": {
-                            "model": "whisper",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:9000/v1",
-                        },
-                        "vision": {
-                            "model": "qwen3-vl",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                        "reasoning": {
-                            "model": "qwen3.5-27b",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                        "critic": {"model": "qwen3.5", "enabled": False},
-                        "tts": {
-                            "model": "qwen3-tts",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    (tmp_path / "default.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "models": {"profile": "remote"},
-                "prompts": {"versions": {"scene_analysis": "v1"}},
-                "privacy": {"cloud_ai": False},
-            }
-        ),
-        encoding="utf-8",
-    )
+    path = _write_config(tmp_path, cloud_ai=False)
     monkeypatch.setenv("MOVIE_REVIEW_PRIVACY__CLOUD_AI", "true")
 
-    settings = load_settings(
-        config_path=tmp_path / "default.yaml", models_path=tmp_path / "models.yaml"
-    )
+    settings = load_settings(config_path=path)
 
     assert settings.privacy.cloud_ai is True
     for name in ("asr", "vision", "reasoning", "tts"):
@@ -236,53 +150,10 @@ def test_the_environment_switch_off_is_believed_too(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The switch has to be able to close the door as well."""
-    (tmp_path / "models.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "profiles": {
-                    "remote": {
-                        "asr": {
-                            "model": "whisper",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:9000/v1",
-                        },
-                        "vision": {
-                            "model": "qwen3-vl",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                        "reasoning": {
-                            "model": "qwen3.5-27b",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                        "critic": {"model": "qwen3.5", "enabled": False},
-                        "tts": {
-                            "model": "qwen3-tts",
-                            "backend": "openai_compatible",
-                            "base_url": "http://gpu:8000/v1",
-                        },
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    (tmp_path / "default.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "models": {"profile": "remote"},
-                "prompts": {"versions": {"scene_analysis": "v1"}},
-                "privacy": {"cloud_ai": True},
-            }
-        ),
-        encoding="utf-8",
-    )
+    path = _write_config(tmp_path, cloud_ai=True)
     monkeypatch.setenv("MOVIE_REVIEW_PRIVACY__CLOUD_AI", "false")
 
-    settings = load_settings(
-        config_path=tmp_path / "default.yaml", models_path=tmp_path / "models.yaml"
-    )
+    settings = load_settings(config_path=path)
 
     assert settings.privacy.cloud_ai is False
     assert settings.models.vision.cloud_ai is False

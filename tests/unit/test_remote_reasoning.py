@@ -46,10 +46,7 @@ def _ok_body(content: str = '{"answer": 42}') -> bytes:
 
 
 def _settings_dir(tmp_path, profile: dict[str, Any], selected: str = "remote") -> Any:
-    (tmp_path / "models.yaml").write_text(
-        yaml.safe_dump({"profiles": {"remote": profile}}), encoding="utf-8"
-    )
-    (tmp_path / "default.yaml").write_text(
+    (tmp_path / "config.yaml").write_text(
         yaml.safe_dump(
             {
                 "models": {"profile": selected},
@@ -57,6 +54,7 @@ def _settings_dir(tmp_path, profile: dict[str, Any], selected: str = "remote") -
                 # The remote profile sends content off the machine, so the
                 # test opts in.
                 "privacy": {"cloud_ai": True},
+                "profiles": {"remote": profile},
             }
         ),
         encoding="utf-8",
@@ -89,7 +87,7 @@ def test_default_backend_is_mlx_and_local() -> None:
 
 
 def test_remote_spec_loads_from_yaml(tmp_path) -> None:
-    """A remote profile resolves endpoint settings from models.yaml."""
+    """A remote profile resolves endpoint settings from the config file."""
     d = _settings_dir(
         tmp_path,
         _profile(
@@ -99,7 +97,7 @@ def test_remote_spec_loads_from_yaml(tmp_path) -> None:
             timeout_seconds=300.0,
         ),
     )
-    settings = load_settings(config_path=d / "default.yaml", models_path=d / "models.yaml")
+    settings = load_settings(config_path=d / "config.yaml")
     spec = settings.models.reasoning
 
     assert settings.models.profile == "remote"
@@ -110,13 +108,13 @@ def test_remote_spec_loads_from_yaml(tmp_path) -> None:
 
 
 def test_remote_profile_selected_by_env_var(tmp_path, monkeypatch) -> None:
-    """Profile selection works without editing default.yaml."""
+    """Profile selection works without editing the config file."""
     d = _settings_dir(
         tmp_path,
         _profile(model="qwen3.5-27b", backend="openai_compatible", base_url="http://gpu:8000/v1"),
     )
     monkeypatch.setenv("MOVIE_REVIEW_MODELS__PROFILE", "remote")
-    settings = load_settings(config_path=d / "default.yaml", models_path=d / "models.yaml")
+    settings = load_settings(config_path=d / "config.yaml")
     assert settings.models.profile == "remote"
     assert settings.models.reasoning.is_remote is True
 
@@ -425,7 +423,7 @@ def test_factory_from_loaded_settings(tmp_path) -> None:
             timeout_seconds=90.0,
         ),
     )
-    settings = load_settings(config_path=d / "default.yaml", models_path=d / "models.yaml")
+    settings = load_settings(config_path=d / "config.yaml")
     adapter = build_reasoning_adapter(settings.models.reasoning)
     assert isinstance(adapter, OpenAICompatAdapter)
     assert adapter.base_url == "http://gpu-box.lan:8000/v1"

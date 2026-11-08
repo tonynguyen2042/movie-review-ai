@@ -219,8 +219,8 @@ def test_log_states_the_effective_profile_not_just_the_flag(tmp_path: Path) -> N
     """`profile: null` told the reader nothing.
 
     Without --profile the flag value is None and the profile actually in force
-    comes from config/default.yaml. Logging only the flag made a run that had
-    silently chosen an unusable profile look unconfigured.
+    comes from the config file's models.profile. Logging only the flag made a
+    run that had silently chosen an unusable profile look unconfigured.
     """
     result = runner.invoke(
         app,

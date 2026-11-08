@@ -39,9 +39,9 @@ def _config__config_cleanup() -> dict[str, Any]:
         return loaded
 
 
-def _default_yaml() -> dict[str, Any]:
+def _config_document() -> dict[str, Any]:
     loaded: dict[str, Any] = yaml.safe_load(
-        (ROOT / "config" / "default.yaml").read_text(encoding="utf-8")
+        (ROOT / "config" / "config.yaml").read_text(encoding="utf-8")
     )
     assert isinstance(loaded, dict)
     return loaded
@@ -77,12 +77,15 @@ def test_the_removed_knobs_are_gone() -> None:
 
 
 def test_the_default_configuration_no_longer_names_them() -> None:
-    document = _default_yaml()
+    document = _config_document()
     assert "runtime" not in document
     assert "memory" not in document
     assert "telemetry" not in document.get("privacy", {})
     assert "json_output" not in document.get("logging", {})
     assert "evidence_required" not in document.get("pipeline", {})
+    # The top-level style was retired in T171; the file merge (T182) dropped
+    # the dead key it left behind.
+    assert "style" not in document
 
 
 def test_the_ffprobe_path_is_honoured(tmp_path: Path, monkeypatch) -> None:

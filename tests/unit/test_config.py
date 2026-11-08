@@ -5,12 +5,29 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from movie_review.config.settings import ModelSpec, load_settings
+from movie_review.config.settings import (
+    ModelSpec,
+    available_profiles,
+    default_config_path,
+    load_settings,
+    set_config_path,
+)
 from movie_review.remote import http
 
 REPO = Path(__file__).resolve().parents[2]
-DEFAULT_YAML = REPO / "config" / "default.yaml"
-MODELS_YAML = REPO / "config" / "models.yaml"
+CONFIG_YAML = REPO / "config" / "config.yaml"
+
+#: A minimal catalog for hand-rolled test configs: one profile whose model
+#: identities are irrelevant to what the test asserts.
+_MINIMAL_PROFILES = (
+    "profiles:\n"
+    "  balanced:\n"
+    "    asr: {model: a}\n"
+    "    vision: {model: v}\n"
+    "    reasoning: {model: r}\n"
+    "    critic: {model: c, enabled: false}\n"
+    "    tts: {model: t}\n"
+)
 
 
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,12 +62,10 @@ def test_explicit_config_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     custom.write_text(
         "models:\n  profile: balanced\n"
         "pipeline:\n  review:\n    target_duration_minutes: 10\n    target_wpm: 150\n"
-        "prompts:\n  versions:\n    script_writer: v9\n",
+        "prompts:\n  versions:\n    script_writer: v9\n" + _MINIMAL_PROFILES,
         encoding="utf-8",
     )
-    models = tmp_path / "models.yaml"
-    models.write_text(MODELS_YAML.read_text(encoding="utf-8"), encoding="utf-8")
-    settings = load_settings(config_path=custom, models_path=models)
+    settings = load_settings(config_path=custom)
     assert settings.pipeline.review.target_duration_minutes == 10
     assert settings.prompts.versions["script_writer"] == "v9"
 
@@ -59,16 +74,72 @@ def test_config_path_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     _clean_env(monkeypatch)
     custom = tmp_path / "custom.yaml"
     custom.write_text(
-        "models:\n  profile: fast\nprompts:\n  versions:\n    script_writer: v1\n",
+        _MINIMAL_PROFILES
+        + "  fast:\n"
+        + "    asr: {model: a}\n"
+        + "    vision: {model: v}\n"
+        + "    reasoning: {model: Qwen3.5-9B}\n"
+        + "    critic: {model: c, enabled: false}\n"
+        + "    tts: {model: t}\n"
+        "models:\n  profile: fast\n"
+        "prompts:\n  versions:\n    script_writer: v1\n",
         encoding="utf-8",
     )
-    models = tmp_path / "models.yaml"
-    models.write_text(MODELS_YAML.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setenv("MOVIE_REVIEW_CONFIG", str(custom))
-    # models.yaml resolves next to the selected config file.
     settings = load_settings()
     assert settings.models.profile == "fast"
     assert settings.models.reasoning.model == "Qwen3.5-9B"
+
+
+def test_profiles_catalog_lives_in_the_config_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    """T182: the catalog is a top-level key of the one config file."""
+    _clean_env(monkeypatch)
+    assert CONFIG_YAML.is_file()
+    assert "fast" in available_profiles()
+    assert "balanced" in available_profiles()
+    assert "quality" in available_profiles()
+    assert "remote" in available_profiles()
+    # The two-file layout is gone.
+    assert not (REPO / "config" / "default.yaml").exists()
+    assert not (REPO / "config" / "models.yaml").exists()
+
+
+def test_config_without_catalog_names_the_merge(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A hand-rolled config without `profiles` gets the merge explanation."""
+    _clean_env(monkeypatch)
+    custom = tmp_path / "custom.yaml"
+    custom.write_text(
+        "models:\n  profile: balanced\nprompts:\n  versions:\n    scene_analysis: v1\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="merged into a single config file"):
+        load_settings(config_path=custom)
+
+
+def test_config_override_beats_the_env_var(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """T182: --config (process override) > MOVIE_REVIEW_CONFIG > repo default."""
+    _clean_env(monkeypatch)
+    env_file = tmp_path / "env.yaml"
+    env_file.write_text(
+        _MINIMAL_PROFILES + "models:\n  profile: balanced\n"
+        "prompts:\n  versions:\n    scene_analysis: v1\n",
+        encoding="utf-8",
+    )
+    flag_file = tmp_path / "flag.yaml"
+    flag_file.write_text(
+        _MINIMAL_PROFILES + "models:\n  profile: balanced\n"
+        "pipeline:\n  review:\n    target_wpm: 171\n"
+        "prompts:\n  versions:\n    scene_analysis: v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MOVIE_REVIEW_CONFIG", str(env_file))
+    set_config_path(flag_file)
+    assert default_config_path() == flag_file
+    assert load_settings().pipeline.review.target_wpm == 171
+    # An explicit config_path still beats the override for one call.
+    assert load_settings(config_path=env_file).pipeline.review.target_wpm == 150
 
 
 def test_profile_switch_changes_models(monkeypatch: pytest.MonkeyPatch) -> None:

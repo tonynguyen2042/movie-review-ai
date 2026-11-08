@@ -7,8 +7,9 @@ Nested overrides join segments with ``__`` after the single-underscore prefix,
 e.g. ``MOVIE_REVIEW_PIPELINE__REVIEW__TARGET_WPM=180``.
 
 Model identities and prompt versions have no code fallbacks: they must come
-from ``models.yaml`` / ``default.yaml`` so no model name, path, duration,
-WPM, threshold, memory budget, or prompt version is hard-coded.
+from the config file (``config/config.yaml`` by default) so no model name,
+path, duration, WPM, threshold, memory budget, or prompt version is
+hard-coded.
 """
 
 from __future__ import annotations
@@ -36,6 +37,12 @@ from movie_review.remote.http import (
 CONFIG_ENV_VAR = "MOVIE_REVIEW_CONFIG"
 ENV_PREFIX = "MOVIE_REVIEW_"
 
+#: Process-wide override for the config file. The CLI's ``--config`` flag sets
+#: it in the startup callback, before any settings load in the process, so
+#: every ``load_settings()`` -- the orchestrator's internal loads included --
+#: resolves against the same file.
+_active_config_path: str | Path | None = None
+
 RatioFloat = Annotated[float, Field(ge=0.0, le=1.0)]
 
 
@@ -44,17 +51,28 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def set_config_path(path: str | Path | None) -> None:
+    """Point the whole process at a different config file (CLI ``--config``).
+
+    Takes precedence over ``MOVIE_REVIEW_CONFIG``: a flag is a more specific
+    intent than an exported variable.
+    """
+    global _active_config_path
+    _active_config_path = path
+
+
 def default_config_path() -> Path:
-    """Default ``config/default.yaml`` path (overridable via ``MOVIE_REVIEW_CONFIG``)."""
+    """The active config file.
+
+    Precedence: the ``--config`` override, then ``MOVIE_REVIEW_CONFIG``, then
+    ``<repo>/config/config.yaml``.
+    """
+    if _active_config_path is not None:
+        return Path(_active_config_path)
     override = os.environ.get(CONFIG_ENV_VAR)
     if override:
         return Path(override)
-    return repo_root() / "config" / "default.yaml"
-
-
-def default_models_path(config_path: Path) -> Path:
-    """Model catalog path: ``models.yaml`` next to the active config file."""
-    return config_path.parent / "models.yaml"
+    return repo_root() / "config" / "config.yaml"
 
 
 def read_yaml(path: Path) -> dict[str, Any]:
@@ -82,7 +100,7 @@ class GenerationSettings(BaseModel):
 
 
 class ModelSpec(BaseModel):
-    """A single model entry; identities come from ``models.yaml``.
+    """A single model entry; identities come from the config file's ``profiles``.
 
     ``backend`` selects the runtime that serves the model. ``mlx`` loads
     local weights on Apple Silicon (the historical default). Setting it to
@@ -96,7 +114,7 @@ class ModelSpec(BaseModel):
     keeps its OpenAI-compatible default.
 
     Secrets are never stored inline: ``api_key_env`` names the environment
-    variable that holds the key, so credentials stay out of ``models.yaml``.
+    variable that holds the key, so credentials stay out of the config file.
     """
 
     model: str
@@ -475,26 +493,26 @@ def _with_privacy(profile: dict[str, Any], data: dict[str, Any]) -> dict[str, An
 
 
 class _ProfileYamlSource(YamlConfigSettingsSource):
-    """YAML source merging ``default.yaml`` with the active ``models.yaml`` profile.
+    """YAML source merging the active profile into the single config file.
 
-    ``default.yaml`` carries the ``models.profile`` name (plus optional pins);
-    full model identities come from the ``profiles`` catalog in ``models.yaml``.
+    The config file carries the ``models.profile`` name (plus optional pins)
+    and the full ``profiles`` catalog in one document, so there is no second
+    file to go missing.
 
     Precedence is ``profile_override`` (a CLI flag), then
-    ``MOVIE_REVIEW_MODELS__PROFILE``, then ``default.yaml``, then ``balanced``.
-    An explicit flag has to beat the environment: a user who exported the
-    variable once should still be able to override it per run.
+    ``MOVIE_REVIEW_MODELS__PROFILE``, then the file's ``models.profile``,
+    then ``balanced``. An explicit flag has to beat the environment: a user
+    who exported the variable once should still be able to override it per
+    run.
     """
 
     def __init__(
         self,
         settings_cls: type[BaseSettings],
         config_path: Path,
-        models_path: Path,
         profile_override: str | None = None,
     ) -> None:
         self._config_path = config_path
-        self._models_path = models_path
         self._profile_override = profile_override
         super().__init__(settings_cls, yaml_file=config_path)
 
@@ -506,12 +524,20 @@ class _ProfileYamlSource(YamlConfigSettingsSource):
         profile_name = (
             self._profile_override or _profile_from_env() or models_block.get("profile", "balanced")
         )
-        catalog = read_yaml(self._models_path).get("profiles", {})
+        catalog = data.get("profiles")
+        if catalog is None:
+            # Usually a hand-rolled file from the two-file era, where the
+            # catalog lived in a separate models.yaml. Name the merge so the
+            # operator knows which key to add.
+            raise ValueError(
+                f"No 'profiles' catalog in {self._config_path}; default.yaml and "
+                "models.yaml were merged into a single config file (T182)"
+            )
         if not isinstance(catalog, dict) or profile_name not in catalog:
-            raise ValueError(f"Unknown model profile {profile_name!r} in {self._models_path}")
+            raise ValueError(f"Unknown model profile {profile_name!r} in {self._config_path}")
         profile = catalog[profile_name]
         if not isinstance(profile, dict):
-            raise ValueError(f"Profile {profile_name!r} must be a mapping: {self._models_path}")
+            raise ValueError(f"Profile {profile_name!r} must be a mapping: {self._config_path}")
         data["models"] = {**_with_privacy(profile, data), **models_block}
         return data
 
@@ -548,7 +574,7 @@ class AppSettings(BaseSettings):
             init_settings,
             env_settings,
             dotenv_settings,
-            _ProfileYamlSource(settings_cls, config_path, default_models_path(config_path)),
+            _ProfileYamlSource(settings_cls, config_path),
         )
 
 
@@ -561,50 +587,50 @@ def _override_sources(
     return (_ProfileOverrideSource(settings_cls, profile),)
 
 
-def available_profiles(
-    config_path: str | Path | None = None,
-    models_path: str | Path | None = None,
-) -> list[str]:
-    """Names present in the ``models.yaml`` profile catalog.
+def available_profiles(config_path: str | Path | None = None) -> list[str]:
+    """Names present in the config file's ``profiles`` catalog.
 
     Lets the CLI validate ``--profile`` and list the real choices in ``--help``
     instead of hardcoding a list that silently omits ``remote``.
     """
     resolved_config = Path(config_path) if config_path else default_config_path()
-    resolved_models = Path(models_path) if models_path else default_models_path(resolved_config)
-    catalog = read_yaml(resolved_models).get("profiles", {})
+    catalog = read_yaml(resolved_config).get("profiles")
+    if catalog is None:
+        raise ValueError(
+            f"No 'profiles' catalog in {resolved_config}; default.yaml and models.yaml "
+            "were merged into a single config file (T182)"
+        )
     if not isinstance(catalog, dict):
-        raise ValueError(f"'profiles' must be a mapping: {resolved_models}")
+        raise ValueError(f"'profiles' must be a mapping: {resolved_config}")
     return list(catalog)
 
 
 def load_settings(
     config_path: str | Path | None = None,
-    models_path: str | Path | None = None,
     *,
     profile: str | None = None,
     generation: GenerationSettings | None = None,
 ) -> AppSettings:
-    """Load settings from explicit YAML files with env overrides applied.
+    """Load settings from a YAML config file with env overrides applied.
 
     Args:
-        config_path: ``default.yaml`` location (default: ``MOVIE_REVIEW_CONFIG``
-            env var or ``<repo>/config/default.yaml``).
-        models_path: ``models.yaml`` location (default: next to ``config_path``).
-        profile: explicit profile name, overriding the environment and
-            ``default.yaml``. Raises :class:`ValueError` if the name is not in
-            the ``models.yaml`` catalog.
+        config_path: the config file location (default: the ``--config``
+            override, the ``MOVIE_REVIEW_CONFIG`` env var, or
+            ``<repo>/config/config.yaml``). The file carries both the product
+            controls and the ``profiles`` catalog.
+        profile: explicit profile name, overriding the environment and the
+            file's ``models.profile``. Raises :class:`ValueError` if the name
+            is not in the catalog.
         generation: pins the sampling of every model slot, which is what
             ``--deterministic`` uses. The values are part of the cache
             identity, so a pinned run and an ordinary one do not share
             answers.
     """
     resolved_config = Path(config_path) if config_path else default_config_path()
-    resolved_models = Path(models_path) if models_path else default_models_path(resolved_config)
-    if profile is not None and profile not in available_profiles(resolved_config, resolved_models):
+    if profile is not None and profile not in available_profiles(resolved_config):
         raise ValueError(
             f"Unknown model profile {profile!r}; available: "
-            f"{', '.join(available_profiles(resolved_config, resolved_models))}"
+            f"{', '.join(available_profiles(resolved_config))}"
         )
 
     class _Configured(AppSettings):
@@ -622,9 +648,7 @@ def load_settings(
                 init_settings,
                 env_settings,
                 dotenv_settings,
-                _ProfileYamlSource(
-                    settings_cls, resolved_config, resolved_models, profile_override=profile
-                ),
+                _ProfileYamlSource(settings_cls, resolved_config, profile_override=profile),
             )
 
     settings: AppSettings = _Configured()  # type: ignore[call-arg]  # sources supply models/prompts
