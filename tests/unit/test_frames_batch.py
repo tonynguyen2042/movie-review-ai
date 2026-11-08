@@ -8,6 +8,7 @@ frame index, so a test can assert which frame landed on which filename.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -34,16 +35,36 @@ from movie_review.storage import repositories as repo
 from movie_review.storage.database import bootstrap, connect
 
 
+def _is_batch_call(args: list[str]) -> bool:
+    """The select pass, as opposed to the per-frame seek or the dHash pass."""
+    return any(arg.startswith("select=") for arg in args)
+
+
 def _fake_batch_run(
     recorded: list[list[str]],
     content_by_index: dict[int, bytes] | None = None,
     max_index: int | None = None,
 ) -> Callable[..., str]:
-    """A run_fn that emulates the select pass and the per-frame seek."""
+    """A run_fn that emulates the select pass, the per-frame seek and dHash.
+
+    The dHash emulation renders each listed frame to a 72-byte block derived
+    from the file's bytes: identical frames hash identically, different
+    frames hash far apart (a digest spread over the block).
+    """
 
     def _run(binary: str, args: list[str]) -> str:
         recorded.append(list(args))
-        if "-vf" in args:
+        if "rawvideo" in args:
+            list_file = Path(args[args.index("-i") + 1])
+            lines = list_file.read_text().strip().splitlines()
+            blocks: list[bytes] = []
+            for line in lines:
+                frame = Path(line.split("'")[1])
+                digest = hashlib.sha256(frame.read_bytes()).digest()
+                blocks.append((digest * 3)[:72])
+            Path(args[-1]).write_bytes(b"".join(blocks))
+            return ""
+        if _is_batch_call(args):
             vf = args[args.index("-vf") + 1]
             indices = [int(match) for match in re.findall(r"eq\(n\\,(?P<i>\d+)\)", vf)]
             pattern = Path(args[-1])
@@ -242,7 +263,7 @@ def test_sample_movie_one_pass_per_scene(tmp_path: Path) -> None:
     )
 
     # Two scenes, two passes -- not nine seeks.
-    batch_calls = [args for args in recorded if "-vf" in args]
+    batch_calls = [args for args in recorded if _is_batch_call(args)]
     assert len(batch_calls) == 2
     assert len(result.frames) == 3 + 6
     assert all(f.path.is_file() for f in result.frames)
@@ -272,8 +293,9 @@ def test_sample_movie_without_fps_keeps_per_frame(tmp_path: Path) -> None:
         run_fn=_fake_batch_run(recorded),
     )
 
-    assert len(recorded) == 3
-    assert all("-vf" not in args for args in recorded)
+    seek_calls = [args for args in recorded if "-ss" in args]
+    assert len(seek_calls) == 3
+    assert not any(_is_batch_call(args) for args in recorded)
     assert len(result.frames) == 3
     conn.close()
 
