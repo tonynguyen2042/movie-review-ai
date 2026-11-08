@@ -26,7 +26,7 @@ from movie_review.benchmark.runner import (  # noqa: E402
     BenchmarkError,
     run_pipeline_benchmark,
 )
-from movie_review.config.settings import load_settings  # noqa: E402
+from movie_review.config.settings import load_settings, set_config_path  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -34,7 +34,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--movie", required=True, help="The reference movie.")
     parser.add_argument("--db-path", help="Where the job database lives.")
     parser.add_argument("--profile", help="The model profile to measure.")
+    parser.add_argument("--config", help="Config file to use (default: <repo>/config/config.yaml).")
     args = parser.parse_args(argv)
+    set_config_path(args.config)
 
     settings = load_settings(profile=args.profile)
 

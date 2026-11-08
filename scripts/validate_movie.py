@@ -26,7 +26,7 @@ _SRC = Path(__file__).resolve().parent.parent / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from movie_review.config.settings import load_settings  # noqa: E402
+from movie_review.config.settings import load_settings, set_config_path  # noqa: E402
 
 
 def _validate_movie(movie: Path, ffprobe: str) -> tuple[dict[str, Any], bool]:
@@ -67,7 +67,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--job", help="The job whose artifacts to check.")
     parser.add_argument("--db-path", help="Where the job database lives.")
     parser.add_argument("--profile", help="The configuration profile to read.")
+    parser.add_argument("--config", help="Config file to use (default: <repo>/config/config.yaml).")
     args = parser.parse_args(argv)
+    set_config_path(args.config)
 
     if not args.movie and not args.job:
         parser.error("give a movie file or --job")

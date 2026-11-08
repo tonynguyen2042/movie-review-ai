@@ -28,7 +28,7 @@ from movie_review.benchmark.runner import (  # noqa: E402
     BenchmarkError,
     run_model_benchmark,
 )
-from movie_review.config.settings import load_settings  # noqa: E402
+from movie_review.config.settings import load_settings, set_config_path  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -47,11 +47,13 @@ def main(argv: list[str] | None = None) -> int:
         "--repeats", type=int, default=3, help="How many times to repeat the measurement."
     )
     parser.add_argument("--profile", help="The model profile to measure.")
+    parser.add_argument("--config", help="Config file to use (default: <repo>/config/config.yaml).")
     parser.add_argument(
         "--workdir",
         help="Where the probe files are written. Defaults to the data directory.",
     )
     args = parser.parse_args(argv)
+    set_config_path(args.config)
 
     settings = load_settings(profile=args.profile)
     workdir = Path(args.workdir) if args.workdir else Path(settings.paths.data_dir) / "benchmark"
