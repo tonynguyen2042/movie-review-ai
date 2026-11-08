@@ -2839,19 +2839,19 @@ docs/troubleshooting.md
 
 **Acceptance criteria**
 
-- [ ] `config/config.yaml` is the only top-level config file in `config/`:
+- [x] `config/config.yaml` is the only top-level config file in `config/`:
   `default.yaml` and `models.yaml` are gone, and a plain `load_settings()`
   resolves the profile from the file's own `profiles` catalog
-- [ ] a config file without a `profiles` catalog fails with an error that
+- [x] a config file without a `profiles` catalog fails with an error that
   names the file and the merge, not "Unknown model profile"
-- [ ] `movie-review <command> --config PATH` runs every settings load in the
+- [x] `movie-review <command> --config PATH` runs every settings load in the
   process against that file, and a missing file is a clean non-zero exit
   with a message, not a traceback
-- [ ] precedence holds: `--config` > `MOVIE_REVIEW_CONFIG` > repo default;
+- [x] precedence holds: `--config` > `MOVIE_REVIEW_CONFIG` > repo default;
   `--profile` > `MOVIE_REVIEW_MODELS__PROFILE` > `models.profile` >
   `balanced`
-- [ ] the desktop bridge reads and writes the single file: `settings:write`
+- [x] the desktop bridge reads and writes the single file: `settings:write`
   validates the whole document (every profile expands), refuses invalid
   input with exit 2, and leaves a `.bak.<timestamp>` on success
-- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
