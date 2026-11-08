@@ -18,6 +18,10 @@ pipeline:
     short_frames: 3
     medium_frames: 6
     long_frames: 12
+    # Drop near-duplicate frames (a held shot sampled twice is one picture).
+    dedupe: true
+    # dHash bits: frames differing by at most this many bits are duplicates.
+    dedupe_hamming_threshold: 5
   diarization: true
   review:
     target_duration_minutes: 20
