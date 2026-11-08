@@ -124,6 +124,12 @@ class ModelSpec(BaseModel):
     #: reply is indistinguishable from prose once the closing brace is missing,
     #: and the model needs room for every list it was asked to produce.
     max_tokens: int | None = Field(default=None, gt=0)
+    #: How many frames a single vision request may carry. A scene keeps every
+    #: frame it sampled, but an endpoint -- a remote one in particular -- may
+    #: refuse more images than that in one request. A scene over the cap is
+    #: sent with its first and last frames and the rest spaced evenly, so the
+    #: request still covers the whole scene.
+    max_frames_per_request: int = Field(default=32, ge=1)
     #: Whether this model may be used while ``privacy.cloud_ai`` is off. A
     #: remote model would send movie content off the machine, so the
     #: configuration sets this from the privacy flag. A hand-built spec
