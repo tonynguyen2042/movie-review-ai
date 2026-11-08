@@ -2,15 +2,19 @@
 
 Base sampling is duration-adaptive (short/medium/long buckets); content
 boosts (motion, new characters, story events) arrive with T026 feedback.
-Frames are extracted from the analysis proxy with accurate seeking.
+Frames are extracted from the analysis proxy. Each scene's sample set is one
+FFmpeg decode pass (T179): a ``select`` filter keeps the scene's frames by
+index and writes them in stream order, so N frames cost one launch and one
+seek instead of N launches and N seeks.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,10 +31,12 @@ from movie_review.utils import logging as ulog
 _logger = logging.getLogger(__name__)
 
 STAGE_NAME = "frames"
-#: Bumped to v2 when frames came from the analysis proxy rather than the
-#: original source. Same scenes, same timestamps, different pixels -- so the v1
-#: cache entries describe images that no longer match what is produced.
-STAGE_VERSION = "v2"
+#: Bumped to v3 when a scene's frames started coming from one decode pass
+#: (T179). The pass addresses frames by index, and ``round(t * fps)`` can
+#: land a frame either side of the millisecond-quantised seek v2 used, so a
+#: v2 cache entry may describe a neighbouring frame rather than the one
+#: produced now.
+STAGE_VERSION = "v3"
 MANIFEST_FILENAME = "frames.json"
 
 
@@ -158,8 +164,144 @@ def extract_frame(
     return target
 
 
+def frame_index_for(timestamp: float, fps: float) -> int:
+    """The frame index nearest a requested instant.
+
+    The batch pass addresses frames by index because the ``select`` filter
+    has no time base. ``round(t * fps)`` is the index of the frame whose
+    centre is closest to the requested instant. The per-frame path seeks a
+    millisecond-quantised timestamp and may land one frame either side; the
+    difference is below the granularity the analysis can use.
+    """
+    if fps <= 0:
+        raise FrameSamplingError(f"Invalid fps: {fps}")
+    return int(round(timestamp * fps))
+
+
+def _select_expression(indices: list[int]) -> str:
+    """A ``select`` filter that keeps exactly the given frame indices.
+
+    A comma separates filters in a filter chain, so each ``eq(n, IDX)``
+    escapes its comma at the filtergraph level.
+    """
+    return "+".join(f"eq(n\\,{index})" for index in indices)
+
+
+def _per_frame(
+    source: str | Path,
+    timestamps: Sequence[float],
+    dest_dir: Path,
+    scene_id: str,
+    ffmpeg: str,
+    run_fn: Callable[..., str],
+) -> list[Path]:
+    """One seek per frame: the pre-batch behaviour, and the batch fallback."""
+    return [
+        extract_frame(
+            source, timestamp, dest_dir / frame_filename(scene_id, timestamp), ffmpeg, run_fn
+        )
+        for timestamp in timestamps
+    ]
+
+
+def extract_scene_frames(
+    source: str | Path,
+    timestamps: Sequence[float],
+    dest_dir: str | Path,
+    scene_id: str,
+    fps: float | None,
+    *,
+    ffmpeg: str = "ffmpeg",
+    run_fn: Callable[..., str] = ff.check,
+) -> list[Path]:
+    """One scene's timestamps, one decode pass whenever the pass is trustworthy.
+
+    The per-frame path pays a process launch and a seek-to-time for every
+    frame; a scene of six frames is six launches and six decodes of the
+    region before the first frame. The batch pass decodes the stream once
+    and keeps the frames by index with a single ``select`` filter, which
+    writes them in stream order, so the i-th output file is the i-th
+    requested timestamp.
+
+    It falls back to one seek per frame when the pass cannot be trusted:
+
+    - no usable fps (index addressing needs a frame rate);
+    - two timestamps land on the same frame (the pass would keep one frame
+      for two samples);
+    - non-ascending timestamps (stream order would not match request order);
+    - the pass itself fails (a broken stream fails per frame too, but the
+      per-frame error names the timestamp);
+    - the pass comes up short (a sample past the last frame is silently
+      dropped by the ``select`` filter).
+
+    The fallback reuses :func:`extract_frame`, so a batch that cannot finish
+    never loses a frame the old path would have produced.
+    """
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    ordered = list(timestamps)
+    if len(ordered) < 2 or any(a > b for a, b in zip(ordered, ordered[1:], strict=False)):
+        return _per_frame(source, ordered, dest, scene_id, ffmpeg, run_fn)
+
+    indices: list[int] | None = None
+    if fps is not None and fps > 0:
+        try:
+            candidates = [frame_index_for(timestamp, fps) for timestamp in ordered]
+        except FrameSamplingError:
+            candidates = None
+        if candidates is not None and len(set(candidates)) == len(candidates):
+            indices = candidates
+    if indices is None:
+        return _per_frame(source, ordered, dest, scene_id, ffmpeg, run_fn)
+
+    batch_dir = dest / ".batch"
+    pattern = str(batch_dir / "%05d.jpg")
+    try:
+        run_fn(
+            ffmpeg,
+            [
+                "-y",
+                "-v",
+                "error",
+                "-i",
+                str(source),
+                "-vf",
+                f"select={_select_expression(indices)}",
+                "-fps_mode",
+                "vfr",
+                "-q:v",
+                "2",
+                pattern,
+            ],
+        )
+    except ff.ProcessError as exc:
+        _logger.warning(
+            "batch frame pass failed for %s (%s); falling back to per-frame", scene_id, exc
+        )
+        shutil.rmtree(batch_dir, ignore_errors=True)
+        return _per_frame(source, ordered, dest, scene_id, ffmpeg, run_fn)
+
+    produced = sorted(batch_dir.glob("*.jpg"))
+    if len(produced) > len(ordered):
+        shutil.rmtree(batch_dir, ignore_errors=True)
+        raise FrameSamplingError(
+            f"Batch pass for {scene_id} produced {len(produced)} frames for {len(ordered)} samples"
+        )
+    for index, frame_file in enumerate(produced):
+        os.replace(frame_file, dest / frame_filename(scene_id, ordered[index]))
+    shutil.rmtree(batch_dir, ignore_errors=True)
+    # A short pass means the trailing samples fell off the end of the stream;
+    # the per-frame seek extracts them or names the unextractable timestamp.
+    for timestamp in ordered[len(produced) :]:
+        extract_frame(source, timestamp, dest / frame_filename(scene_id, timestamp), ffmpeg, run_fn)
+    return [dest / frame_filename(scene_id, timestamp) for timestamp in ordered]
+
+
 def frames_cache_key(
-    file_hash: str, scenes: list[tuple[str, float, float]], cfg: SamplingConfig
+    file_hash: str,
+    scenes: list[tuple[str, float, float]],
+    cfg: SamplingConfig,
+    fps: float | None = None,
 ) -> str:
     """Cache key for a sampling plan (shared with feedback resampling)."""
     spec = CacheSpec(
@@ -173,6 +315,7 @@ def frames_cache_key(
             "short_frames": cfg.short_frames,
             "medium_frames": cfg.medium_frames,
             "long_frames": cfg.long_frames,
+            "fps": fps,
         },
     )
     return cache_key(spec)
@@ -187,6 +330,7 @@ def sample_movie(
     conn: sqlite3.Connection,
     cache: CacheManager,
     config: SamplingConfig | None = None,
+    fps: float | None = None,
     ffmpeg: str = "ffmpeg",
     run_fn: Callable[..., str] = ff.check,
     on_progress: ProgressReporter | None = None,
@@ -196,6 +340,10 @@ def sample_movie(
     Reports one step per frame when ``on_progress`` is given. The total is known
     before any extraction starts -- the sum of the per-scene bucket counts -- so
     the fraction is real rather than an estimate.
+
+    ``fps`` (the frame rate of the file being sampled, recorded at ingest)
+    lets each scene's frames come from one decode pass; without it the
+    sampler keeps one seek per frame.
     """
     cfg = config or SamplingConfig()
     src = Path(source)
@@ -207,7 +355,7 @@ def sample_movie(
     # which one produced a frame -- otherwise switching between them would
     # silently reuse the other's frames.
     file_hash = artifacts.sha256_file(src)
-    key = frames_cache_key(file_hash, scenes, cfg)
+    key = frames_cache_key(file_hash, scenes, cfg, fps)
     frames_dir = Path(jobs_dir) / job_id / STAGE_NAME
     # Counted up front so the reported fraction is exact, not a guess that
     # drifts when a scene lands in a different bucket than the last one.
@@ -241,15 +389,21 @@ def sample_movie(
                 )
             continue
 
-        for timestamp in sample_timestamps(start, end, count):
-            dest = frames_dir / scene_id / frame_filename(scene_id, timestamp)
-            extract_frame(src, timestamp, dest, ffmpeg, run_fn)
+        # One decode pass per scene (T179): the pass falls back to one seek
+        # per frame when it cannot be trusted, so this never loses a frame
+        # the old behaviour would have produced. It returns the paths in
+        # request order, so the timestamps pair by position.
+        timestamps = sample_timestamps(start, end, count)
+        paths = extract_scene_frames(
+            src, timestamps, frames_dir / scene_id, scene_id, fps, ffmpeg=ffmpeg, run_fn=run_fn
+        )
+        for timestamp, path in zip(timestamps, paths, strict=True):
             frames.append(
                 Frame(
                     scene_id=scene_id,
                     timestamp=timestamp,
-                    path=dest,
-                    sha256=artifacts.sha256_file(dest),
+                    path=path,
+                    sha256=artifacts.sha256_file(path),
                 )
             )
             extracted += 1

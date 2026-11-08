@@ -2582,3 +2582,54 @@ tests/unit/test_proxy.py
   `config/default.yaml` change (see T177)
 
 ---
+
+## T179 - Batch frame extraction: one decode pass per scene
+
+**Objective**
+
+Stop paying one process launch and one seek-and-decode per frame. Extract a
+scene's whole sample set in a single FFmpeg decode pass with a `select`
+filter, and fall back to the per-frame seek when the pass cannot be trusted.
+
+**Depends on**: T015.
+
+**The defect**
+
+`media/frames.py` extracted every frame with its own
+`ffmpeg -ss T -i source -frames:v 1` invocation. Each launch re-opens the
+file, re-seeks to the timestamp and re-decodes the region before the first
+frame. A feature film samples roughly 6,000 frames, so the frames stage pays
+6,000 launches and 6,000 seeks for work one pass per scene could do.
+
+FFmpeg's `select` filter keeps frames by index in a single decode:
+`-vf "select=eq(n\,123)+eq(n\,456)+..."` writes the kept frames in stream
+order, so the i-th output file is the i-th requested timestamp. Frame index
+addressing needs the stream's fps, which the ingest probe already recorded.
+
+**Files**
+
+```text
+src/movie_review/media/frames.py
+src/movie_review/pipeline/orchestrator.py
+tests/unit/test_frames_batch.py
+```
+
+**Acceptance criteria**
+
+- [x] a scene with N samples runs one FFmpeg pass for N >= 2, asserted by
+  counting invocations
+- [x] batch outputs land on the same deterministic filenames the per-frame
+  path used, with the i-th kept frame mapping to the i-th timestamp
+- [x] no fps, colliding frame indices, a failed pass, or samples past the
+  last frame all fall back to the per-frame path without losing a frame
+- [x] the per-frame output of a real 24 fps test clip is byte-identical to
+  the batch output at the same frame index
+- [x] `sample_movie` reports progress per frame as before and persists
+  after every scene as before
+- [x] `STAGE_VERSION` moves to v3 so v2 cache entries are not adopted
+- [x] the orchestrator passes the probed fps from the job's metadata
+- [x] `pytest -q` passes apart from the three pre-existing
+  `test_publish_title.py` Windows-path failures, which are red on this
+  master and unrelated to frame sampling
+
+---
