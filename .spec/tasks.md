@@ -2758,3 +2758,100 @@ tests/unit/test_vision_frames_wiring.py
   the boosted-frames pass
 - [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
+
+## T182 - One config file, pointable from the CLI
+
+**Objective**
+
+Merge `config/default.yaml` and `config/models.yaml` into a single
+`config/config.yaml`, and let the application point at a different config
+file with a `--config PATH` flag (the `MOVIE_REVIEW_CONFIG` env var already
+did this for the old two-file layout).
+
+**Depends on**: T002, T181.
+
+**The problem**
+
+Two files describe one configuration: the product controls in
+`default.yaml` and the model catalog in `models.yaml`, tied together by a
+profile name and by the loader deriving the catalog path from the config
+file's directory. An operator who copies one file to a new machine, or
+points `MOVIE_REVIEW_CONFIG` at a custom file, ships or validates against a
+missing catalog, and the failure surfaces as "Unknown model profile
+'balanced'" — a message that does not name the missing file. And there is
+no flag for the common case "run this job with my own config".
+
+**Design**
+
+- One file: `config/config.yaml` = the former `default.yaml` plus the
+  `profiles:` catalog. No two-file fallback; the old layout is a clean break
+  and an error that names the merge.
+- `models.profile` (or `--profile` / `MOVIE_REVIEW_MODELS__PROFILE`) still
+  selects from the `profiles:` catalog in the same file.
+- CLI: `--config PATH` is a global option on the app, set in the startup
+  callback before any settings load in the process, so every
+  `load_settings()` — the orchestrator's internal loads included — resolves
+  against the same file. Precedence: `--config` > `MOVIE_REVIEW_CONFIG` >
+  `<repo>/config/config.yaml`. A missing file is a clean non-zero exit, not
+  a traceback.
+- Scripts: `benchmark_pipeline.py`, `benchmark_models.py`,
+  `validate_movie.py`, `cleanup_cache.py` gain the same `--config` flag.
+- Desktop: `settings:read` / `settings:write` operate on the one file; the
+  two editors (model profiles / pipeline settings) edit one draft of it and
+  both save buttons write the whole file.
+
+**Files**
+
+```text
+.spec/tasks.md
+config/config.yaml
+config/default.yaml                    (deleted)
+config/models.yaml                     (deleted)
+src/movie_review/config/settings.py
+src/movie_review/cli/app.py
+src/movie_review/pipeline/orchestrator.py    (docstrings only)
+scripts/benchmark_pipeline.py
+scripts/benchmark_models.py
+scripts/validate_movie.py
+scripts/cleanup_cache.py
+desktop/scripts/desktop_bridge.py
+desktop/src/main/ipc.js
+desktop/src/renderer/index.html
+desktop/src/renderer/app.js
+desktop/test/bridge.test.js
+desktop/test/python-runner.test.js
+tests/conftest.py
+tests/unit/test_config.py
+tests/unit/test_config_cleanup.py
+tests/unit/test_cli_profile.py
+tests/unit/test_privacy_gate.py
+tests/unit/test_remote_reasoning.py
+tests/unit/test_orchestrator.py
+tests/unit/test_desktop_bridge.py
+README.md
+docs/GETTING-STARTED.md
+docs/DESKTOP-APP.md
+docs/architecture.md
+docs/model-selection.md
+docs/pipeline.md
+docs/troubleshooting.md
+```
+
+**Acceptance criteria**
+
+- [ ] `config/config.yaml` is the only top-level config file in `config/`:
+  `default.yaml` and `models.yaml` are gone, and a plain `load_settings()`
+  resolves the profile from the file's own `profiles` catalog
+- [ ] a config file without a `profiles` catalog fails with an error that
+  names the file and the merge, not "Unknown model profile"
+- [ ] `movie-review <command> --config PATH` runs every settings load in the
+  process against that file, and a missing file is a clean non-zero exit
+  with a message, not a traceback
+- [ ] precedence holds: `--config` > `MOVIE_REVIEW_CONFIG` > repo default;
+  `--profile` > `MOVIE_REVIEW_MODELS__PROFILE` > `models.profile` >
+  `balanced`
+- [ ] the desktop bridge reads and writes the single file: `settings:write`
+  validates the whole document (every profile expands), refuses invalid
+  input with exit 2, and leaves a `.bak.<timestamp>` on success
+- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+  Windows-path failures, which are red on this master
