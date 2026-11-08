@@ -2616,18 +2616,20 @@ tests/unit/test_frames_batch.py
 
 **Acceptance criteria**
 
-- [ ] a scene with N samples runs one FFmpeg pass for N >= 2, asserted by
+- [x] a scene with N samples runs one FFmpeg pass for N >= 2, asserted by
   counting invocations
-- [ ] batch outputs land on the same deterministic filenames the per-frame
+- [x] batch outputs land on the same deterministic filenames the per-frame
   path used, with the i-th kept frame mapping to the i-th timestamp
-- [ ] no fps, colliding frame indices, a failed pass, or samples past the
+- [x] no fps, colliding frame indices, a failed pass, or samples past the
   last frame all fall back to the per-frame path without losing a frame
-- [ ] the per-frame output of a real 24 fps test clip is byte-identical to
+- [x] the per-frame output of a real 24 fps test clip is byte-identical to
   the batch output at the same frame index
-- [ ] `sample_movie` reports progress per frame as before and persists
+- [x] `sample_movie` reports progress per frame as before and persists
   after every scene as before
-- [ ] `STAGE_VERSION` moves to v3 so v2 cache entries are not adopted
-- [ ] the orchestrator passes the probed fps from the job's metadata
-- [ ] `pytest -q` passes
+- [x] `STAGE_VERSION` moves to v3 so v2 cache entries are not adopted
+- [x] the orchestrator passes the probed fps from the job's metadata
+- [x] `pytest -q` passes apart from the three pre-existing
+  `test_publish_title.py` Windows-path failures, which are red on this
+  master and unrelated to frame sampling
 
 ---
