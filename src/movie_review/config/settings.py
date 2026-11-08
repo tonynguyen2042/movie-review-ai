@@ -296,6 +296,12 @@ class VisualSamplingSettings(BaseModel):
     short_frames: PositiveInt = 3
     medium_frames: PositiveInt = 6
     long_frames: PositiveInt = 12
+    #: Whether near-duplicate frames are dropped after sampling (T180). A
+    #: static shot sampled six times would otherwise be read six times.
+    dedupe: bool = True
+    #: Frames differing by at most this many dHash bits count as duplicates
+    #: (0 = only bit-identical renders).
+    dedupe_hamming_threshold: int = Field(default=5, ge=0)
 
 
 class PipelineSettings(BaseModel):

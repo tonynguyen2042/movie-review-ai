@@ -640,9 +640,14 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
         # <scene>" on the first scene every single time.
         #
         # sample_movie is idempotent (cache key over the sampled file's hash,
-        # scene spans and bucket settings, re-verified against each frame's
-        # sha256), so a retry or resume re-uses the frames instead of re-running
-        # ffmpeg.
+        # scene spans, bucket settings and the frame rate, re-verified against
+        # each frame's sha256), so a retry or resume re-uses the frames instead
+        # of re-running ffmpeg.
+        #
+        # The fps comes from the ingest probe: the proxy keeps the source's
+        # frame rate, and with it each scene's frames come from one decode
+        # pass instead of one seek per frame (T179).
+        movie = repo.get_movie(ctx.conn, ctx.job_id)
         sampled = sample_movie(
             proxy.path,
             [(scene.scene_id, scene.start, scene.end) for scene in scenes],
@@ -651,6 +656,7 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             conn=ctx.conn,
             cache=ctx.cache,
             config=sampling_config_from(ctx.settings.pipeline.visual_sampling),
+            fps=movie.metadata.fps if movie is not None else None,
             ffmpeg=ctx.settings.media.ffmpeg,
             # run_stage left the caller's callback here, already bound to
             # "vision"; both sub-steps report through the same channel.
@@ -702,6 +708,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             conn=ctx.conn,
             cache=ctx.cache,
             sampling_config=sampling_config_from(ctx.settings.pipeline.visual_sampling),
+            # The same fps sample_movie used: the feedback's manifest lands in
+            # the cache slot a resumed run looks up (T180).
+            fps=movie.metadata.fps if movie is not None else None,
             ffmpeg=ctx.settings.media.ffmpeg,
         )
         if not feedback.added:

@@ -2583,6 +2583,135 @@ tests/unit/test_proxy.py
 
 ---
 
+## T179 - Batch frame extraction: one decode pass per scene
+
+**Objective**
+
+Stop paying one process launch and one seek-and-decode per frame. Extract a
+scene's whole sample set in a single FFmpeg decode pass with a `select`
+filter, and fall back to the per-frame seek when the pass cannot be trusted.
+
+**Depends on**: T015.
+
+**The defect**
+
+`media/frames.py` extracted every frame with its own
+`ffmpeg -ss T -i source -frames:v 1` invocation. Each launch re-opens the
+file, re-seeks to the timestamp and re-decodes the region before the first
+frame. A feature film samples roughly 6,000 frames, so the frames stage pays
+6,000 launches and 6,000 seeks for work one pass per scene could do.
+
+FFmpeg's `select` filter keeps frames by index in a single decode:
+`-vf "select=eq(n\,123)+eq(n\,456)+..."` writes the kept frames in stream
+order, so the i-th output file is the i-th requested timestamp. Frame index
+addressing needs the stream's fps, which the ingest probe already recorded.
+
+**Files**
+
+```text
+src/movie_review/media/frames.py
+src/movie_review/pipeline/orchestrator.py
+tests/unit/test_frames_batch.py
+```
+
+**Acceptance criteria**
+
+- [x] a scene with N samples runs one FFmpeg pass for N >= 2, asserted by
+  counting invocations
+- [x] batch outputs land on the same deterministic filenames the per-frame
+  path used, with the i-th kept frame mapping to the i-th timestamp
+- [x] no fps, colliding frame indices, a failed pass, or samples past the
+  last frame all fall back to the per-frame path without losing a frame
+- [x] the per-frame output of a real 24 fps test clip is byte-identical to
+  the batch output at the same frame index
+- [x] `sample_movie` reports progress per frame as before and persists
+  after every scene as before
+- [x] `STAGE_VERSION` moves to v3 so v2 cache entries are not adopted
+- [x] the orchestrator passes the probed fps from the job's metadata
+- [x] `pytest -q` passes apart from the three pre-existing
+  `test_publish_title.py` Windows-path failures, which are red on this
+  master and unrelated to frame sampling
+
+---
+
+## T180 - Perceptual frame deduplication
+
+**Objective**
+
+Stop sampling the same picture twice. A static or slow shot sampled six
+times produces six near-identical frames; a dissolve gives two adjacent
+scenes a shared boundary frame. Drop the near-duplicates after sampling and
+after feedback so the VLM reads each distinct picture once.
+
+**Depends on**: T179.
+
+**The defect**
+
+`sample_timestamps` spaces frames evenly over a scene's span and
+`apply_feedback` tops up boosted scenes, and neither knows what the frames
+look like. A 60-second held shot yields six frames the VLM is then asked to
+describe six times -- tokens spent re-reading one picture -- and a dissolve
+puts a copy of scene A's last frame at the head of scene B. The cache and
+the manifest already guard against *re-extracting* a frame, but nothing
+guards against *sampling* two visually identical frames.
+
+A difference hash (dHash) fixes the detection: 64 bits of coarse structure
+(horizontally adjacent pixels compared in a 9x8 grayscale render).
+Near-identical frames differ by a handful of bits; different frames by
+dozens. The hash is computed without an image library -- one FFmpeg concat
+pass per scene renders the frames to raw 9x8 gray bytes -- so no dependency
+is added and a movie's frames never leave the machine.
+
+Two consequences the fix must keep straight:
+
+- A deduplicated manifest is part of the cache identity, so the dedupe
+  switch and threshold join the frames cache key, and the frame stage's
+  manifest records each kept frame's dhash.
+- A resumed run must drop the same frames a fresh run would, or the manifest
+  would differ between a fresh run and a resume and every downstream cache
+  keyed on frame hashes would miss. Adopted scenes therefore seed the
+  deduper from their recorded dhashes.
+- T179 bound the fps into `frames_cache_key`, but `apply_feedback` still
+  computed the key without it, so the feedback pass would overwrite a
+  different cache slot than the one `sample_movie` wrote. The feedback path
+  must bind the same fps.
+
+**Files**
+
+```text
+src/movie_review/media/fingerprint.py
+src/movie_review/media/frames.py
+src/movie_review/media/feedback.py
+src/movie_review/pipeline/orchestrator.py
+src/movie_review/config/settings.py
+config/default.yaml
+tests/unit/test_fingerprint.py
+tests/unit/test_frames_dedupe.py
+tests/unit/test_feedback_dedupe.py
+```
+
+**Acceptance criteria**
+
+- [x] a static scene keeps exactly its floor of frames; a dynamic scene
+  keeps all of them
+- [x] a boundary frame shared by two adjacent scenes is dropped from the
+  later scene beyond its floor
+- [x] the dhash is computed by one FFmpeg concat pass per scene, asserted by
+  counting invocations, with no image library in the dependency list
+- [x] near-identical real frames hash within the threshold; different real
+  frames hash far outside it
+- [x] a fingerprint failure keeps all frames of the scene and logs it
+  instead of failing the stage
+- [x] the dedupe switch and threshold are configuration, not constants, and
+  join the frames cache key
+- [x] the manifest records the dhash of every kept frame, and a resumed run
+  drops the same frames a fresh run does
+- [x] `apply_feedback` stops adding frames that duplicate the scene's kept
+  frames, and its cache key binds the same fps as `sample_movie`
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+  failures
+
+---
 ## T181 - The vision request carries no more frames than its endpoint will take
 
 **Objective**

@@ -205,8 +205,13 @@ def test_proxy_frame_run_is_a_cache_hit_the_second_time(workspace: _Workspace) -
 
 
 def test_frames_stage_version_records_the_change(workspace: _Workspace) -> None:
-    """v1 entries describe source pixels; reusing them would be wrong."""
-    assert frames_module.STAGE_VERSION == "v2"
+    """v1 entries describe source pixels; reusing them would be wrong.
+
+    v3 (T179) means the frames came from one decode pass per scene, which can
+    land a frame either side of the v2 millisecond seek, so v2 entries are not
+    adopted.
+    """
+    assert frames_module.STAGE_VERSION == "v3"
     key_source = frames_module.frames_cache_key(
         artifacts.sha256_file(workspace.source), SPANS, frames_module.SamplingConfig()
     )
