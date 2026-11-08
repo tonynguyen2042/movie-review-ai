@@ -2614,18 +2614,18 @@ tests/unit/test_vision_frames_wiring.py
 
 **Acceptance criteria**
 
-- [ ] a request carries no more than `max_frames_per_request` frames,
+- [x] a request carries no more than `max_frames_per_request` frames,
   asserted on the frames the port actually receives
-- [ ] a scene at or under the cap gets an unchanged request: every frame,
+- [x] a scene at or under the cap gets an unchanged request: every frame,
   the same prompt counts
-- [ ] a scene over the cap gets a subset that is chronological, evenly
+- [x] a scene over the cap gets a subset that is chronological, evenly
   spaced, keeps the scene's first and last frame, and has exactly the cap's
   length
-- [ ] the cap is configuration on the vision model spec (env/yaml
+- [x] the cap is configuration on the vision model spec (env/yaml
   overridable), not a code threshold, and joins the vision cache key: a
   different cap re-analyses instead of adopting
-- [ ] the prompt's frame count describes the frames the request carries
-- [ ] the orchestrator passes the configured cap on both the first pass and
+- [x] the prompt's frame count describes the frames the request carries
+- [x] the orchestrator passes the configured cap on both the first pass and
   the boosted-frames pass
-- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
