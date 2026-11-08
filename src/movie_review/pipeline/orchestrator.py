@@ -705,6 +705,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             conn=ctx.conn,
             cache=ctx.cache,
             sampling_config=sampling_config_from(ctx.settings.pipeline.visual_sampling),
+            # The same fps sample_movie used: the feedback's manifest lands in
+            # the cache slot a resumed run looks up (T180).
+            fps=movie.metadata.fps if movie is not None else None,
             ffmpeg=ctx.settings.media.ffmpeg,
         )
         if not feedback.added:
