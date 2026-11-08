@@ -36,8 +36,8 @@ def _load_bridge() -> ModuleType:
 bridge = _load_bridge()
 
 
-def _valid_models() -> dict[str, Any]:
-    """A minimal models.yaml that loads for every profile it declares."""
+def _valid_profiles() -> dict[str, Any]:
+    """A minimal profile catalog that loads for every profile it declares."""
     slots: dict[str, Any] = {
         "asr": {"model": "whisper-large-v3-turbo", "precision": "fp16"},
         "vision": {"model": "Qwen3-VL", "precision": "4bit"},
@@ -45,11 +45,11 @@ def _valid_models() -> dict[str, Any]:
         "critic": {"model": "Qwen3.5-27B", "precision": "4bit", "enabled": False},
         "tts": {"model": "Qwen3-TTS-12Hz-1.7B", "precision": "8bit"},
     }
-    return {"profiles": {"balanced": dict(slots)}}
+    return {"balanced": dict(slots)}
 
 
-def _valid_default() -> dict[str, Any]:
-    """A minimal default.yaml that loads against :func:`_valid_models`.
+def _valid_config() -> dict[str, Any]:
+    """A minimal config document that loads: the controls and the catalog.
 
     ``models`` and ``prompts`` are the only required sections; everything else has
     a code fallback. A test fixture that omits them would fail validation for the
@@ -59,20 +59,21 @@ def _valid_default() -> dict[str, Any]:
         "models": {"profile": "balanced"},
         "prompts": {"versions": {"scene_analysis": "v1", "script_writer": "v1"}},
         "paths": {"data_dir": "data"},
+        "profiles": _valid_profiles(),
     }
 
 
-def _config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Point the bridge at a throwaway config directory."""
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    default = config_dir / "default.yaml"
-    models = config_dir / "models.yaml"
-    default.write_text(yaml.safe_dump(_valid_default()), encoding="utf-8")
-    models.write_text(yaml.safe_dump(_valid_models()), encoding="utf-8")
-    monkeypatch.setattr(bridge, "default_config_path", lambda: default)
-    monkeypatch.setattr(bridge, "default_models_path", lambda _config: models)
-    return config_dir
+def _config_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    document: dict[str, Any] | None = None,
+) -> Path:
+    """Point the bridge at a throwaway config file."""
+    path = tmp_path / "config" / "config.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(document or _valid_config()), encoding="utf-8")
+    monkeypatch.setattr(bridge, "default_config_path", lambda: path)
+    return path
 
 
 def _write_payload(tmp_path: Path, payload: Any, encoding: str = "utf-8") -> str:
@@ -138,30 +139,28 @@ def test_stages_titles_are_not_empty(capsys: pytest.CaptureFixture[str]) -> None
     assert all(title.strip() for _name, title in payload["stages"])
 
 
-def test_settings_read_returns_both_files_and_the_profile_catalog(
+def test_settings_read_returns_the_config_and_the_profile_catalog(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _config_dir(tmp_path, monkeypatch)
+    _config_file(tmp_path, monkeypatch)
 
     payload = bridge._settings_read()
 
     assert payload["ok"] is True
     assert payload["profiles"] == ["balanced"]
-    assert payload["paths"]["config"].endswith("default.yaml")
-    assert payload["default"]["models"]["profile"] == "balanced"
+    assert payload["paths"]["config"].endswith("config.yaml")
+    assert payload["config"]["models"]["profile"] == "balanced"
     assert payload["load_error"] is None
 
 
 def test_settings_read_reports_a_broken_config_instead_of_raising(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    config_dir = _config_dir(tmp_path, monkeypatch)
-    broken = {**_valid_default(), "pipeline": {"review": {"target_wpm": -5}}}
-    (config_dir / "default.yaml").write_text(yaml.safe_dump(broken), encoding="utf-8")
+    config = _config_file(tmp_path, monkeypatch)
+    broken = {**_valid_config(), "pipeline": {"review": {"target_wpm": -5}}}
+    config.write_text(yaml.safe_dump(broken), encoding="utf-8")
 
     payload = bridge._settings_read()
 
@@ -175,23 +174,17 @@ def test_write_creates_a_timestamped_backup(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    config_dir = _config_dir(tmp_path, monkeypatch)
-    original = (config_dir / "default.yaml").read_text(encoding="utf-8")
+    config = _config_file(tmp_path, monkeypatch)
+    original = config.read_text(encoding="utf-8")
 
     code = bridge.main(
-        [
-            "settings:write",
-            "--target",
-            "default",
-            "--payload-file",
-            _write_payload(tmp_path, _valid_default()),
-        ]
+        ["settings:write", "--payload-file", _write_payload(tmp_path, _valid_config())]
     )
 
     payload = json.loads(_stdout(capsys))
     assert code == 0
     assert payload["ok"] is True
-    backups = list(config_dir.glob("default.yaml.bak.*"))
+    backups = list(config.parent.glob("config.yaml.bak.*"))
     assert len(backups) == 1
     assert backups[0].read_text(encoding="utf-8") == original
 
@@ -201,31 +194,17 @@ def test_write_applies_the_payload(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    config_dir = _config_dir(tmp_path, monkeypatch)
+    config = _config_file(tmp_path, monkeypatch)
+    payload = _valid_config()
+    payload["profiles"]["balanced"]["reasoning"] = {"model": "Qwen3.5-9B", "precision": "4bit"}
 
-    code = bridge.main(
-        [
-            "settings:write",
-            "--target",
-            "models",
-            "--payload-file",
-            _write_payload(
-                tmp_path,
-                {
-                    "profiles": {
-                        "balanced": {
-                            **_valid_models()["profiles"]["balanced"],
-                            "reasoning": {"model": "Qwen3.5-9B", "precision": "4bit"},
-                        }
-                    }
-                },
-            ),
-        ]
-    )
+    code = bridge.main(["settings:write", "--payload-file", _write_payload(tmp_path, payload)])
 
-    written = yaml.safe_load((config_dir / "models.yaml").read_text(encoding="utf-8"))
+    written = yaml.safe_load(config.read_text(encoding="utf-8"))
     assert code == 0
     assert written["profiles"]["balanced"]["reasoning"]["model"] == "Qwen3.5-9B"
+    # The rest of the document travels with the edited catalog.
+    assert written["models"]["profile"] == "balanced"
 
 
 def test_write_rejects_an_unknown_profile_and_leaves_the_file_alone(
@@ -233,25 +212,19 @@ def test_write_rejects_an_unknown_profile_and_leaves_the_file_alone(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    config_dir = _config_dir(tmp_path, monkeypatch)
-    before = (config_dir / "models.yaml").read_text(encoding="utf-8")
+    config = _config_file(tmp_path, monkeypatch)
+    before = config.read_text(encoding="utf-8")
 
     code = bridge.main(
-        [
-            "settings:write",
-            "--target",
-            "models",
-            "--payload",
-            json.dumps({"profiles": {}}),
-        ]
+        ["settings:write", "--payload", json.dumps({**_valid_config(), "profiles": {}})]
     )
 
     payload = json.loads(_stdout(capsys))
     assert code == 2
     assert payload["ok"] is False
     assert payload["errors"]
-    assert (config_dir / "models.yaml").read_text(encoding="utf-8") == before
-    assert not list(config_dir.glob("*.bak.*"))
+    assert config.read_text(encoding="utf-8") == before
+    assert not list(config.parent.glob("*.bak.*"))
 
 
 def test_write_rejects_a_remote_slot_without_a_base_url(
@@ -259,17 +232,15 @@ def test_write_rejects_a_remote_slot_without_a_base_url(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _config_dir(tmp_path, monkeypatch)
-    slots = _valid_models()["profiles"]["balanced"]
+    _config_file(tmp_path, monkeypatch)
+    slots = _valid_profiles()["balanced"]
     broken = {**slots, "vision": {"model": "Qwen3-VL", "backend": "openai_compatible"}}
 
     code = bridge.main(
         [
             "settings:write",
-            "--target",
-            "models",
             "--payload",
-            json.dumps({"profiles": {"balanced": broken}}),
+            json.dumps({**_valid_config(), "profiles": {"balanced": broken}}),
         ]
     )
 
@@ -285,17 +256,15 @@ def test_write_rejects_a_profile_that_is_not_the_active_one(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A broken secondary profile must not wait days to be discovered."""
-    _config_dir(tmp_path, monkeypatch)
-    slots = _valid_models()["profiles"]["balanced"]
+    _config_file(tmp_path, monkeypatch)
+    slots = _valid_profiles()["balanced"]
     broken = {"quality": {**slots, "tts": {"model": "x", "backend": "not-a-backend"}}}
 
     code = bridge.main(
         [
             "settings:write",
-            "--target",
-            "models",
             "--payload",
-            json.dumps({"profiles": {"balanced": dict(slots), **broken}}),
+            json.dumps({**_valid_config(), "profiles": {"balanced": dict(slots), **broken}}),
         ]
     )
 
@@ -307,13 +276,12 @@ def test_write_rejects_a_profile_that_is_not_the_active_one(
 def test_write_leaves_no_candidate_file_behind(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    config_dir = _config_dir(tmp_path, monkeypatch)
+    config = _config_file(tmp_path, monkeypatch)
 
-    bridge.main(["settings:write", "--target", "default", "--payload", json.dumps({})])
+    bridge.main(["settings:write", "--payload", json.dumps({})])
 
-    assert not list(config_dir.glob("*desktop-validate*"))
+    assert not list(config.parent.glob("*desktop-validate*"))
 
 
 def test_write_accepts_a_payload_file_with_a_bom(
@@ -321,11 +289,11 @@ def test_write_accepts_a_payload_file_with_a_bom(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _config_dir(tmp_path, monkeypatch)
+    _config_file(tmp_path, monkeypatch)
     path = tmp_path / "bom.json"
-    path.write_text(json.dumps(_valid_default()), encoding="utf-8-sig")
+    path.write_text(json.dumps(_valid_config()), encoding="utf-8-sig")
 
-    code = bridge.main(["settings:write", "--target", "default", "--payload-file", str(path)])
+    code = bridge.main(["settings:write", "--payload-file", str(path)])
 
     assert code == 0
     assert json.loads(_stdout(capsys))["ok"] is True
@@ -336,11 +304,11 @@ def test_write_rejects_malformed_json(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _config_dir(tmp_path, monkeypatch)
+    _config_file(tmp_path, monkeypatch)
     path = tmp_path / "broken.json"
     path.write_text("{not json", encoding="utf-8")
 
-    code = bridge.main(["settings:write", "--target", "default", "--payload-file", str(path)])
+    code = bridge.main(["settings:write", "--payload-file", str(path)])
 
     assert code == 2
     assert json.loads(_stdout(capsys))["ok"] is False
@@ -351,9 +319,9 @@ def test_write_rejects_a_json_array(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _config_dir(tmp_path, monkeypatch)
+    _config_file(tmp_path, monkeypatch)
 
-    code = bridge.main(["settings:write", "--target", "default", "--payload", "[1, 2]"])
+    code = bridge.main(["settings:write", "--payload", "[1, 2]"])
 
     assert code == 2
     assert "JSON object" in json.dumps(json.loads(_stdout(capsys)))

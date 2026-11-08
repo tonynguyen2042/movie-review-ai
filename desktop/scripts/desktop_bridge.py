@@ -14,7 +14,7 @@ Usage::
 
     uv run python desktop/scripts/desktop_bridge.py settings:read
     uv run python desktop/scripts/desktop_bridge.py settings:write \\
-        --target default --payload '{...}'
+        --payload '{...}'
     uv run python desktop/scripts/desktop_bridge.py jobs:list --limit 50
     uv run python desktop/scripts/desktop_bridge.py jobs:show job_20261008_001
     uv run python desktop/scripts/desktop_bridge.py stages
@@ -38,7 +38,6 @@ from movie_review.config.settings import (
     AppSettings,
     available_profiles,
     default_config_path,
-    default_models_path,
     load_settings,
     read_yaml,
     repo_root,
@@ -49,10 +48,10 @@ from movie_review.ui.dashboard import JobDashboard
 EXIT_OK = 0
 EXIT_REJECTED = 2
 
-#: Suffix for the temporary candidate files used to validate before a write. It
-#: keeps the candidate inside the real config directory on purpose: that is the
-#: only way ``default_models_path()`` resolves to the models.yaml the pipeline
-#: will actually use.
+#: Suffix for the temporary candidate file used to validate before a write.
+#: The candidate is a sibling of the real file, never a temp directory: the
+#: backup that follows a successful validation lands beside the file it
+#: protects, and the validation and the write agree on the same directory.
 _CANDIDATE_SUFFIX = ".desktop-validate"
 
 
@@ -76,12 +75,11 @@ def _backup_path(path: Path, when: datetime) -> Path:
 
 
 class _Candidate:
-    """A candidate config/models file dropped beside the real one.
+    """A candidate config file dropped beside the real one.
 
-    Validation has to run against the real config directory, because the loader
-    derives ``models.yaml`` from the directory of ``default.yaml``. Writing the
-    candidate into a temp directory would silently validate it against a missing
-    or wrong models.yaml, which is exactly the case the desktop app must catch.
+    The loader validates the candidate file directly, so the pipeline never
+    observes an intermediate state: a bad edit is refused and deleted, a good
+    one is then written to the real path with a backup.
     """
 
     def __init__(self, path: Path, payload: dict[str, Any]) -> None:
@@ -100,72 +98,45 @@ class _Candidate:
         self.path.unlink(missing_ok=True)
 
 
-def _validation_errors(config: Path, models: Path) -> list[str]:
-    """Validate a candidate (config, models) pair, returning human-readable errors.
+def _validation_errors(config: Path) -> list[str]:
+    """Validate a candidate config file, returning human-readable errors.
 
-    Both files are validated together because the loader composes them: a
-    ``models.profile`` in default.yaml only resolves if that profile exists in
-    models.yaml, and every profile is expanded through ``ModelsSettings``. A pair
-    that loads is the only definition of "valid" the pipeline itself has.
+    The file is validated as a whole because the loader composes it: the
+    ``models.profile`` must resolve against the ``profiles`` catalog in the
+    same file, and every profile is expanded through ``ModelsSettings``. A
+    file that loads is the only definition of "valid" the pipeline itself has.
     """
     try:
-        load_settings(config_path=config, models_path=models)
+        load_settings(config_path=config)
     except Exception as exc:  # noqa: BLE001 - surfaced to the user verbatim
         return [f"{type(exc).__name__}: {exc}"]
 
-    if config == default_config_path():
-        # default.yaml selects a profile, so every profile the candidate models
-        # file offers must also expand. A broken `remote` profile would otherwise
-        # only fail once a user picked it, days later.
-        errors: list[str] = []
+    # The file selects a profile, so every profile it offers must also expand.
+    # A broken `remote` profile would otherwise only fail once a user picked
+    # it, days later.
+    errors: list[str] = []
+    try:
+        names = available_profiles(config_path=config)
+    except Exception as exc:  # noqa: BLE001 - surfaced to the user verbatim
+        return [f"{type(exc).__name__}: {exc}"]
+    for name in names:
         try:
-            names = available_profiles(config_path=config, models_path=models)
+            load_settings(config_path=config, profile=name)
         except Exception as exc:  # noqa: BLE001 - surfaced to the user verbatim
-            return [f"{type(exc).__name__}: {exc}"]
-        for name in names:
-            try:
-                load_settings(config_path=config, models_path=models, profile=name)
-            except Exception as exc:  # noqa: BLE001 - surfaced to the user verbatim
-                errors.append(f"profile {name!r}: {type(exc).__name__}: {exc}")
-        return errors
-    return []
-
-
-def _validate_target(target: str, payload: dict[str, Any]) -> tuple[Path, Path, list[str]]:
-    """Return (config_path, models_path, errors) for a candidate payload.
-
-    The candidate is written to a scratch path and validated as a pair with the
-    untouched file, so an invalid edit can never be observed by the pipeline.
-    """
-    config = default_config_path()
-    models = default_models_path(config)
-    if target == "default":
-        candidate = _Candidate(config, payload)
-    elif target == "models":
-        candidate = _Candidate(models, payload)
-    else:
-        raise ValueError(f"unknown target {target!r}; expected 'default' or 'models'")
-
-    with candidate as candidate_path:
-        if target == "default":
-            pair = (candidate_path, models)
-        else:
-            pair = (config, candidate_path)
-        return pair[0], pair[1], _validation_errors(*pair)
+            errors.append(f"profile {name!r}: {type(exc).__name__}: {exc}")
+    return errors
 
 
 def _settings_read() -> dict[str, Any]:
-    """Both config files as plain data, plus the profile catalog."""
+    """The config file as plain data, plus the profile catalog."""
     config = default_config_path()
-    models = default_models_path(config)
-    default_data = read_yaml(config)
-    models_data = read_yaml(models)
+    data = read_yaml(config)
     try:
-        # The paths are passed explicitly rather than left to the loader's own
-        # resolution: everything else in this script resolves them the same way,
+        # The path is passed explicitly rather than left to the loader's own
+        # resolution: everything else in this script resolves it the same way,
         # and a read that silently validated a different file than the one the
         # app is about to edit would be worthless.
-        settings: AppSettings = load_settings(config_path=config, models_path=models)
+        settings: AppSettings = load_settings(config_path=config)
         loaded = settings.model_dump(mode="json")
         load_error: str | None = None
     except Exception as exc:  # noqa: BLE001 - shown in the UI, not raised
@@ -176,36 +147,30 @@ def _settings_read() -> dict[str, Any]:
         "paths": {
             "repo_root": str(repo_root()),
             "config": str(config),
-            "models": str(models),
             "config_exists": config.is_file(),
-            "models_exists": models.is_file(),
         },
-        "default": default_data,
-        "models": models_data,
-        "profiles": available_profiles(config_path=config, models_path=models),
+        "config": data,
+        "profiles": available_profiles(config_path=config),
         "loaded": loaded,
         "load_error": load_error,
     }
 
 
-def _settings_write(target: str, payload: dict[str, Any]) -> int:
-    """Validate, back up, then overwrite a config file."""
-    config = default_config_path()
-    target_path = config if target == "default" else default_models_path(config)
-    try:
-        _, _, errors = _validate_target(target, payload)
-    except ValueError as exc:
-        return _fail([str(exc)])
+def _settings_write(payload: dict[str, Any]) -> int:
+    """Validate, back up, then overwrite the config file."""
+    path = default_config_path()
+    with _Candidate(path, payload) as candidate_path:
+        errors = _validation_errors(candidate_path)
     if errors:
         # Nothing is written: a file that fails to load would break every later
         # CLI invocation, including the one that is supposed to repair it.
         return _fail(errors)
 
     when = datetime.now(tz=UTC)
-    backup = _backup_path(target_path, when)
-    if target_path.is_file():
-        shutil.copy2(target_path, backup)
-    target_path.write_text(
+    backup = _backup_path(path, when)
+    if path.is_file():
+        shutil.copy2(path, backup)
+    path.write_text(
         yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
@@ -213,7 +178,7 @@ def _settings_write(target: str, payload: dict[str, Any]) -> int:
         {
             "ok": True,
             "errors": [],
-            "path": str(target_path),
+            "path": str(path),
             "backup": str(backup) if backup.exists() else None,
         }
     )
@@ -243,11 +208,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="desktop_bridge", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("settings:read", help="Read both config files as JSON data.")
+    sub.add_parser("settings:read", help="Read the config file as JSON data.")
     sub.add_parser("stages", help="Print the pipeline stage sequence.")
 
-    write = sub.add_parser("settings:write", help="Validate, back up and write a config file.")
-    write.add_argument("--target", required=True, choices=["default", "models"])
+    write = sub.add_parser("settings:write", help="Validate, back up and write the config file.")
     write.add_argument(
         "--payload",
         help="JSON object for the file. Reads stdin when omitted.",
@@ -297,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
             payload = json.loads(_payload_text(args))
             if not isinstance(payload, dict):
                 return _fail(["Payload must be a JSON object."])
-            return _settings_write(args.target, payload)
+            return _settings_write(payload)
         if args.command == "jobs:list":
             return _jobs_list(max(1, args.limit))
         if args.command == "jobs:show":
