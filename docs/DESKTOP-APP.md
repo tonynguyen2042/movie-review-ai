@@ -122,30 +122,33 @@ get their argument.
 **Open output folder** resolves `<data_dir>/jobs/<job_id>`, the same layout the
 CLI uses.
 
-### Models
+### Model profiles
 
-Edits `config/models.yaml`: pick a profile, then edit any slot
-(`asr`, `vision`, `reasoning`, `critic`, `translation`, `tts`) and any field
-(`model`, `precision`, `backend`, `base_url`, `endpoint_path`, `api_key_env`,
-`timeout_seconds`, `max_tokens`, `enabled`).
+Edits the `profiles` section of `config/config.yaml`: pick a profile, then
+edit any slot (`asr`, `vision`, `reasoning`, `critic`, `translation`, `tts`)
+and any field (`model`, `precision`, `backend`, `base_url`, `endpoint_path`,
+`api_key_env`, `timeout_seconds`, `max_tokens`, `enabled`).
 
 Blanking a field removes it from the file rather than writing an empty string, so
 the `ModelSpec` defaults apply again.
 
 ### Settings
 
-Edits `config/default.yaml`, rendering the nested structure as dotted paths
-(`pipeline.review.target_wpm`). Values are parsed back to their YAML type — a
-field holding `150` stays a number, one holding `true` stays a boolean.
+Edits the rest of `config/config.yaml`, rendering the nested structure as
+dotted paths (`pipeline.review.target_wpm`). Values are parsed back to their
+YAML type — a field holding `150` stays a number, one holding `true` stays a
+boolean. The `profiles` section is not listed here; it has its own editor
+above. Both editors mutate one draft of the same file, and both save buttons
+write the whole document.
 
 ## How a config save is kept safe
 
 Saving from either editor does three things, in this order:
 
 1. **Validates** the candidate through the project's own `AppSettings` and
-   `ModelSpec` via `load_settings`. For `models.yaml` it additionally expands
-   *every* profile the file declares, not only the active one — a broken `remote`
-   profile should not wait days to be discovered.
+   `ModelSpec` via `load_settings`. It expands *every* profile the file
+   declares, not only the active one — a broken `remote` profile should not
+   wait days to be discovered.
 2. **Backs up** the current file to `<name>.bak.<timestamp>` beside it.
 3. **Writes** the file, and only then.
 
@@ -154,14 +157,14 @@ nothing is written. A config file that fails to load breaks every later CLI
 invocation, including the one you would use to repair it.
 
 The candidate is validated from a scratch file **inside the real `config/`**
-directory, because `load_settings` derives `models.yaml` from the directory of
-`default.yaml`. Validating in a temp directory would check it against the wrong
-models file — which is precisely the mistake worth preventing.
+directory, beside the file it is about to become: the validation and the write
+agree on the same directory, and the backup that follows a successful
+validation lands where it belongs.
 
-> Writing re-serialises the YAML, so **comments in `config/default.yaml` and
-> `config/models.yaml` are not preserved**. The current files carry substantial
-> commentary. Keep a copy outside the app if you want to keep it; the `.bak`
-> file is the previous version with its comments intact.
+> Writing re-serialises the YAML, so **comments in `config/config.yaml` are not
+> preserved**. The current file carries substantial commentary. Keep a copy
+> outside the app if you want to keep it; the `.bak` file is the previous
+> version with its comments intact.
 
 ## Packaging
 

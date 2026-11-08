@@ -382,8 +382,7 @@ movie-review-ai/
 ├── .gitignore
 │
 ├── config/
-│   ├── default.yaml
-│   ├── models.yaml
+│   ├── config.yaml
 │   ├── styles/
 │   │   ├── youtube.yaml
 │   │   ├── documentary.yaml

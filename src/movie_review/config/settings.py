@@ -259,7 +259,7 @@ def require_cloud_ai(spec: ModelSpec, cloud_ai: bool, slot: str) -> None:
 
 
 class ModelsSettings(BaseModel):
-    """Active model set. ``profile`` selects a catalog entry in ``models.yaml``."""
+    """Active model set. ``profile`` selects a catalog entry in the config file."""
 
     profile: str = "balanced"
     asr: ModelSpec
@@ -434,7 +434,7 @@ class MediaSettings(BaseModel):
 def _profile_from_env() -> str | None:
     """Effective ``models.profile`` override from the environment, if present.
 
-    The profile name selects which ``models.yaml`` subtree loads, so it must be
+    The profile name selects which ``profiles`` subtree loads, so it must be
     resolved inside the YAML source itself (a separate env source merges too
     late). Matching is case-insensitive, mirroring ``case_sensitive=False``.
     """
