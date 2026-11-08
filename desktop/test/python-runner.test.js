@@ -43,8 +43,8 @@ test('the repo root resolves to the checkout, not the desktop folder', () => {
   assert.notEqual(path.basename(REPO_ROOT), 'desktop');
   assert.ok(fs.existsSync(path.join(REPO_ROOT, 'pyproject.toml')), 'pyproject.toml must be found');
   assert.ok(
-    fs.existsSync(path.join(REPO_ROOT, 'config', 'default.yaml')),
-    'config/default.yaml must be found',
+    fs.existsSync(path.join(REPO_ROOT, 'config', 'config.yaml')),
+    'config/config.yaml must be found',
   );
 });
 

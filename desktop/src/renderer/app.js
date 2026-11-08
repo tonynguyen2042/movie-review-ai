@@ -17,7 +17,7 @@ const state = {
   jobs: [],
   selectedJob: null,
   settings: null,
-  modelsDraft: null,
+  configDraft: null,
   modelsProfile: null,
   running: false,
 };
@@ -82,10 +82,10 @@ function collectOptions() {
 function profileSelect() {
   const select = document.createElement('select');
   const blank = document.createElement('option');
-  // Empty means "let config/default.yaml choose", which is the common case and
-  // must stay distinguishable from an explicit choice.
+  // Empty means "let the config file's models.profile choose", which is the
+  // common case and must stay distinguishable from an explicit choice.
   blank.value = '';
-  blank.textContent = '(from config/default.yaml)';
+  blank.textContent = '(from config.yaml)';
   select.append(blank);
   ((state.settings && state.settings.profiles) || []).forEach((name) => {
     const option = document.createElement('option');
@@ -487,6 +487,12 @@ const MODEL_FIELDS = [
   'enabled',
 ];
 
+function withoutProfiles(draft) {
+  // `profiles` is edited on the Model profiles tab; rendering it here as well
+  // would create a second editor for the same data.
+  return Object.fromEntries(Object.entries(draft).filter(([key]) => key !== 'profiles'));
+}
+
 async function loadSettings() {
   const result = await api.settings.read();
   state.settings = result;
@@ -496,29 +502,33 @@ async function loadSettings() {
   } else {
     el('settings-errors').hidden = true;
   }
-  renderInto(el('settings-body'), result.default || {}, '');
-  loadModels();
+  state.configDraft = JSON.parse(JSON.stringify(result.config || {}));
+  renderInto(el('settings-body'), withoutProfiles(state.configDraft), '');
+  renderProfilePicker(result.profiles || []);
+  renderModels();
 }
 
 async function loadModels() {
-  if (!state.settings) state.settings = await api.settings.read();
-  const result = state.settings;
-  el('models-path').textContent = result.paths ? result.paths.models : '';
-  state.modelsDraft = JSON.parse(JSON.stringify(result.models || {}));
+  if (!state.configDraft) {
+    await loadSettings();
+    return;
+  }
+  el('models-path').textContent = state.settings.paths ? state.settings.paths.config : '';
+  renderModels();
+}
+
+function renderProfilePicker(names) {
   const picker = el('profile-picker');
   picker.textContent = '';
-  (result.profiles || []).forEach((name) => {
+  names.forEach((name) => {
     const option = document.createElement('option');
     option.value = name;
     option.textContent = name;
     picker.append(option);
   });
   state.modelsProfile =
-    (result.default && result.default.models && result.default.models.profile) ||
-    (result.profiles || [])[0] ||
-    null;
+    (state.configDraft.models && state.configDraft.models.profile) || names[0] || null;
   if (state.modelsProfile) picker.value = state.modelsProfile;
-  renderModels();
 }
 
 el('profile-picker').addEventListener('change', () => {
@@ -529,7 +539,7 @@ el('profile-picker').addEventListener('change', () => {
 function renderModels() {
   const host = el('models-body');
   host.textContent = '';
-  const profiles = (state.modelsDraft && state.modelsDraft.profiles) || {};
+  const profiles = (state.configDraft && state.configDraft.profiles) || {};
   const slots = profiles[state.modelsProfile] || {};
 
   const note = document.createElement('p');
@@ -565,7 +575,7 @@ function renderModels() {
       input.dataset.field = name;
       input.value = value === null ? '' : String(value);
       input.addEventListener('change', () => {
-        const target = state.modelsDraft.profiles[state.modelsProfile][slot];
+        const target = state.configDraft.profiles[state.modelsProfile][slot];
         const raw = input.value.trim();
         if (raw === '') {
           delete target[name];
@@ -585,21 +595,25 @@ function renderModels() {
   });
 }
 
-el('save-models').addEventListener('click', async () => {
-  showErrors('models-errors', []);
-  el('save-models').disabled = true;
+// Both editors mutate one draft of the single config file, so both save
+// buttons send the whole document; the bridge validates it as a whole.
+async function saveConfig(errorId, buttonId) {
+  showErrors(errorId, []);
+  el(buttonId).disabled = true;
   try {
-    const result = await api.settings.write('models', state.modelsDraft);
+    const result = await api.settings.write(state.configDraft);
     if (!result.ok) {
-      showErrors('models-errors', result.errors);
+      showErrors(errorId, result.errors);
       return;
     }
     quiet(`Saved ${result.path}${result.backup ? ` (backup: ${result.backup})` : ''}`);
     await loadSettings();
   } finally {
-    el('save-models').disabled = false;
+    el(buttonId).disabled = false;
   }
-});
+}
+
+el('save-models').addEventListener('click', () => saveConfig('models-errors', 'save-models'));
 
 /* ---------------------------------------------------------------- settings */
 
@@ -634,7 +648,7 @@ function renderInto(host, data, prefix) {
             : !Number.isNaN(Number(raw)) && raw !== ''
               ? Number(raw)
               : raw;
-      setByPath(state.settings.default, path, parsed);
+      setByPath(state.configDraft, path, parsed);
     });
     label.append(caption, input);
     host.append(label);
@@ -655,21 +669,7 @@ el('reload-settings').addEventListener('click', () => {
   loadSettings().then(() => quiet('Reloaded from disk.'));
 });
 
-el('save-default').addEventListener('click', async () => {
-  showErrors('settings-errors', []);
-  el('save-default').disabled = true;
-  try {
-    const result = await api.settings.write('default', state.settings.default);
-    if (!result.ok) {
-      showErrors('settings-errors', result.errors);
-      return;
-    }
-    quiet(`Saved ${result.path}${result.backup ? ` (backup: ${result.backup})` : ''}`);
-    await loadSettings();
-  } finally {
-    el('save-default').disabled = false;
-  }
-});
+el('save-config').addEventListener('click', () => saveConfig('settings-errors', 'save-config'));
 
 function showErrors(id, errors) {
   const node = el(id);
