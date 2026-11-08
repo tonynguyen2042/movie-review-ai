@@ -205,6 +205,8 @@ def test_sample_movie_real_end_to_end(tmp_path: Path) -> None:
         conn=conn,
         cache=CacheManager(tmp_path / "cache"),
     )
-    assert len(result.frames) == 3
+    # testsrc's three samples are near-identical at the dHash's 9x8, so the
+    # dedupe keeps the scene's floor of two and drops the third (T180).
+    assert len(result.frames) == 2
     assert all(frame.path.is_file() for frame in result.frames)
     conn.close()

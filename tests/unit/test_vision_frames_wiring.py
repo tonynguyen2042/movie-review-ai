@@ -16,6 +16,7 @@ the wiring rather than the encoder.
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 from collections.abc import Callable
 from pathlib import Path
@@ -33,6 +34,22 @@ from movie_review.storage.database import bootstrap, connect
 
 # `import movie_review.cli.app as m` style trap: package __init__ re-exports.
 frames_module = importlib.import_module("movie_review.media.frames")
+fingerprint_module = importlib.import_module("movie_review.media.fingerprint")
+
+
+def _fake_fingerprint__vision_frames_wiring(paths: list[Path], **_kwargs: Any) -> list[int]:
+    """One far-apart hash per frame, so the dedupe keeps every sampled frame.
+
+    The stage's dHash pass is not routed through extract_frame, so the stub
+    above cannot reach it; without this it would shell out to the real
+    ffmpeg, and for identical stub frames it would collapse each scene to
+    its floor of two. Digests of distinct paths land around 32 bits apart,
+    well beyond the dedupe threshold.
+    """
+    return [
+        int.from_bytes(hashlib.sha256(str(path).encode()).digest()[:8], "big") for path in paths
+    ]
+
 
 MINIMAL_PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
@@ -124,6 +141,9 @@ def stub_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         frames_module, "extract_frame", _extract_with(_fake_run__vision_frames_wiring)
     )
+    monkeypatch.setattr(
+        fingerprint_module, "fingerprint_frames", _fake_fingerprint__vision_frames_wiring
+    )
 
 
 @pytest.fixture
@@ -134,6 +154,9 @@ def captured_frames(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, list[Path
 
     monkeypatch.setattr(
         frames_module, "extract_frame", _extract_with(_fake_run__vision_frames_wiring)
+    )
+    monkeypatch.setattr(
+        fingerprint_module, "fingerprint_frames", _fake_fingerprint__vision_frames_wiring
     )
 
     def fake_run_visual_analysis(

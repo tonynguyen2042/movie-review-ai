@@ -15,7 +15,7 @@ import os
 import shutil
 import sqlite3
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from movie_review.artifacts import manager as artifacts
@@ -24,6 +24,7 @@ from movie_review.cache.manager import CacheManager
 from movie_review.config.settings import VisualSamplingSettings
 from movie_review.domain import Artifact
 from movie_review.media import ffmpeg as ff
+from movie_review.media import fingerprint
 from movie_review.pipeline.progress import ProgressReporter, WorkProgress
 from movie_review.storage import repositories as repo
 from movie_review.utils import logging as ulog
@@ -52,12 +53,16 @@ class Frame:
     every frame it listed, and the manifest was written after every scene,
     so a frame was hashed once per scene that followed it -- quadratic in the
     number of frames, and the dominant cost of the stage.
+
+    ``dhash`` is the frame's perceptual hash (T180), when one was computed:
+    it is what lets a resumed run drop the same frames a fresh run would.
     """
 
     scene_id: str
     timestamp: float
     path: Path
     sha256: str = ""
+    dhash: str = ""
 
 
 @dataclass(frozen=True)
@@ -78,6 +83,10 @@ class SamplingConfig:
     short_frames: int = 3
     medium_frames: int = 6
     long_frames: int = 12
+    #: Drop near-duplicate frames after sampling (T180).
+    dedupe: bool = True
+    #: dHash bits: frames differing by at most this many bits are duplicates.
+    dedupe_hamming_threshold: int = fingerprint.DEFAULT_HAMMING_THRESHOLD
 
     def __post_init__(self) -> None:
         if not 0 < self.short_threshold < self.medium_threshold:
@@ -85,6 +94,8 @@ class SamplingConfig:
         for name in ("short_frames", "medium_frames", "long_frames"):
             if getattr(self, name) < 2:
                 raise ValueError(f"{name} must be at least 2")
+        if self.dedupe_hamming_threshold < 0:
+            raise ValueError("dedupe_hamming_threshold must be >= 0")
 
 
 def sampling_config_from(settings: VisualSamplingSettings) -> SamplingConfig:
@@ -95,6 +106,8 @@ def sampling_config_from(settings: VisualSamplingSettings) -> SamplingConfig:
         short_frames=settings.short_frames,
         medium_frames=settings.medium_frames,
         long_frames=settings.long_frames,
+        dedupe=settings.dedupe,
+        dedupe_hamming_threshold=settings.dedupe_hamming_threshold,
     )
 
 
@@ -316,6 +329,8 @@ def frames_cache_key(
             "medium_frames": cfg.medium_frames,
             "long_frames": cfg.long_frames,
             "fps": fps,
+            "dedupe": cfg.dedupe,
+            "dedupe_hamming_threshold": cfg.dedupe_hamming_threshold,
         },
     )
     return cache_key(spec)
@@ -334,6 +349,7 @@ def sample_movie(
     ffmpeg: str = "ffmpeg",
     run_fn: Callable[..., str] = ff.check,
     on_progress: ProgressReporter | None = None,
+    fingerprint_fn: Callable[[list[Path]], list[int]] | None = None,
 ) -> SamplingResult:
     """Sample frames for ``(scene_id, start, end)`` spans; skips work on cache hit.
 
@@ -344,6 +360,10 @@ def sample_movie(
     ``fps`` (the frame rate of the file being sampled, recorded at ingest)
     lets each scene's frames come from one decode pass; without it the
     sampler keeps one seek per frame.
+
+    ``fingerprint_fn`` replaces the dHash pass for tests. A held shot sampled
+    six times is one picture, so beyond a scene's floor of two frames the
+    near-duplicates are dropped (T180); a failed fingerprint keeps them all.
     """
     cfg = config or SamplingConfig()
     src = Path(source)
@@ -365,10 +385,15 @@ def sample_movie(
     total_frames = sum(count for _, _, _, count in planned)
 
     reusable = _reusable_by_scene(cache.lookup_json(key))
+    # One deduper for the whole run, in scene order: a resumed run must drop
+    # the same frames a fresh run would, so adopted scenes register their
+    # recorded hashes into the same state.
+    deduper = fingerprint.FrameDeduper(threshold=cfg.dedupe_hamming_threshold)
 
     frames: list[Frame] = []
     adopted = 0
     extracted = 0
+    dropped = 0
 
     for scene_id, start, end, count in planned:
         # Adopt what a previous run already produced for this scene, even if it
@@ -376,6 +401,9 @@ def sample_movie(
         # already on disk costs a decode per scene and gains nothing.
         reused = _adopt_scene(reusable.get(scene_id, []), frames_dir, scene_id)
         if reused is not None:
+            for frame in reused:
+                if frame.dhash:
+                    deduper.mark_kept(scene_id, int(frame.dhash, 16))
             frames.extend(reused)
             adopted += len(reused)
             extracted += len(reused)
@@ -397,15 +425,16 @@ def sample_movie(
         paths = extract_scene_frames(
             src, timestamps, frames_dir / scene_id, scene_id, fps, ffmpeg=ffmpeg, run_fn=run_fn
         )
-        for timestamp, path in zip(timestamps, paths, strict=True):
-            frames.append(
-                Frame(
-                    scene_id=scene_id,
-                    timestamp=timestamp,
-                    path=path,
-                    sha256=artifacts.sha256_file(path),
-                )
+        scene_frames = [
+            Frame(
+                scene_id=scene_id,
+                timestamp=timestamp,
+                path=path,
+                sha256=artifacts.sha256_file(path),
             )
+            for timestamp, path in zip(timestamps, paths, strict=True)
+        ]
+        for _frame in scene_frames:
             extracted += 1
             if on_progress is not None:
                 on_progress(
@@ -415,6 +444,32 @@ def sample_movie(
                         label=f"frame {extracted}/{total_frames}",
                     )
                 )
+
+        # Held shots, dissolves, pans: the samples of a scene can be the same
+        # picture (T180). Beyond the scene's floor, a frame within the
+        # threshold of a kept one -- in the scene, or at its boundary -- is
+        # dropped. A fingerprint failure keeps them all: the frames are
+        # valid, only the dedupe evidence is missing.
+        if cfg.dedupe:
+            hashes = _fingerprint_scene(
+                frames_dir / scene_id,
+                [f.path for f in scene_frames],
+                fingerprint_fn,
+                ffmpeg,
+                run_fn,
+            )
+            if hashes is None:
+                frames.extend(scene_frames)
+            else:
+                for frame, frame_hash in zip(scene_frames, hashes, strict=True):
+                    if deduper.should_keep(scene_id, frame_hash):
+                        deduper.mark_kept(scene_id, frame_hash)
+                        frames.append(replace(frame, dhash=f"{frame_hash:016x}"))
+                    else:
+                        frame.path.unlink(missing_ok=True)
+                        dropped += 1
+        else:
+            frames.extend(scene_frames)
 
         # Persisted after every scene, not once at the end: a run interrupted by
         # a crash or a full disk keeps the work already done, and the next run
@@ -455,8 +510,36 @@ def sample_movie(
             frames=len(frames),
             adopted=adopted,
             extracted=len(frames) - adopted,
+            dropped=dropped,
         )
     return SamplingResult(frames=frames, manifest_path=manifest_path, cache_hit=cache_hit)
+
+
+def _fingerprint_scene(
+    scene_dir: Path,
+    paths: list[Path],
+    fingerprint_fn: Callable[[list[Path]], list[int]] | None,
+    ffmpeg: str,
+    run_fn: Callable[..., str],
+) -> list[int] | None:
+    """dHash of a scene's frames, or ``None`` when fingerprinting failed.
+
+    A failed fingerprint must not fail the stage: the frames are valid, only
+    the dedupe evidence is missing, so the caller keeps them all and logs the
+    gap instead of inventing it away.
+    """
+    work_dir = scene_dir / ".fingerprint"
+    try:
+        if fingerprint_fn is not None:
+            return fingerprint_fn(list(paths))
+        return fingerprint.fingerprint_frames(
+            paths, ffmpeg=ffmpeg, run_fn=run_fn, work_dir=work_dir
+        )
+    except fingerprint.FingerprintError as exc:
+        _logger.warning("frame dedupe skipped: %s", exc)
+        return None
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 def _manifest_entries(frames: list[Frame]) -> list[dict[str, object]]:
@@ -465,16 +548,22 @@ def _manifest_entries(frames: list[Frame]) -> list[dict[str, object]]:
     The digest is the one the frame was created with, not a fresh hash: the
     manifest is written after every scene, so hashing here meant a frame was
     hashed once per scene that followed it.
+
+    The dhash rides along when it exists: it is what a resumed run seeds the
+    deduper with, so it drops the same frames a fresh run would.
     """
-    return [
-        {
+    entries: list[dict[str, object]] = []
+    for frame in frames:
+        entry: dict[str, object] = {
             "scene_id": frame.scene_id,
             "timestamp": frame.timestamp,
             "path": str(frame.path),
             "sha256": frame.sha256 or artifacts.sha256_file(frame.path),
         }
-        for frame in frames
-    ]
+        if frame.dhash:
+            entry["dhash"] = frame.dhash
+        entries.append(entry)
+    return entries
 
 
 def _persist(
@@ -498,7 +587,7 @@ def _persist(
 
 
 def _adopt_scene(
-    entries: list[tuple[float, Path, str]], frames_dir: Path, scene_id: str
+    entries: list[tuple[float, Path, str, str | None]], frames_dir: Path, scene_id: str
 ) -> list[Frame] | None:
     """Materialise a previously sampled scene into this job's frames directory.
 
@@ -512,11 +601,15 @@ def _adopt_scene(
     or modified file. The recorded path is also required to be the filename this
     module would have produced, which keeps a stale or hand-edited cache entry
     from redirecting the copy somewhere unintended.
+
+    The recorded dhash (when the entry has one) travels with the frame: it is
+    what seeds the deduper so a resumed run drops the same frames a fresh run
+    would.
     """
     if not entries:
         return None
     frames: list[Frame] = []
-    for timestamp, source, expected in sorted(entries):
+    for timestamp, source, expected, dhash in sorted(entries, key=lambda e: e[0]):
         if source.name != frame_filename(scene_id, timestamp):
             return None
         dest = frames_dir / scene_id / frame_filename(scene_id, timestamp)
@@ -529,18 +622,27 @@ def _adopt_scene(
                 return None
         # The digest is already known: the entry was recorded with it, and
         # the file was just verified against it.
-        frames.append(Frame(scene_id=scene_id, timestamp=timestamp, path=dest, sha256=expected))
+        frames.append(
+            Frame(
+                scene_id=scene_id,
+                timestamp=timestamp,
+                path=dest,
+                sha256=expected,
+                dhash=dhash or "",
+            )
+        )
     return frames
 
 
-def _reusable_by_scene(pointer: object) -> dict[str, list[tuple[float, Path, str]]]:
+def _reusable_by_scene(pointer: object) -> dict[str, list[tuple[float, Path, str, str | None]]]:
     """Group a cache pointer's frames by scene.
 
     Malformed entries are skipped individually rather than discarding the whole
     pointer: a partially readable manifest should still contribute the scenes it
-    can vouch for.
+    can vouch for. An entry without a dhash (pre-dedupe or dedupe off) carries
+    ``None``: the deduper simply has no recorded evidence for it.
     """
-    grouped: dict[str, list[tuple[float, Path, str]]] = {}
+    grouped: dict[str, list[tuple[float, Path, str, str | None]]] = {}
     if not isinstance(pointer, dict):
         return grouped
     entries = pointer.get("frames")
@@ -556,5 +658,7 @@ def _reusable_by_scene(pointer: object) -> dict[str, list[tuple[float, Path, str
             expected = str(entry["sha256"])
         except (KeyError, TypeError, ValueError):
             continue
-        grouped.setdefault(scene_id, []).append((timestamp, path, expected))
+        dhash = entry.get("dhash")
+        recorded = dhash if isinstance(dhash, str) else None
+        grouped.setdefault(scene_id, []).append((timestamp, path, expected, recorded))
     return grouped
