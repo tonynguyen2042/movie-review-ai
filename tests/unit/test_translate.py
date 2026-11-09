@@ -564,8 +564,8 @@ def test_translation_model_identity_enters_the_cache_key(ctx: _Ctx) -> None:
 
     The cache key uses the identity of the adapter that actually ran, which in
     production is the configured spec's model -- swap the translation model in
-    models.yaml and every paragraph is translated again, rather than the new
-    model silently inheriting the old model's cached prose.
+    the config file and every paragraph is translated again, rather than the
+    new model silently inheriting the old model's cached prose.
     """
     _translate(ctx, _script__translate())
     first_calls = ctx.reasoner.calls

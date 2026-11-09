@@ -23,8 +23,9 @@ disabled, and a disabled slot costs nothing.
 
 ## The profiles
 
-The profiles live in [`config/models.yaml`](../config/models.yaml). Select
-one with `models.profile` or `--profile`.
+The profiles live in the `profiles` section of
+[`config/config.yaml`](../config/config.yaml). Select one with
+`models.profile` or `--profile`.
 
 ### `fast`
 
@@ -80,7 +81,7 @@ uv run movie-review process movie.mkv --profile remote
 ```
 
 The remote profile ships with placeholder addresses. Change them in
-`config/models.yaml` before you use it.
+`config/config.yaml` before you use it.
 
 **Remote means the movie leaves the machine.** `privacy.cloud_ai` gates
 it: with the default `false`, a remote model is refused. The policy
@@ -155,7 +156,7 @@ The report carries `peak_memory_mb`.
 
 ## Writing your own profile
 
-Add it to `config/models.yaml`:
+Add it to the `profiles` section of `config/config.yaml`:
 
 ```yaml
 profiles:

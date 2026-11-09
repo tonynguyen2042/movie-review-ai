@@ -3,7 +3,7 @@
 The balanced profile is the default: Whisper large-v3-turbo for ASR,
 Qwen3-VL for vision, Qwen3.5-27B for reasoning, critic disabled, and
 Qwen3-TTS 1.7B for narration. This module pins that contract in code so
-benchmark-driven checkpoint edits in ``models.yaml`` cannot silently
+benchmark-driven checkpoint edits in ``config.yaml`` cannot silently
 change the profile shape.
 """
 

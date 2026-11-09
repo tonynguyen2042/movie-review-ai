@@ -114,7 +114,7 @@ Source footage 512.0s exceeds limit 420.0s
 ```
 
 The review asked for more source footage than the controls allow. The
-controls are in `config/default.yaml`:
+controls are in `config/config.yaml`:
 
 ```yaml
 source_video:
@@ -215,7 +215,7 @@ RemoteUnavailableError: HTTP 500 from http://192.168.1.144:8000/v1/chat/completi
 The request was well formed and the host failed to serve it. A 500, a 503 and
 a 429 are retried, so a message that reaches the operator means the slot spent
 its whole budget first — `attempts`, `backoff_seconds` and
-`max_backoff_seconds` per slot in `config/models.yaml`.
+`max_backoff_seconds` per slot in `config/config.yaml`.
 
 The body after the URL is the server's own explanation, quoted up to 300
 characters. It is the first thing to read:
@@ -240,7 +240,7 @@ RemoteUnavailableError: cannot reach http://192.168.1.144:8000/v1
 
 **What to do:**
 
-- check the server is up and the address is right in `config/models.yaml`
+- check the server is up and the address is right in `config/config.yaml`
 - check the timeout is long enough for the model to load
   (`timeout_seconds` per slot)
 - check the network

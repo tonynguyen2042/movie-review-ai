@@ -43,8 +43,8 @@ async function register() {
 
   ipcMain.handle('settings:read', async () => runBridge(['settings:read']));
 
-  ipcMain.handle('settings:write', async (_event, { target, payload }) => {
-    const args = ['settings:write', '--target', target];
+  ipcMain.handle('settings:write', async (_event, { payload }) => {
+    const args = ['settings:write'];
     // The payload goes to a temp file rather than argv: config JSON is full of
     // quotes and backslashes, and a shell-mangled payload would be written as
     // truth. Writing it ourselves avoids the shell entirely (spawn, not exec).

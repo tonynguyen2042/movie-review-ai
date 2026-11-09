@@ -389,7 +389,7 @@ def test_guide_links_only_to_files_that_exist(guide: str) -> None:
 
 
 def test_guide_documents_the_remote_profile(guide: str) -> None:
-    """config/models.yaml ships a working `remote` profile; the guide must cover it."""
+    """config/config.yaml ships a working `remote` profile; the guide must cover it."""
     assert "MOVIE_REVIEW_MODELS__PROFILE" in guide
     assert "api_key_env" in guide, "remote credentials need explaining"
 

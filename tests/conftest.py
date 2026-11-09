@@ -17,8 +17,22 @@ from typing import Any
 
 import pytest
 
+from movie_review.config.settings import set_config_path
 from movie_review.media.proxy import ProxyResult
 from movie_review.storage.database import bootstrap, connect
+
+
+@pytest.fixture(autouse=True)
+def isolated_config_path() -> Generator[None]:
+    """Clear the process-wide ``--config`` override between tests.
+
+    The CLI startup callback stores the flag on the settings module, and
+    tests run in one process; without this, a test that invokes the CLI with
+    ``--config`` would leak the path into every later ``load_settings()``.
+    """
+    set_config_path(None)
+    yield
+    set_config_path(None)
 
 
 @pytest.fixture

@@ -219,8 +219,8 @@ def test_log_states_the_effective_profile_not_just_the_flag(tmp_path: Path) -> N
     """`profile: null` told the reader nothing.
 
     Without --profile the flag value is None and the profile actually in force
-    comes from config/default.yaml. Logging only the flag made a run that had
-    silently chosen an unusable profile look unconfigured.
+    comes from the config file's models.profile. Logging only the flag made a
+    run that had silently chosen an unusable profile look unconfigured.
     """
     result = runner.invoke(
         app,
@@ -354,3 +354,168 @@ def test_resolver_accepts_every_catalog_entry() -> None:
 
     for name in available_profiles():
         assert _resolve_profile(name, None) == name
+
+
+# ---------------------------------------------------------------------------
+# --config: run with a different config file
+# ---------------------------------------------------------------------------
+
+
+def _custom_config__cli_profile(tmp_path: Path, reasoning: str = "Qwen3.5-27B") -> Path:
+    """A self-contained config file: the controls and the catalog together."""
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "models:\n  profile: balanced\n"
+        "prompts:\n  versions:\n    scene_analysis: v1\n"
+        "profiles:\n"
+        "  balanced:\n"
+        "    asr: {model: a}\n"
+        "    vision: {model: v}\n"
+        f"    reasoning: {{model: {reasoning}}}\n"
+        "    critic: {model: c, enabled: false}\n"
+        "    tts: {model: t}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_help_offers_config_flag() -> None:
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "--config" in result.output
+
+
+def test_config_flag_changes_the_run_configuration(tmp_path: Path) -> None:
+    """The accepted job must reflect the file --config points at."""
+    custom = _custom_config__cli_profile(tmp_path, reasoning="Qwen3.5-9B")
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(custom),
+            "process",
+            str(_movie__cli_profile(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+            "--no-run",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    event = _accepted_log(result.output)
+    assert event["profile"] == "balanced"
+    assert event["backends"]["reasoning"].endswith("Qwen3.5-9B")
+
+
+def test_config_flag_reaches_the_internal_settings_loads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The orchestrator loads settings again mid-run; it must see the same file.
+
+    The override is process-wide, so a command-level load alone would leave the
+    pipeline running on the default config while the acceptance log claimed
+    otherwise.
+    """
+    custom = _custom_config__cli_profile(tmp_path, reasoning="Qwen3.5-9B")
+    seen: list[object] = []
+
+    def fake_run(*_args: object, **kwargs: object) -> list[object]:
+        # What the orchestrator's own load_settings() would resolve to.
+        from movie_review.config.settings import load_settings
+
+        seen.append(load_settings().models.reasoning.model)
+        return [StageResult(stage="ingest", success=True, duration_ms=0)]
+
+    monkeypatch.setattr(cliapp, "run_pipeline", fake_run)
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(custom),
+            "process",
+            str(_movie__cli_profile(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert seen == ["Qwen3.5-9B"]
+
+
+def test_profile_validation_uses_the_config_file(tmp_path: Path) -> None:
+    """--profile is checked against the catalog of the file --config points at."""
+    custom = _custom_config__cli_profile(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(custom),
+            "process",
+            str(_movie__cli_profile(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+            "--profile",
+            "remote",
+            "--no-run",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "Unknown profile 'remote'" in result.output
+
+    ok = runner.invoke(
+        app,
+        [
+            "--config",
+            str(custom),
+            "process",
+            str(_movie__cli_profile(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+            "--profile",
+            "balanced",
+            "--no-run",
+        ],
+    )
+    assert ok.exit_code == 0, ok.output
+
+
+def test_missing_config_file_is_a_clean_error(tmp_path: Path) -> None:
+    """A mistyped path is user input, not a bug: no traceback, non-zero exit."""
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(tmp_path / "absent.yaml"),
+            "process",
+            str(_movie__cli_profile(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+            "--no-run",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "Configuration file not found" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_config_without_catalog_explains_the_merge(tmp_path: Path) -> None:
+    """A two-file-era config gets the merge named, not a bare 'unknown profile'."""
+    bare = tmp_path / "bare.yaml"
+    bare.write_text(
+        "models:\n  profile: balanced\nprompts:\n  versions:\n    scene_analysis: v1\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(bare),
+            "process",
+            str(_movie__cli_profile(tmp_path)),
+            "--db-path",
+            _db(tmp_path),
+            "--no-run",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "merged into a single config file" in result.output
+    assert "Traceback" not in result.output

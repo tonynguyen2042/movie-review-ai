@@ -92,7 +92,7 @@ The hash is the film's identity. Everything downstream keys on it.
 ### 2. `scenes` — find the scenes
 
 Detects the scene boundaries and writes `scenes/scenes.json`. The detector
-is `adaptive` by default; the thresholds are in `config/default.yaml`.
+is `adaptive` by default; the thresholds are in `config/config.yaml`.
 
 ### 3. `transcript` — hear the dialogue
 

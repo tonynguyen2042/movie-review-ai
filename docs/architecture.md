@@ -151,15 +151,17 @@ of every model invocation.
 
 ## The configuration
 
-`config/default.yaml` holds the product controls. `config/models.yaml`
-holds the model catalogue and the profiles. `config/prompts/` holds the
-prompt templates, one file per version.
+`config/config.yaml` holds the product controls and the model catalogue:
+the `profiles` section is the catalog, and `models.profile` (or `--profile`)
+selects from it. `config/prompts/` holds the prompt templates, one file per
+version.
 
 Settings are read in this order, highest first:
 
 1. explicit CLI options
 2. `MOVIE_REVIEW_*` environment variables
-3. `config/default.yaml`
+3. `config/config.yaml` (or the file `--config` / `MOVIE_REVIEW_CONFIG`
+   points at)
 4. the built-in defaults
 
 Nothing about a model name, a path, a duration, a threshold or a prompt

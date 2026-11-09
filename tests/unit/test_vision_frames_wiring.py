@@ -217,7 +217,7 @@ def test_frame_counts_follow_the_configured_buckets(
     ctx: PipelineContext, captured_frames: list[Any], stub_analysis_proxy: None
 ) -> None:
     """Short/medium/long buckets must reach the stage, not just the module."""
-    # default.yaml: short_threshold 10, medium_threshold 60, 3/6/12 frames
+    # config.yaml: short_threshold 10, medium_threshold 60, 3/6/12 frames
     _scenes__vision_frames_wiring(
         ctx,
         [

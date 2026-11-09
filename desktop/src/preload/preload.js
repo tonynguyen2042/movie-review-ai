@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('desktop', {
 
   settings: {
     read: () => ipcRenderer.invoke('settings:read'),
-    write: (target, payload) => ipcRenderer.invoke('settings:write', { target, payload }),
+    write: (payload) => ipcRenderer.invoke('settings:write', { payload }),
   },
 
   jobs: {

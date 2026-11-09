@@ -315,8 +315,8 @@ def _build_context(
     :meth:`StageContext.from_settings`, so artifacts land under
     ``<data_dir>/jobs/<job_id>/`` as the artifact layout requires.
 
-    ``profile`` selects a ``models.yaml`` profile for this run only, overriding
-    the environment and ``default.yaml``.
+    ``profile`` selects a profile from the config file for this run only,
+    overriding the environment and the file's ``models.profile``.
 
     ``source_language`` is given to ASR and treated as the language the review is
     written in; ``target_language`` is what the narration must end up in and
@@ -409,7 +409,7 @@ def run_pipeline(
     ``on_progress`` is forwarded to :func:`run_stage`; see there.
     ``on_work`` likewise receives in-stage steps.
 
-    ``profile`` selects a ``models.yaml`` profile for this run only.
+    ``profile`` selects a profile from the config file for this run only.
     ``source_language`` and ``target_language`` are described in
     :func:`_build_context`.
 
@@ -1272,9 +1272,9 @@ def resume_job(
 
     ``on_progress`` is forwarded to :func:`run_pipeline`; see there.
     ``on_work`` likewise receives in-stage steps.
-    ``profile`` selects a ``models.yaml`` profile for this resume only, and the
-    languages behave as they do for a fresh run. ``on_model_stage`` is the
-    pause before a stage that needs a model, also as described there.
+    ``profile`` selects a profile from the config file for this resume only,
+    and the languages behave as they do for a fresh run. ``on_model_stage``
+    is the pause before a stage that needs a model, also as described there.
     """
     from movie_review.config.settings import load_settings
     from movie_review.storage.database import bootstrap

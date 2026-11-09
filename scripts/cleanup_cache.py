@@ -29,7 +29,7 @@ if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from movie_review.cache.manager import CacheManager  # noqa: E402
-from movie_review.config.settings import load_settings  # noqa: E402
+from movie_review.config.settings import load_settings, set_config_path  # noqa: E402
 
 #: How the ``--older-than`` value is read: ``30m``, ``2h``, ``7d`` or a
 #: number of seconds.
@@ -103,7 +103,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Report what would be removed, and remove nothing.",
     )
     parser.add_argument("--profile", help="The configuration profile to read.")
+    parser.add_argument("--config", help="Config file to use (default: <repo>/config/config.yaml).")
     args = parser.parse_args(argv)
+    set_config_path(args.config)
 
     try:
         older_than = _seconds(args.older_than) if args.older_than else None

@@ -27,6 +27,7 @@ from movie_review.config.settings import (
     GenerationSettings,
     available_profiles,
     load_settings,
+    set_config_path,
 )
 from movie_review.domain import Job, JobStatus
 from movie_review.jobs.manager import JobManager
@@ -330,9 +331,10 @@ def _effective_profile(settings: AppSettings) -> str:
     """The profile actually in force, after env and flag resolution.
 
     The accepted-job log used to record the raw flag value, which is ``None``
-    for a normal run. A reader then could not tell that ``config/default.yaml``
-    had silently selected a profile that cannot work on this host -- the exact
-    confusion behind a run dying 15 seconds in at the ASR stage.
+    for a normal run. A reader then could not tell that the config file's
+    ``models.profile`` had silently selected a profile that cannot work on
+    this host -- the exact confusion behind a run dying 15 seconds in at the
+    ASR stage.
     """
     return settings.models.profile
 
@@ -473,13 +475,14 @@ ProfileOption = Annotated[
     str | None,
     typer.Option(
         "--profile",
-        help="Model profile from config/models.yaml: fast, balanced, quality, remote.",
+        help="Model profile from the config file's profiles catalog: "
+        "fast, balanced, quality, remote.",
     ),
 ]
 
 # The flag used to be called --quality and did nothing: it was read into the
 # acceptance log event and never reached settings, so the only way to select a
-# profile was editing config/default.yaml or exporting an env var. It is kept as
+# profile was editing the config file or exporting an env var. It is kept as
 # a hidden alias because it shipped, but --profile is the real name -- a
 # "quality" flag that means "which models" is the same concept as profile, and
 # having both invites the belief that they differ.
@@ -503,7 +506,10 @@ def _resolve_profile(profile: str | None, quality: str | None) -> str | None:
     chosen = profile or quality
     if chosen is None:
         return None
-    available = available_profiles()
+    try:
+        available = available_profiles()
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
     if chosen not in available:
         raise typer.BadParameter(f"Unknown profile {chosen!r}; available: {', '.join(available)}")
     return chosen
@@ -512,8 +518,25 @@ def _resolve_profile(profile: str | None, quality: str | None) -> str | None:
 @app.callback()
 def _startup(
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
+    config: Annotated[
+        str | None,
+        typer.Option(
+            "--config",
+            help="Config file to use (default: <repo>/config/config.yaml). "
+            "Overrides MOVIE_REVIEW_CONFIG.",
+        ),
+    ] = None,
 ) -> None:
-    settings = load_settings()
+    # The override is process-wide, set before any settings load: the command
+    # below and the orchestrator's own internal loads must see the same file.
+    set_config_path(config)
+    try:
+        settings = load_settings()
+    except (FileNotFoundError, ValueError) as exc:
+        # A path the user typed is input, not a bug: name the problem and exit
+        # cleanly instead of printing a traceback from the settings loader.
+        typer.secho(f"error: {exc}", err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=2) from exc
     ulog.configure_logging(level="DEBUG" if verbose else settings.logging.level)
 
 

@@ -138,22 +138,26 @@
         </div>
       </section>
 
-      <!-- --------------------------------------------------------- Models -->
+      <!-- ------------------------------------------------------- Profiles -->
       <section class="panel" data-panel="models">
         <div class="card">
           <div class="card-head">
-            <h2>Model catalog</h2>
+            <h2>Model profiles</h2>
             <div class="row">
               <label class="inline">
                 Profile
                 <select id="profile-picker"></select>
               </label>
-              <button type="button" id="save-models" class="primary">Save models.yaml</button>
+              <button type="button" id="save-models" class="primary">Save config.yaml</button>
             </div>
           </div>
           <p class="muted" id="models-path"></p>
           <div id="models-body" class="models"></div>
           <div id="models-errors" class="errors" hidden></div>
+          <p class="hint">
+            Edits the <code>profiles</code> section of the single config file; saving writes the
+            whole document, so the pipeline settings below travel with it.
+          </p>
         </div>
       </section>
 
@@ -164,7 +168,7 @@
             <h2>Pipeline settings</h2>
             <div class="row">
               <button type="button" id="reload-settings" class="ghost">Reload</button>
-              <button type="button" id="save-default" class="primary">Save default.yaml</button>
+              <button type="button" id="save-config" class="primary">Save config.yaml</button>
             </div>
           </div>
           <p class="muted" id="settings-path"></p>

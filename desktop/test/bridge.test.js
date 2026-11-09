@@ -60,7 +60,7 @@ test('stages returns the full pipeline sequence', { timeout: 240000 }, () => {
   assert.equal(payload.stages.at(-1)[0], 'quality');
 });
 
-test('settings:read returns both files and the profile catalog', { timeout: 240000 }, () => {
+test('settings:read returns the config file and the profile catalog', { timeout: 240000 }, () => {
   const run = runBridge(['settings:read']);
   if (run.skipped) return;
 
@@ -68,9 +68,10 @@ test('settings:read returns both files and the profile catalog', { timeout: 2400
   const payload = parsed(run);
   assert.equal(payload.ok, true);
   assert.ok(Array.isArray(payload.profiles) && payload.profiles.length > 0);
-  assert.ok(payload.paths.config.endsWith('default.yaml'));
-  assert.ok(payload.default);
-  assert.ok(payload.models);
+  assert.ok(payload.paths.config.endsWith('config.yaml'));
+  assert.ok(payload.config);
+  // The catalog the app renders comes from the same document it edits.
+  assert.ok(payload.config.profiles);
 });
 
 test('jobs:list returns rows, or an empty list on a fresh database', { timeout: 240000 }, () => {
@@ -86,10 +87,8 @@ test('jobs:list returns rows, or an empty list on a fresh database', { timeout: 
 test('a rejected write exits 2 with an explanation and no stack trace', { timeout: 240000 }, () => {
   const run = runBridge([
     'settings:write',
-    '--target',
-    'models',
     '--payload',
-    JSON.stringify({ profiles: {} }),
+    JSON.stringify({}),
   ]);
   if (run.skipped) return;
 

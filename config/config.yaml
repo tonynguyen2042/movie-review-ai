@@ -1,8 +1,103 @@
-# Model catalog — movie-review-ai (T002).
-# Profiles per README section 56. The active profile is selected via
-# `models.profile` in default.yaml (or MOVIE_REVIEW_MODELS__PROFILE).
-# Exact checkpoints are benchmark-driven (T074-T077); edit here, not in code.
+# Configuration — movie-review-ai (T002; the two-file layout was merged in T182).
+# One file: the product controls on top, the model profile catalog under
+# `profiles`.
+# Precedence: init kwargs > MOVIE_REVIEW_* env vars > this file > code
+# fallbacks. The CLI's --config flag (or MOVIE_REVIEW_CONFIG) points the
+# pipeline at a different file with the same shape.
+# Source-footage limits are product controls, NOT a legal guarantee.
 
+models:
+  # The profile NAME from the `profiles` catalog below; the full model
+  # identities live there.
+  profile: balanced
+
+pipeline:
+  scene_detection:
+    detector: adaptive
+    threshold: null
+    min_scene_len: 15
+  visual_sampling:
+    mode: adaptive
+    short_threshold: 10.0
+    medium_threshold: 60.0
+    short_frames: 3
+    medium_frames: 6
+    long_frames: 12
+    # Drop near-duplicate frames (a held shot sampled twice is one picture).
+    dedupe: true
+    # dHash bits: frames differing by at most this many bits are duplicates.
+    dedupe_hamming_threshold: 5
+  diarization: true
+  review:
+    target_duration_minutes: 20
+    target_wpm: 150
+  rendering:
+    width: 1920
+    height: 1080
+    fps: 30
+    preset: veryfast
+    crf: 23
+
+source_video:
+  max_clip_seconds: 8.0
+  preferred_clip_seconds: 3.0
+  max_source_ratio: 0.35
+  max_total_seconds: 420.0
+
+paths:
+  data_dir: data
+  output_dir: data/output
+
+# The optional music bed (README section 43). Local assets only, off by
+# default. Set `track` to a local file to enable it.
+music:
+  enabled: false
+  track: null
+  gain: 1.0
+
+privacy:
+  cloud_ai: false
+
+interaction:
+  # Pause before every pipeline stage that needs a model, so a machine that
+  # cannot hold every model at once has time to swap the loaded one. The
+  # pause is per stage, not per model call. The CLI's --auto-accept overrides
+  # this for one run, and MOVIE_REVIEW_INTERACTION__AUTO_ACCEPT overrides it
+  # for every run.
+  auto_accept: false
+
+prompts:
+  # The pinned version of every prompt that exists. A prompt that is not
+  # listed here uses its newest version. The names below are the files in
+  # config/prompts/; the registry used to name five prompts that were never
+  # written, and the five that were written were not listed.
+  versions:
+    critic: v1
+    event_extraction: v1
+    publishing_metadata: v1
+    scene_analysis: v1
+    script_writer: v1
+    story_arc: v1
+    theme: v1
+    translate: v1
+    twist: v1
+
+logging:
+  level: INFO
+
+media:
+  ffmpeg: ffmpeg
+  ffprobe: ffprobe
+  proxy:
+    max_width: 1280
+    max_height: 720
+    preset: veryfast
+    crf: 23
+
+# Model catalog (T002). Profiles per README section 56. The active profile is
+# selected via `models.profile` above, the CLI's --profile flag, or
+# MOVIE_REVIEW_MODELS__PROFILE. Exact checkpoints are benchmark-driven
+# (T074-T077); edit here, not in code.
 profiles:
   fast:
     asr:
@@ -61,7 +156,8 @@ profiles:
   # Remote profile: models run on another host (GPU box, home server) behind
   # OpenAI-compatible endpoints -- vLLM, faster-whisper-server, llama.cpp
   # server, LM Studio, Ollama, or TGI. Select with either:
-  #   models.profile: remote                 (in config/default.yaml)
+  #   models.profile: remote            (in this file)
+  #   --profile remote                  (one CLI run)
   #   export MOVIE_REVIEW_MODELS__PROFILE=remote
   #
   # `backend: openai_compatible` routes that slot over HTTP instead of loading

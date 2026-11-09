@@ -125,7 +125,7 @@ On `master` this currently reports **811 passed**. The number grows as work land
 
 ## 4. Configure
 
-Configuration lives in [`config/default.yaml`](../config/default.yaml), loaded automatically. You do not need a config flag for normal use.
+Configuration lives in [`config/config.yaml`](../config/config.yaml), loaded automatically. You do not need a config flag for normal use; pass `--config PATH` to run with a different file.
 
 ### Precedence
 
@@ -133,7 +133,7 @@ Highest first:
 
 1. Explicit CLI options
 2. `MOVIE_REVIEW_*` environment variables
-3. `config/default.yaml`
+3. `config/config.yaml` (or the file `--config` / `MOVIE_REVIEW_CONFIG` points at)
 4. Built-in defaults
 
 Environment variables use the prefix `MOVIE_REVIEW_`, and `__` separates nested keys:
@@ -150,7 +150,7 @@ export MOVIE_REVIEW_MODELS__PROFILE=quality
 
 | Setting | Default | What it means |
 |---|---|---|
-| `models.profile` | `balanced` | Model profile: `fast`, `balanced`, `quality`, or `remote`. Selects the model set from `config/models.yaml`. |
+| `models.profile` | `balanced` | Model profile: `fast`, `balanced`, `quality`, or `remote`. Selects the model set from the `profiles` section of the same file. |
 | `paths.data_dir` | `data` | Where the job database and artifacts are written. |
 | `paths.output_dir` | `data/output` | Where finished videos are written. |
 | `pipeline.review.target_duration_minutes` | `20` | Target review length. |
@@ -176,14 +176,14 @@ The default profiles load MLX weights locally, which needs Apple Silicon. To run
 $env:MOVIE_REVIEW_MODELS__PROFILE = "remote"
 ```
 
-Then edit the `remote:` block in [`config/models.yaml`](../config/models.yaml) and set each `base_url`. Slots are independent, so you can keep one model local and run the rest remotely.
+Then edit the `remote:` block in the `profiles` section of [`config/config.yaml`](../config/config.yaml) and set each `base_url`. Slots are independent, so you can keep one model local and run the rest remotely.
 
 Two things to get right:
 
 - **Credentials:** `api_key_env` takes the *name* of an environment variable, never the secret itself, so tokens stay out of version control. Leave it unset for a LAN server needing no auth.
 - **TTS format:** ask the server for `wav`. Duration is measured from the returned bytes, and `mp3` is rejected rather than guessed — a wrong duration would silently corrupt subtitle timing.
 
-The `remote` profile in `config/models.yaml` ships with placeholder hostnames (`gpu-box.local`). Edit it before use.
+The `remote` profile in `config/config.yaml` ships with placeholder hostnames (`gpu-box.local`). Edit it before use.
 
 ### Swapping models on one machine
 
@@ -226,7 +226,8 @@ uv run movie-review process ./my-movie.mp4 \
 | `--target-language` | = `--language` | Language the narration is spoken in. Omit it and nothing is translated. |
 | `--duration` | `20m` | Target length, e.g. `20m` or `15`. |
 | `--style` | `youtube` | Review style profile. |
-| `--profile` | from config | Model profile: `fast`, `balanced`, `quality`, or `remote`. Overrides `config/default.yaml` and `MOVIE_REVIEW_MODELS__PROFILE` for this run. |
+| `--profile` | from config | Model profile: `fast`, `balanced`, `quality`, or `remote`. Overrides the config file's `models.profile` and `MOVIE_REVIEW_MODELS__PROFILE` for this run. |
+| `--config` | `config/config.yaml` | Use a different config file. Global flag: place it before the command. Overrides `MOVIE_REVIEW_CONFIG`. |
 | `--spoilers` | `full` | Spoiler level. |
 | `--output` | `./output` | Output directory. |
 | `--db-path` | `<data_dir>/jobs.db` | Use a specific jobs database. |
@@ -296,7 +297,7 @@ Translation runs in its own `review-translate` stage, after the script is writte
 
 Each paragraph is cached on its own text, so a retry re-translates only what is missing. Names and `INSUFFICIENT_EVIDENCE` markers must survive translation intact — a model that drops the marker turns "we cannot support this" into a confident sentence, and the paragraph is rejected rather than published.
 
-Translation has its own model slot in `config/models.yaml`, so it can be a different size, quantisation or host than the reasoning model:
+Translation has its own model slot in the profiles section of `config/config.yaml`, so it can be a different size, quantisation or host than the reasoning model:
 
 ```yaml
 translation:
@@ -563,9 +564,10 @@ npm start
 ```
 
 Pick a command and a movie, press **Start**, and watch the 19 stages and the live
-CLI log. There is also a job list, and editors for `config/default.yaml` and
-`config/models.yaml` that validate through the project's own pydantic settings
-before writing and leave a timestamped `.bak` beside the file.
+CLI log. There is also a job list, and editors for `config/config.yaml` —
+the pipeline settings and the model profiles — that validate through the
+project's own pydantic settings before writing and leave a timestamped
+`.bak` beside the file.
 
 The app spawns `uv run movie-review` in this checkout — it does not re-implement
 the pipeline, so anything the CLI can do is reachable from the form. Full details,
@@ -729,7 +731,7 @@ Every job command reports this the same way and exits `2` — as a usage error, 
 
 ### `Cannot find ffmpeg` / `ffprobe not found`
 
-Install FFmpeg (see [Step 1](#1-what-you-need)), or set absolute paths in `config/default.yaml`:
+Install FFmpeg (see [Step 1](#1-what-you-need)), or set absolute paths in `config/config.yaml`:
 
 ```yaml
 media:
@@ -776,7 +778,6 @@ uv run pytest -q
 - [`model-selection.md`](model-selection.md) — the profiles, and how to measure before choosing
 - [`troubleshooting.md`](troubleshooting.md) — what to do when something fails
 - [`DESKTOP-APP.md`](DESKTOP-APP.md) — the Electron GUI (T111)
-- [`config/default.yaml`](../config/default.yaml) — all settings with comments
-- [`config/models.yaml`](../config/models.yaml) — model profiles, including `remote`
+- [`config/config.yaml`](../config/config.yaml) — all settings with comments, including the model profiles and `remote`
 
 If a step here does not match what you see, that is a bug in the guide or the tool. Open an issue.
