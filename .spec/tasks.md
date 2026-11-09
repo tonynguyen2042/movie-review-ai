@@ -2855,3 +2855,49 @@ docs/troubleshooting.md
   input with exit 2, and leaves a `.bak.<timestamp>` on success
 - [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
+
+## T183 - The batch frame pass creates the directory ffmpeg writes to
+
+**Objective**
+
+Make the T179 batch pass actually run: create the per-scene `.batch` output
+directory before launching the single-pass ffmpeg, and make the tests catch
+a pass that silently falls back.
+
+**Depends on**: T179.
+
+**The defect**
+
+`extract_scene_frames` launches the single-pass ffmpeg writing to
+`<dest>/.batch/%05d.jpg`, but only `<dest>` is created. ffmpeg's image2
+muxer does not create directories, so the pass always exits non-zero
+("Could not open file ... .batch/00001.jpg: No such file or directory"),
+logs a warning per scene, and falls back to the per-frame seeks. Jobs stay
+correct — the fallback does its job — but the optimisation T179 shipped
+(one decode pass per scene) never ran: every scene paid for N launches and
+N decodes, and the vision log filled with warnings.
+
+Two things hid it: the fake ``run_fn`` in the unit tests created the
+pattern's parent directory (real ffmpeg does not), and the real-ffmpeg test
+only asserted the pass was *attempted* and compared frame bytes — the
+fallback's output is byte-identical to a direct seek, so the comparison
+passes either way.
+
+**Files**
+
+```text
+.spec/tasks.md
+src/movie_review/media/frames.py
+tests/unit/test_frames_batch.py
+```
+
+**Acceptance criteria**
+
+- [x] with real ffmpeg the batch pass succeeds without a fallback: one
+  select call, zero per-frame seeks, no "falling back to per-frame"
+  warning, and no `.batch` directory left behind
+- [x] the fake ``run_fn`` emulates the image2 directory contract (missing
+  directory -> non-zero exit), so the unit tests pin the ``mkdir`` without
+  needing the binary
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+  Windows-path failures, which are red on this master

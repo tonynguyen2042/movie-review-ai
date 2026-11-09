@@ -269,6 +269,10 @@ def extract_scene_frames(
 
     batch_dir = dest / ".batch"
     pattern = str(batch_dir / "%05d.jpg")
+    # The image2 muxer will not create the output directory; without this the
+    # pass dies on the first frame with "Could not open file" and every scene
+    # silently falls back to per-frame seeks (T183).
+    batch_dir.mkdir(parents=True, exist_ok=True)
     try:
         run_fn(
             ffmpeg,
