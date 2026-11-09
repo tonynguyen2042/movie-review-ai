@@ -3005,15 +3005,15 @@ tests/unit/test_vision_frames_wiring.py
 
 **Acceptance criteria**
 
-- [ ] the settings default is 4 and equal to `DEFAULT_CONCURRENCY`; the
+- [x] the settings default is 4 and equal to `DEFAULT_CONCURRENCY`; the
   config file carries the key with the same value
-- [ ] a recording adapter proves the stage honours a configured value
+- [x] a recording adapter proves the stage honours a configured value
   smaller than the default: the observed in-flight call count never
   exceeds it, for a batch of scenes larger than the value
-- [ ] the orchestrator's vision stage passes
+- [x] the orchestrator's vision stage passes
   `ctx.settings.pipeline.visual_analysis.concurrency` through to
   `run_visual_analysis`, asserted at the orchestrator (fake analysis,
   real stage function)
-- [ ] `concurrency < 1` raises `VisualAnalysisError`
-- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+- [x] `concurrency < 1` raises `VisualAnalysisError`
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
