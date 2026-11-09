@@ -2945,13 +2945,13 @@ tests/unit/test_vision_audit.py
 
 **Acceptance criteria**
 
-- [ ] the audit event's `frames_sent` equals the frame count the port
+- [x] the audit event's `frames_sent` equals the frame count the port
   actually received, asserted through a recording adapter, for both an
   under-cap request and a capped subset
-- [ ] the response JSON in the console event and in
+- [x] the response JSON in the console event and in
   `<jobs_dir>/<job_id>/vision/responses/<scene_id>.json` are identical, and
   the file names the frame files the request carried
-- [ ] a cached scene is audited with `cache_hit: true`, no response payload,
+- [x] a cached scene is audited with `cache_hit: true`, no response payload,
   and no rewrite of an existing response file
-- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
