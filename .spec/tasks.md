@@ -2955,3 +2955,65 @@ tests/unit/test_vision_audit.py
   and no rewrite of an existing response file
 - [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
+
+## T185 - Vision concurrency is configuration, not a constant
+
+**Objective**
+
+`DEFAULT_CONCURRENCY` in the vision stage moves from a hard-coded constant
+into the config file as `pipeline.visual_analysis.concurrency`, so an
+operator can tune how many scene requests run at once without editing code.
+
+**Depends on**: T184.
+
+**The need**
+
+The T184 audit confirmed the per-request frame cap was not the speed
+variable — stage time is scene count × per-call latency at the stage's
+concurrency, which was hard-coded to 4. An operator on a remote
+OpenAI-compatible endpoint (a vLLM box that happily serves several
+requests in flight) had no way to use that parallelism without a code
+change.
+
+**Design**
+
+- `pipeline.visual_analysis.concurrency` (default 4, positive integer)
+  joins `config/config.yaml` next to `visual_sampling`, the other knob of
+  the vision stage. The env-var override
+  (`MOVIE_REVIEW_PIPELINE__VISUAL_ANALYSIS__CONCURRENCY`) works like every
+  other nested setting.
+- `run_visual_analysis` takes `concurrency` the way it already takes
+  `max_frames` (T181): the orchestrator passes the configured value, the
+  `DEFAULT_CONCURRENCY` constant remains as the fallback for direct
+  callers and must stay equal to the settings default.
+- The stage rejects `concurrency < 1` with `VisualAnalysisError`, the
+  same shape as the `max_frames` guard.
+- `batch_size` stays a constant: it shapes the continuity context, not
+  throughput, and was not requested.
+
+**Files**
+
+```text
+.spec/tasks.md
+config/config.yaml
+src/movie_review/config/settings.py
+src/movie_review/vision/analysis.py
+src/movie_review/pipeline/orchestrator.py
+tests/unit/test_vision_concurrency.py
+tests/unit/test_vision_frames_wiring.py
+```
+
+**Acceptance criteria**
+
+- [ ] the settings default is 4 and equal to `DEFAULT_CONCURRENCY`; the
+  config file carries the key with the same value
+- [ ] a recording adapter proves the stage honours a configured value
+  smaller than the default: the observed in-flight call count never
+  exceeds it, for a batch of scenes larger than the value
+- [ ] the orchestrator's vision stage passes
+  `ctx.settings.pipeline.visual_analysis.concurrency` through to
+  `run_visual_analysis`, asserted at the orchestrator (fake analysis,
+  real stage function)
+- [ ] `concurrency < 1` raises `VisualAnalysisError`
+- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+  Windows-path failures, which are red on this master
