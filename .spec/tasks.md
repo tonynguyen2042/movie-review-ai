@@ -3062,15 +3062,15 @@ tests/unit/test_event_extraction_concurrency.py
 
 **Acceptance criteria**
 
-- [ ] the settings default is 4 and equal to `DEFAULT_CONCURRENCY`; the
+- [x] the settings default is 4 and equal to `DEFAULT_CONCURRENCY`; the
   config file carries the key with the same value
-- [ ] a recording port proves the stage honours a configured value smaller
+- [x] a recording port proves the stage honours a configured value smaller
   than the default: the observed in-flight call count never exceeds it,
   for a batch of scenes larger than the value
-- [ ] the orchestrator's events stage passes
+- [x] the orchestrator's events stage passes
   `ctx.settings.pipeline.event_extraction.concurrency` through to
   `run_event_extraction`, asserted at the orchestrator (fake extraction,
   real stage function)
-- [ ] `concurrency < 1` raises `EventExtractionError`
-- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+- [x] `concurrency < 1` raises `EventExtractionError`
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
