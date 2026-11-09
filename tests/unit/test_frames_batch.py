@@ -3,12 +3,15 @@
 The fake ``run_fn`` emulates both ffmpeg shapes the sampler can produce: the
 batch pass (``-vf select=eq(n\\,IDX)+...`` writing numbered files in stream
 order) and the per-frame seek (``-ss T ... OUT``). File contents are keyed by
-frame index, so a test can assert which frame landed on which filename.
+frame index, so a test can assert which frame landed on which filename. It
+also emulates the image2 directory contract: a missing output directory is a
+non-zero exit, exactly as the real binary behaves (T183).
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -68,7 +71,12 @@ def _fake_batch_run(
             vf = args[args.index("-vf") + 1]
             indices = [int(match) for match in re.findall(r"eq\(n\\,(?P<i>\d+)\)", vf)]
             pattern = Path(args[-1])
-            pattern.parent.mkdir(parents=True, exist_ok=True)
+            # The image2 muxer will not create the output directory; a missing
+            # one is a non-zero exit, exactly as real ffmpeg behaves (T183).
+            if not pattern.parent.is_dir():
+                raise ff.ProcessError(
+                    "ffmpeg", args, "Could not open file: No such file or directory"
+                )
             for position, index in enumerate(indices, start=1):
                 if max_index is not None and index > max_index:
                     continue  # past the last frame: the select filter drops it
@@ -105,6 +113,29 @@ def test_frame_index_for_rounds_to_nearest() -> None:
 def test_select_expression_escapes_the_filter_commas() -> None:
     assert _select_expression([5, 47]) == r"eq(n\,5)+eq(n\,47)"
     assert "," not in _select_expression([5]).replace(r"\,", "")
+
+
+def test_batch_pass_creates_its_output_directory(tmp_path: Path) -> None:
+    """T183: the image2 muxer will not create the directory; the pass must.
+
+    Without the mkdir the pass dies on the first frame and every scene
+    silently falls back to per-frame seeks: correct output, no
+    optimisation, a wall of warnings in the vision log.
+    """
+    src = _source(tmp_path)
+    recorded: list[list[str]] = []
+    run_fn = _fake_batch_run(recorded)
+    timestamps = sample_timestamps(0.0, 5.0, 3)
+
+    dest = tmp_path / "frames"
+    paths = extract_scene_frames(src, timestamps, dest, "scene_000001", 24.0, run_fn=run_fn)
+
+    assert len([args for args in recorded if _is_batch_call(args)]) == 1
+    # No fallback: every frame came from the single pass, not a seek.
+    assert not any("-ss" in args for args in recorded)
+    assert len(paths) == 3
+    assert all(path.is_file() for path in paths)
+    assert not (dest / ".batch").exists()
 
 
 def test_batch_is_one_pass_and_maps_stream_order(tmp_path: Path) -> None:
@@ -301,7 +332,9 @@ def test_sample_movie_without_fps_keeps_per_frame(tmp_path: Path) -> None:
 
 
 @pytest.mark.ffmpeg
-def test_batch_output_matches_per_frame_seeks_on_a_real_clip(tmp_path: Path) -> None:
+def test_batch_output_matches_per_frame_seeks_on_a_real_clip(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     src = tmp_path / "t.mp4"
     ff.check(
         "ffmpeg",
@@ -328,11 +361,18 @@ def test_batch_output_matches_per_frame_seeks_on_a_real_clip(tmp_path: Path) -> 
 
     recorded: list[list[str]] = []
     dest = tmp_path / "batch"
-    batch_paths = extract_scene_frames(
-        src, timestamps, dest, "scene_000001", fps, run_fn=_fake_real(recorded)
-    )
+    with caplog.at_level(logging.WARNING, logger="movie_review.media.frames"):
+        batch_paths = extract_scene_frames(
+            src, timestamps, dest, "scene_000001", fps, run_fn=_fake_real(recorded)
+        )
 
+    # The pass is what ran, not the fallback: one select call, no seeks. A
+    # fallback would still yield byte-identical frames, so the byte comparison
+    # below cannot tell the two apart on its own (T183).
     assert len([args for args in recorded if "-vf" in args]) == 1
+    assert not any("-ss" in args for args in recorded)
+    assert not [record for record in caplog.records if "falling back" in record.message]
+    assert not (dest / ".batch").exists()
     for index, timestamp, path in zip(indices, timestamps, batch_paths, strict=True):
         seek = tmp_path / f"seek_{index}.jpg"
         extract_frame(src, timestamp, seek, run_fn=ff.check)
