@@ -27,6 +27,12 @@ pipeline:
     dedupe: true
     # dHash bits: frames differing by at most this many bits are duplicates.
     dedupe_hamming_threshold: 5
+  visual_analysis:
+    # How many scene requests run at the same time. Stage time is roughly
+    # scene count / concurrency x per-call latency, so this is the speed
+    # lever for a remote endpoint that serves requests in flight. A local
+    # model is limited by the machine: more in flight costs memory, not time.
+    concurrency: 4
   diarization: true
   review:
     target_duration_minutes: 20

@@ -322,11 +322,21 @@ class VisualSamplingSettings(BaseModel):
     dedupe_hamming_threshold: int = Field(default=5, ge=0)
 
 
+class VisualAnalysisSettings(BaseModel):
+    """How the vision stage analyses its scenes (T185)."""
+
+    #: How many scene requests run at the same time. A remote endpoint can
+    #: take several in flight; a local one is limited by the machine, so a
+    #: higher number there costs memory, not speed.
+    concurrency: PositiveInt = 4
+
+
 class PipelineSettings(BaseModel):
     """Pipeline stage defaults."""
 
     scene_detection: SceneDetectionSettings = SceneDetectionSettings()
     visual_sampling: VisualSamplingSettings = VisualSamplingSettings()
+    visual_analysis: VisualAnalysisSettings = VisualAnalysisSettings()
     #: Whether the diarization stage runs. The speakers are only needed for
     #: the speaker-to-character linking.
     diarization: bool = True
