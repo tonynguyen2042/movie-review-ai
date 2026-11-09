@@ -10,6 +10,7 @@ local MLX weights, or a remote OpenAI-compatible endpoint.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from bisect import bisect_left, bisect_right
@@ -123,8 +124,12 @@ def _analyse_one(
             analysis = SceneAnalysis.model_validate(cached["analysis"])
         except (KeyError, TypeError, ValueError) as exc:
             raise VisualAnalysisError(f"Cached vision is corrupt for {scene.scene_id}") from exc
+        _audit_response(
+            scene, scene_frames, request_frames, max_frames, ctx, model, analysis, cache_hit=True
+        )
         return _BatchEntry(analysis=analysis, cache_hit=True)
 
+    started = time.perf_counter()
     try:
         analysis = run_with_oom_recovery(
             lambda: active.analyze(
@@ -142,8 +147,80 @@ def _analyse_one(
         )
     except Exception as exc:
         raise VisualAnalysisError(f"Cannot analyze {scene.scene_id}: {exc}") from exc
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
     ctx.cache.store_json(key, {"analysis": analysis.model_dump(mode="json")})
+    _audit_response(
+        scene,
+        scene_frames,
+        request_frames,
+        max_frames,
+        ctx,
+        model,
+        analysis,
+        cache_hit=False,
+        duration_ms=elapsed_ms,
+    )
     return _BatchEntry(analysis=analysis, cache_hit=False)
+
+
+def _audit_response(
+    scene: Scene,
+    scene_frames: list[Path],
+    request_frames: list[Path],
+    max_frames: int,
+    ctx: StageContext,
+    model: str,
+    analysis: SceneAnalysis,
+    *,
+    cache_hit: bool,
+    duration_ms: int | None = None,
+) -> None:
+    """One line per scene answering "what did the VLM get, and what did it say".
+
+    ``frames_sent`` is the audit number (T184): the exact frames the request
+    carried, and the very list the port encodes and sends. Alongside it,
+    ``frames_sampled`` (what the scene sampled before the cap) and
+    ``max_frames`` (the cap applied), so a reader can tell an untouched
+    request from a capped subset at a glance.
+
+    The response is not thrown away: it rides the event to the console and
+    is written under the job, so a suspicious answer can be inspected
+    without re-running the model. Cache hits are audited too, without a
+    response payload and without touching the file a real request wrote.
+    """
+    response_path = ctx.jobs_dir / ctx.job_id / "vision" / "responses" / f"{scene.scene_id}.json"
+    analysis_dump = analysis.model_dump(mode="json")
+    response_text = json.dumps(analysis_dump, ensure_ascii=False)
+    if not cache_hit:
+        response_path.parent.mkdir(parents=True, exist_ok=True)
+        response_path.write_text(
+            json.dumps(
+                {
+                    "scene_id": scene.scene_id,
+                    "model": model,
+                    "frames_sent": len(request_frames),
+                    "frame_files": [path.name for path in request_frames],
+                    "response": analysis_dump,
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    ulog.log_event(
+        _logger,
+        "vision.response",
+        "ok",
+        duration_ms=duration_ms,
+        scene_id=scene.scene_id,
+        model=model,
+        frames_sent=len(request_frames),
+        frames_sampled=len(scene_frames),
+        max_frames=max_frames,
+        cache_hit=cache_hit,
+        response_file=str(response_path) if response_path.is_file() else None,
+        response=None if cache_hit else response_text,
+    )
 
 
 def _analyse_batch(

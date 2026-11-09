@@ -2901,3 +2901,57 @@ tests/unit/test_frames_batch.py
   needing the binary
 - [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
+
+## T184 - Vision requests are auditable: exact frame counts, responses on record
+
+**Objective**
+
+Every vision request must report exactly how many frames the VLM received,
+and each response must be inspectable: dumped to the console after the
+request and written to a file under the job directory.
+
+**Depends on**: T181, T183.
+
+**The need**
+
+An operator who tuned `max_frames_per_request` (32 -> 128 -> 200) saw no
+change in stage time, and there was no way to see from the run itself how
+many frames a request actually carried or what the model answered. The
+count exists in code (the capped subset) but nowhere in the logs, and the
+model's reply was parsed and discarded — a suspicious answer could only be
+chased by re-running the model.
+
+**Design**
+
+- One `vision.response` log event per scene, at the point where the request
+  is decided: `frames_sent` (the exact frames the request carried — the very
+  list the port encodes and sends), `frames_sampled` (what the scene
+  sampled before the cap), `max_frames` (the cap applied), `cache_hit`,
+  `duration_ms`, and the response file path. A reader can tell an
+  untouched request from a capped subset at a glance.
+- The full response JSON rides the same event (console) and is written to
+  `<jobs_dir>/<job_id>/vision/responses/<scene_id>.json` (overwritten on
+  re-runs; the file lists the frame files the request carried).
+- A cache hit is audited too, with `cache_hit: true` and no response
+  payload.
+
+**Files**
+
+```text
+.spec/tasks.md
+src/movie_review/vision/analysis.py
+tests/unit/test_vision_audit.py
+```
+
+**Acceptance criteria**
+
+- [x] the audit event's `frames_sent` equals the frame count the port
+  actually received, asserted through a recording adapter, for both an
+  under-cap request and a capped subset
+- [x] the response JSON in the console event and in
+  `<jobs_dir>/<job_id>/vision/responses/<scene_id>.json` are identical, and
+  the file names the frame files the request carried
+- [x] a cached scene is audited with `cache_hit: true`, no response payload,
+  and no rewrite of an existing response file
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+  Windows-path failures, which are red on this master
