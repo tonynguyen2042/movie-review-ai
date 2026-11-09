@@ -33,6 +33,10 @@ pipeline:
     # lever for a remote endpoint that serves requests in flight. A local
     # model is limited by the machine: more in flight costs memory, not time.
     concurrency: 4
+  event_extraction:
+    # How many scene extractions run at the same time (one reasoning call
+    # per scene). The same lever as the vision stage above.
+    concurrency: 4
   diarization: true
   review:
     target_duration_minutes: 20

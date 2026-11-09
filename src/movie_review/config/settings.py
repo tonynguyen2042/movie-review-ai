@@ -331,12 +331,22 @@ class VisualAnalysisSettings(BaseModel):
     concurrency: PositiveInt = 4
 
 
+class EventExtractionSettings(BaseModel):
+    """How the events stage extracts its scenes (T187)."""
+
+    #: How many scene extractions run at the same time. The same lever as
+    #: the vision stage: a remote endpoint serves requests in flight, a
+    #: local model is limited by the machine.
+    concurrency: PositiveInt = 4
+
+
 class PipelineSettings(BaseModel):
     """Pipeline stage defaults."""
 
     scene_detection: SceneDetectionSettings = SceneDetectionSettings()
     visual_sampling: VisualSamplingSettings = VisualSamplingSettings()
     visual_analysis: VisualAnalysisSettings = VisualAnalysisSettings()
+    event_extraction: EventExtractionSettings = EventExtractionSettings()
     #: Whether the diarization stage runs. The speakers are only needed for
     #: the speaker-to-character linking.
     diarization: bool = True

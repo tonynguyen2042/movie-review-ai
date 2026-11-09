@@ -50,7 +50,10 @@ MAX_PRIOR_EVENTS = 20
 #: concurrently; the batch before it supplies the continuity context.
 DEFAULT_BATCH_SIZE = 8
 
-#: How many scenes are extracted at the same time.
+#: How many scenes are extracted at the same time. The orchestrator always
+#: passes the configured ``pipeline.event_extraction.concurrency`` (T187);
+#: this default serves direct callers and must stay equal to the
+#: EventExtractionSettings fallback.
 DEFAULT_CONCURRENCY = 4
 
 
@@ -155,6 +158,7 @@ def _extract_batch(
     characters: list[Character],
     active: ReasoningPort,
     ctx: StageContext,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> list[tuple[list[dict[str, object]], bool]]:
     """Extract a batch of scenes concurrently, preserving their order."""
     if not batch:
@@ -177,10 +181,10 @@ def _extract_batch(
             ctx,
         )
 
-    if len(batch) == 1 or DEFAULT_CONCURRENCY <= 1:
+    if len(batch) == 1 or concurrency <= 1:
         return [work(scene) for scene in batch]
 
-    with ThreadPoolExecutor(max_workers=min(DEFAULT_CONCURRENCY, len(batch))) as pool:
+    with ThreadPoolExecutor(max_workers=min(concurrency, len(batch))) as pool:
         # `map` keeps the order of the input, so the results line up with the
         # scenes no matter which finished first.
         return list(pool.map(work, batch))
@@ -218,8 +222,18 @@ def run_event_extraction(
     reasoner: ReasoningPort | None = None,
     prompt_version: str | None = None,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> EventsResult:
-    """Extract story events for ``ctx.job_id`` through to ``EVENTS_READY``."""
+    """Extract story events for ``ctx.job_id`` through to ``EVENTS_READY``.
+
+    ``concurrency`` is how many of a batch's extractions run at once (T187):
+    stage time is roughly scene count / concurrency times the per-call
+    latency. It shapes scheduling only, never the request content, so it
+    does not join the per-scene cache key.
+    """
+    if concurrency < 1:
+        message = f"event_extraction.concurrency must be at least 1, got {concurrency}"
+        raise EventExtractionError(message)
     started = time.perf_counter()
     try:
         job = ctx.manager.get(ctx.job_id)
@@ -267,6 +281,7 @@ def run_event_extraction(
                 characters,
                 active,
                 ctx,
+                concurrency,
             )
             for entries, hit in results:
                 if hit:
