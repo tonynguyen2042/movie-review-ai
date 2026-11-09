@@ -3076,16 +3076,16 @@ tests/unit/test_reasoning_audit.py
 
 **Acceptance criteria**
 
-- [ ] a valid JSON reply: the console event and the file under
+- [x] a valid JSON reply: the console event and the file under
   `<jobs_dir>/<job_id>/reasoning/responses/` carry the same raw text and
   the parsed value, and the file names the model
-- [ ] an unparsable reply: the `ReasoningError` still propagates, and the
+- [x] an unparsable reply: the `ReasoningError` still propagates, and the
   event plus the file are written with `parse_error` set and `parsed`
   null, so the failing reply is inspectable
-- [ ] outside a pipeline run (no job in the logging context) no file is
+- [x] outside a pipeline run (no job in the logging context) no file is
   created and the console event still carries the reply
-- [ ] a spec with `max_tokens: 4096` reaches the built remote adapter;
+- [x] a spec with `max_tokens: 4096` reaches the built remote adapter;
   without it the default 2048 applies; an explicit override wins over
   the spec
-- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
