@@ -2893,11 +2893,11 @@ tests/unit/test_frames_batch.py
 
 **Acceptance criteria**
 
-- [ ] with real ffmpeg the batch pass succeeds without a fallback: one
+- [x] with real ffmpeg the batch pass succeeds without a fallback: one
   select call, zero per-frame seeks, no "falling back to per-frame"
   warning, and no `.batch` directory left behind
-- [ ] the fake ``run_fn`` emulates the image2 directory contract (missing
+- [x] the fake ``run_fn`` emulates the image2 directory contract (missing
   directory -> non-zero exit), so the unit tests pin the ``mkdir`` without
   needing the binary
-- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
