@@ -3017,3 +3017,60 @@ tests/unit/test_vision_frames_wiring.py
 - [x] `concurrency < 1` raises `VisualAnalysisError`
 - [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
+
+## T187 - Events concurrency is configuration, not a constant
+
+**Objective**
+
+The events stage's in-flight budget moves from a hard-coded constant into
+the config file as `pipeline.event_extraction.concurrency`, mirroring
+`pipeline.visual_analysis.concurrency` (T185) for the other long stage.
+
+**Depends on**: T185.
+
+**The need**
+
+The events stage is the second serial long pole of the pipeline: one
+reasoning call per scene, at a hard-coded concurrency of 4. An operator on
+a remote endpoint that serves requests in flight can use more (or, to
+protect a shared server, less) without editing code.
+
+**Design**
+
+- `pipeline.event_extraction.concurrency` (default 4, positive integer)
+  joins `config/config.yaml` next to `visual_analysis`. The env-var
+  override (`MOVIE_REVIEW_PIPELINE__EVENT_EXTRACTION__CONCURRENCY`) works
+  like every other nested setting.
+- `run_event_extraction` takes `concurrency` the way
+  `run_visual_analysis` does (T185): the orchestrator's events stage
+  passes the configured value, `DEFAULT_CONCURRENCY` remains the fallback
+  for direct callers and must stay equal to the settings default.
+- The stage rejects `concurrency < 1` with `EventExtractionError`.
+- Concurrency shapes scheduling only, never request content, so it does
+  not join the per-scene cache key.
+
+**Files**
+
+```text
+.spec/tasks.md
+config/config.yaml
+src/movie_review/config/settings.py
+src/movie_review/story/events.py
+src/movie_review/pipeline/orchestrator.py
+tests/unit/test_event_extraction_concurrency.py
+```
+
+**Acceptance criteria**
+
+- [ ] the settings default is 4 and equal to `DEFAULT_CONCURRENCY`; the
+  config file carries the key with the same value
+- [ ] a recording port proves the stage honours a configured value smaller
+  than the default: the observed in-flight call count never exceeds it,
+  for a batch of scenes larger than the value
+- [ ] the orchestrator's events stage passes
+  `ctx.settings.pipeline.event_extraction.concurrency` through to
+  `run_event_extraction`, asserted at the orchestrator (fake extraction,
+  real stage function)
+- [ ] `concurrency < 1` raises `EventExtractionError`
+- [ ] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+  Windows-path failures, which are red on this master
