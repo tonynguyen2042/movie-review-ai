@@ -677,6 +677,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             # The endpoint's image budget, not a constant: a scene over the cap
             # is sent with an evenly spaced subset of its frames (T181).
             max_frames=ctx.settings.models.vision.max_frames_per_request,
+            # How many of the batch's requests run at once (T185): a remote
+            # endpoint serves them in flight, a local model cannot.
+            concurrency=ctx.settings.pipeline.visual_analysis.concurrency,
         )
 
         # The frame budget is feedback-driven, not a pure function of the
@@ -727,6 +730,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             ctx.stage_context(),
             on_progress=_sub_step(ctx),
             max_frames=ctx.settings.models.vision.max_frames_per_request,
+            # The boosted pass reschedules the same work; it keeps the same
+            # in-flight budget as the first pass (T185).
+            concurrency=ctx.settings.pipeline.visual_analysis.concurrency,
         )
 
     def characters_fn(ctx: PipelineContext) -> Any:

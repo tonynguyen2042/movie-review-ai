@@ -43,9 +43,10 @@ MAX_DIALOGUE_CHARS = 2000
 #: concurrently; the batch before it supplies the continuity context.
 DEFAULT_BATCH_SIZE = 8
 
-#: How many scenes are analysed at the same time. A remote endpoint can
-#: usually take a few requests at once; a local one can take as many as
-#: the machine has cores for.
+#: How many scenes are analysed at the same time. The orchestrator always
+#: passes the configured ``pipeline.visual_analysis.concurrency`` (T185);
+#: this default serves direct callers and must stay equal to the
+#: VisualAnalysisSettings fallback.
 DEFAULT_CONCURRENCY = 4
 
 #: The most frames one request may carry. The orchestrator always passes the
@@ -233,6 +234,7 @@ def _analyse_batch(
     active: VLMPort,
     ctx: StageContext,
     max_frames: int,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> list[_BatchEntry]:
     """Analyse a batch of scenes concurrently, preserving their order.
 
@@ -266,10 +268,10 @@ def _analyse_batch(
             max_frames,
         )
 
-    if len(batch) == 1 or DEFAULT_CONCURRENCY <= 1:
+    if len(batch) == 1 or concurrency <= 1:
         return [work(scene) for scene in batch]
 
-    with ThreadPoolExecutor(max_workers=min(DEFAULT_CONCURRENCY, len(batch))) as pool:
+    with ThreadPoolExecutor(max_workers=min(concurrency, len(batch))) as pool:
         # `map` keeps the order of the input, so the results line up with the
         # scenes no matter which finished first.
         return list(pool.map(work, batch))
@@ -363,6 +365,7 @@ def run_visual_analysis(
     on_progress: ProgressReporter | None = None,
     batch_size: int = DEFAULT_BATCH_SIZE,
     max_frames: int = DEFAULT_MAX_FRAMES_PER_REQUEST,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> VisualAnalysisResult:
     """Analyze scenes for ``ctx.job_id`` through to ``VISUAL_ANALYSIS_READY``.
 
@@ -377,9 +380,18 @@ def run_visual_analysis(
     frames is sent with its first and last frames and the rest spaced evenly.
     The cap joins the per-scene cache key, so changing it re-analyses instead
     of adopting an answer the other cap produced.
+
+    ``concurrency`` is how many of the batch's requests run at once (T185):
+    stage time is roughly scene count / concurrency times the per-call
+    latency, so it is the throughput knob for a remote endpoint that serves
+    requests in flight. It shapes scheduling only, never the request content,
+    so it does not join the cache key.
     """
     if max_frames < 1:
         raise VisualAnalysisError(f"max_frames_per_request must be at least 1, got {max_frames}")
+    if concurrency < 1:
+        message = f"visual_analysis.concurrency must be at least 1, got {concurrency}"
+        raise VisualAnalysisError(message)
     started = time.perf_counter()
     try:
         job = ctx.manager.get(ctx.job_id)
@@ -425,6 +437,7 @@ def run_visual_analysis(
                 active,
                 ctx,
                 max_frames,
+                concurrency,
             )
             for entry in results:
                 if entry.cache_hit:
