@@ -22,8 +22,13 @@ _LOGGER_NAMESPACE = "movie_review"
 _context: ContextVar[dict[str, Any] | None] = ContextVar("movie_review_log_context", default=None)
 
 
-def _current_context() -> dict[str, Any]:
-    """Active logging context (empty mapping when nothing is bound)."""
+def current_context() -> dict[str, Any]:
+    """The logging context bound for this thread/task (empty when none).
+
+    Stage functions bind ``job_id`` and ``stage`` via :func:`logging_context`;
+    callers that live inside that binding but outside the stage -- the model
+    ports, which run in its threads -- read the binding through this.
+    """
     return dict(_context.get() or {})
 
 
@@ -49,7 +54,7 @@ def logging_context(
     job_id: str | None = None, stage: str | None = None, **extra: Any
 ) -> Iterator[None]:
     """Bind logging context for the enclosed block; nesting restores outer values."""
-    merged = _current_context()
+    merged = current_context()
     if job_id is not None:
         merged["job_id"] = job_id
     if stage is not None:
@@ -72,7 +77,7 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        payload.update(_current_context())
+        payload.update(current_context())
         for key, value in record.__dict__.items():
             if key not in _STANDARD_ATTRS and key != "message":
                 payload.setdefault(key, value)
