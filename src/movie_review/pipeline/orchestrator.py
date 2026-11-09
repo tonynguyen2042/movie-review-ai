@@ -813,6 +813,9 @@ def _get_stage_function(stage_name: str) -> Callable[[PipelineContext], Any] | N
             segments,
             characters,
             ctx.stage_context(),
+            # How many of the batch's extractions run at once (T187): the
+            # same lever as the vision stage, from the same file.
+            concurrency=ctx.settings.pipeline.event_extraction.concurrency,
         )
 
         # The story graph is derived from the events and persisted, so the
