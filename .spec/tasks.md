@@ -3017,3 +3017,75 @@ tests/unit/test_vision_frames_wiring.py
 - [x] `concurrency < 1` raises `VisualAnalysisError`
 - [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
   Windows-path failures, which are red on this master
+
+## T186 - Every reasoning response is on record; configured max_tokens is honoured
+
+**Objective**
+
+Every reasoning-model call keeps its reply on record — dumped to the
+console and written to a file under the job directory — and the
+reasoning factory honours the configured `max_tokens` the way the vision
+factory already does.
+
+**Depends on**: T184.
+
+**The need**
+
+A run failed with `Cannot extract events for scene_000009: Model output
+contains no JSON value`. The reply the model actually sent was parsed and
+discarded, so the failure was a guess: truncation at `max_tokens`, a prose
+refusal, or a server quirk cannot be told apart from the run itself. The
+operator asked for the reply to be dumped on every call, the way vision
+does since T184.
+
+Investigating where `max_tokens` was set found a gap: `ModelSpec.max_tokens`
+exists in the configuration, and the vision factory honours it — but the
+reasoning factory never reads it. Every reasoning call runs at the
+factory's hard-coded 2048, so raising the budget in the config file was a
+no-op.
+
+**Design**
+
+- `ReasoningPort.complete_json` — the single choke point of all eight
+  reasoning consumers (events, arcs, themes, twists, critic, writer,
+  translate, metadata) — now captures the raw reply before parsing and
+  records it once: a `reasoning.response` log event (console) carrying
+  `response` (the raw text), `parse_error`, `model`, `duration_ms` and the
+  response file path, plus a file at
+  `<jobs_dir>/<job_id>/reasoning/responses/<NNNN>.json` with `raw`,
+  `parsed`, `parse_error` and `model`. The job and stage ride the existing
+  logging context; outside a pipeline run the file is skipped and the
+  console line still carries the reply.
+- A parse failure is recorded with `status: "error"` and the exception
+  still propagates — the dump never changes the stage's behaviour.
+- `build_reasoning_adapter` resolves `max_tokens` as
+  `override or spec.max_tokens or 2048`, mirroring the vision factory;
+  2048 becomes the module constant `DEFAULT_MAX_TOKENS`.
+- `utils.logging` gains a public `current_context()` accessor for the
+  port to read the bound job/stage.
+
+**Files**
+
+```text
+.spec/tasks.md
+src/movie_review/utils/logging.py
+src/movie_review/reasoning/factory.py
+src/movie_review/reasoning/port.py
+tests/unit/test_reasoning_audit.py
+```
+
+**Acceptance criteria**
+
+- [x] a valid JSON reply: the console event and the file under
+  `<jobs_dir>/<job_id>/reasoning/responses/` carry the same raw text and
+  the parsed value, and the file names the model
+- [x] an unparsable reply: the `ReasoningError` still propagates, and the
+  event plus the file are written with `parse_error` set and `parsed`
+  null, so the failing reply is inspectable
+- [x] outside a pipeline run (no job in the logging context) no file is
+  created and the console event still carries the reply
+- [x] a spec with `max_tokens: 4096` reaches the built remote adapter;
+  without it the default 2048 applies; an explicit override wins over
+  the spec
+- [x] `pytest -q` passes apart from the pre-existing `test_publish_title.py`
+  Windows-path failures, which are red on this master
